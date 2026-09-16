@@ -1,6 +1,11 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
+import { sameSelectionSnapshot, type DeskSelectionSnapshot } from '../api/selectionApi'
 import type { CueTarget } from '../api/cuesApi'
+import type { AttributeFamily } from '../lib/attributeFamily'
+import { normaliseFamilies } from '../lib/selectionMask'
+import { useDeskFollow, useLocalSelection } from '../lib/deskFollow'
+import { windowName } from '../lib/windowIdentity'
 
 /**
  * The desk selection — see `api/selectionApi.ts` for what it is and why it is server-owned.
@@ -14,19 +19,26 @@ import type { CueTarget } from '../api/cuesApi'
  * The project is not part of the key. The backend keeps one selection and clears it on project
  * switch, so a per-project cache entry would be a second, disagreeing answer to which selection is
  * current.
+ *
+ * **The entry is written only when the snapshot actually changed.** A `selection.state` frame
+ * arrives for a source-only move now — another window setting the same heads — and the desk
+ * itself skips a no-op `update`, so a frame that changes nothing this side can see must not churn
+ * every reader either. `decodeSelectionState` already keeps the untouched parts' identities; this
+ * is the last step, for a frame identical in all three.
  */
 
 /** What the selection is before its first frame, and after a clear — one identity, every reader. */
 const NO_TARGETS: CueTarget[] = []
+const EMPTY: DeskSelectionSnapshot = { targets: NO_TARGETS, families: null, source: null }
 
 export const selectionApi = restApi.injectEndpoints({
   endpoints: (build) => ({
-    deskSelection: build.query<CueTarget[], void>({
-      queryFn: () => ({ data: lightingApi.selection.getState() ?? NO_TARGETS }),
+    deskSelection: build.query<DeskSelectionSnapshot, void>({
+      queryFn: () => ({ data: lightingApi.selection.getState() ?? EMPTY }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
         await cacheDataLoaded
-        const subscription = lightingApi.selection.subscribe((targets) => {
-          updateCachedData(() => targets)
+        const subscription = lightingApi.selection.subscribe((snapshot) => {
+          updateCachedData((draft) => (sameSelectionSnapshot(draft, snapshot) ? undefined : snapshot))
         })
         await cacheEntryRemoved
         subscription.unsubscribe()
@@ -38,10 +50,36 @@ export const selectionApi = restApi.injectEndpoints({
 
 export const { useDeskSelectionQuery } = selectionApi
 
+/** The whole fact — targets, mask and mover. The desk chip's reader. */
+export function useDeskSelectionSnapshot(): DeskSelectionSnapshot {
+  const { data } = useDeskSelectionQuery()
+  return data ?? EMPTY
+}
+
 /** The desk selection, in the order targets were added. */
 export function useDeskSelection(): CueTarget[] {
-  const { data } = useDeskSelectionQuery()
-  return data ?? NO_TARGETS
+  return useDeskSelectionSnapshot().targets
+}
+
+/**
+ * The attribute mask a press from this tab should carry (multi-screen plan D4): the **desk's**
+ * while following, and this tab's own otherwise. [local] is what the surface itself would say —
+ * the programmer's marquee families, the busk view's unlinked copy — and is the answer only when
+ * the tab is unlinked, because a following tab's press acts on the desk's selection and must be
+ * masked as the desk is, even in the moment another window has moved the mask under it.
+ */
+export function usePressFamilies(local: readonly AttributeFamily[] | null): AttributeFamily[] | null {
+  const following = useDeskFollow()
+  const desk = useDeskSelectionSnapshot()
+  return following ? desk.families : normaliseFamilies(local)
+}
+
+/** The busk view's selection pair: the desk's when following, the tab's own when not (D8). */
+export function useSelectionPair(): { targets: CueTarget[]; families: AttributeFamily[] | null } {
+  const following = useDeskFollow()
+  const desk = useDeskSelectionSnapshot()
+  const local = useLocalSelection()
+  return following ? desk : local
 }
 
 /**
@@ -52,18 +90,28 @@ export function useDeskSelection(): CueTarget[] {
  * reader. A `useX` wrapper would only be a stable identity around `lightingApi`, which is already
  * a module singleton.
  *
- * [toggleDeskSelection] is **not** "add if absent, remove if present". The desk narrows a partly
- * covered group head by head (D2, through `fx/TargetCoverage`), so pressing a fixture that a
- * selected group already covers takes that one head *out of the group's coverage* rather than
- * adding a duplicate entry. That is the behaviour a select button on the surface has, and the
- * reason the busk band's toggle goes through here rather than keeping its own Map.
+ * Every write carries this tab's name as its `sourceName` (D7, `lib/windowIdentity.ts`): the desk
+ * stamps it as the selection's `source`, which is what the chip on another screen reads. It rides
+ * every write rather than being sent once on connect, because the wire has no name-only frame —
+ * a socket names itself only by writing — and a reconnect makes a new, unnamed socket.
+ *
+ * [setDeskSelection] replaces the **whole** fact: the heads and the mask, so a replace with no
+ * families — the narrow-width picker's one-thing press — clears the mask, as D2 says it must.
+ * [toggleDeskSelection] keeps the mask, and is **not** "add if absent, remove if present". The
+ * desk narrows a partly covered group head by head (through `fx/TargetCoverage`), so pressing a
+ * fixture that a selected group already covers takes that one head *out of the group's coverage*
+ * rather than adding a duplicate entry. That is the behaviour a select button on the surface has,
+ * and the reason the busk band's toggle goes through here rather than keeping its own Map.
  */
-export function setDeskSelection(targets: readonly CueTarget[]): void {
-  lightingApi.selection.set([...targets])
+export function setDeskSelection(
+  targets: readonly CueTarget[],
+  families: readonly AttributeFamily[] | null = null,
+): void {
+  lightingApi.selection.set([...targets], families, windowName())
 }
 
 export function toggleDeskSelection(target: CueTarget): void {
-  lightingApi.selection.toggle(target)
+  lightingApi.selection.toggle(target, windowName())
 }
 
 export function clearDeskSelection(): void {

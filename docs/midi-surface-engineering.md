@@ -117,12 +117,23 @@ snapshot and the broadcast), and three surfaces move it: the busk view's target 
 (`useBuskingSelection`), the programmer's fixture list (`useDeskSelectionBridge`), and a
 `selectTarget` button on the surface itself.
 
-Read `components/fixtures-list/useDeskSelectionBridge.ts` before touching the list half. Its four
+Read `components/fixtures-list/useDeskSelectionBridge.ts` before touching the list half. Its
 rules each fail silently, and the first is the one the plan names: **rows are published through
 `rowLocateTarget`** (via `selectedRowTargets`), never through the `programmer` scope's `targetKeys`,
 which `expandSelectionToTargets` has already flattened to member keys. Publish those and a marquee
 over *Front wash* arrives at the desk as eight loose fixtures, with the strip's group select LED
 dark.
+
+Since the multi-screen plan's session 1 the selection is one fact with three parts —
+`{targets, families, source}` — and the bridge carries two of them. It takes the marquee's `cells`
+as well as the row ids and publishes `cellFamilies(cells)` beside the rows (a rows-only selection
+publishes *no* mask, which clears the desk's); its echo FIFO is keyed on targets **and** families,
+so a frame with the same heads and a different mask is applied (as a row selection) rather than
+swallowed as an echo; and its `enabled` is gated on the tab's follow/local flag
+(`lib/deskFollow.ts`) in both directions, re-enabling as a fresh mount. `source` is stamped by the
+desk from the `sourceName` every write carries (`lib/windowIdentity.ts`); a MIDI write stamps
+`{kind: "surface"}`, which the desk chip reads as *Desk · from the desk*. The long form is
+CLAUDE.md §"One selection, two shapes" and §"The desk selection has a mask".
 
 ## Records on buttons
 

@@ -9,6 +9,7 @@ import { startOAuthIdentityBridge } from "./store/oauthGithub"
 import { startLooksBridge } from "./store/looks"
 import { startTemplatesBridge } from "./store/templates"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
+import { windowName } from "./lib/windowIdentity"
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
 // loading overlay renders before Layout's ThemeToggle effect runs, so without
@@ -31,6 +32,11 @@ startTemplatesBridge()
 // there is no REST action for `errorToastMiddleware` to catch — so an unheard frame means a
 // slider that moved while the rig did not. See startProgrammerErrorBridge.
 startProgrammerErrorBridge()
+
+// This tab's name (multi-screen plan D10): `?window=` is read once and stripped here, before the
+// router is created, so the router never sees the parameter and a bookmark of the stripped URL
+// does not re-mint the name on the next tab. See lib/windowIdentity.ts.
+windowName()
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

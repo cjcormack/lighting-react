@@ -1,7 +1,8 @@
 import { useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { toast } from 'sonner'
 import { useLongPress } from '@/hooks/useLongPress'
-import { formatError } from '@/lib/formatError'
+import type { AttributeFamily } from '@/lib/attributeFamily'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useApplyTemplateMutation, useToggleTemplateMutation } from '@/store/templates'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
@@ -17,8 +18,22 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  *
  * It is **not** a third gesture and adds nothing of its own: the ⌥/hold decision is still the
  * caller's, because only the caller knows what the operator did with their hand.
+ *
+ * **Both presses carry [families]** — the selection's attribute mask, beside the targets it is a
+ * mask of (multi-screen plan D4): the desk's pair while this tab follows the desk, the tab's own
+ * when unlinked (`usePressFamilies`). A template is one family, so under a mask it lands whole or
+ * the desk refuses it by name (400 `TEMPLATE_OUTSIDE_MASK`, on the click and the layer alike),
+ * and that refusal is toasted with the desk's own sentence — *'Warm Amber' is a Colour template,
+ * and the selection is masked to Position* — by `errorToastMiddleware`, which reports every
+ * rejected mutation. **Nothing is pre-refused here from the mask this tab holds**: the mask is
+ * tested on the on arm only, so a press that takes a lit layer off comes off under any mask, and
+ * only the desk knows which arm a press is on.
  */
-export function useTemplatePress(projectId: number, targets: readonly TemplateTarget[]) {
+export function useTemplatePress(
+  projectId: number,
+  targets: readonly TemplateTarget[],
+  families: readonly AttributeFamily[] | null = null,
+) {
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()
 
@@ -30,6 +45,7 @@ export function useTemplatePress(projectId: number, targets: readonly TemplateTa
         toast.error('Select the fixtures this should land on first')
         return
       }
+      const mask = families != null && families.length > 0 ? [...families] : undefined
       const request = additive
         ? toggleTemplate({
             projectId,
@@ -39,8 +55,9 @@ export function useTemplatePress(projectId: number, targets: readonly TemplateTa
             // template's own rows and reports it back, so a disagreement surfaces in the response
             // rather than silently on the rig.
             propertyMask: template.family ?? undefined,
+            families: mask,
           })
-        : applyTemplate({ projectId, templateId: template.id, targets: [...targets] })
+        : applyTemplate({ projectId, templateId: template.id, targets: [...targets], families: mask })
       request
         .unwrap()
         .then((result) => {
@@ -73,9 +90,12 @@ export function useTemplatePress(projectId: number, targets: readonly TemplateTa
             }
           }
         })
-        .catch((err) => toast.error(formatError(err)))
+        // The failure is already on screen: `errorToastMiddleware` toasts every rejected
+        // mutation with the desk's message. Toasting it again here said the same thing twice —
+        // and for a mask refusal the desk's sentence is the whole answer.
+        .catch(ignoreReportedError)
     },
-    [applyTemplate, toggleTemplate, projectId, targets],
+    [applyTemplate, toggleTemplate, projectId, targets, families],
   )
 }
 

@@ -528,7 +528,11 @@ all — the solo rules and the refusals are the pad's behaviour, not the endpoin
 sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
 siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue
 press taking its layer siblings off wholesale, because a cue has no targets to narrow by. An **off**
-press releases nothing, and a stacking bank has no siblings at all.
+press releases nothing, and a stacking bank has no siblings at all. The request carries the
+selection's **`families`** beside its targets — the desk's pair while this tab follows the desk,
+the tab's own when unlinked — and the response answers `skippedFamilies`; see §The desk selection
+has a mask for what lands under it and why a press is never pre-refused here. The band's label row
+carries the family pill and the desk chip for the same pair.
 
 **`src/lib/buskLayout.ts` is the document model**: no React, no store, every gesture a plain call a
 unit test can make. Three rules run through it:
@@ -872,6 +876,44 @@ where every selected head agrees, one row per head where they do not — rather 
 because the operator already said which they meant by putting the heads where they are. The
 colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
 either was driven); it lives in one place, `templateRecord.kt`.
+
+### The desk selection has a mask
+
+**Every press sends the pair it is acting on — targets and `families` — and the desk decides what
+lands** (multi-screen plan D4, D5; lighting7 af3575a). The four press routes take `families?`
+beside `targets`: `POST /busk/pads/{id}/press`, `/templates/{id}/apply`, `/templates/{id}/toggle`
+and `/looks/{id}/toggle` (`buskApi.ts`, `templatesApi.ts`, `looksApi.ts`). The pair is the desk's
+while the tab follows the desk and the tab's own when unlinked — `usePressFamilies` in
+`store/selection.ts` answers it for the strip and the picker (through `useTemplatePress`'s third
+argument), `useBuskingSelection` for the pads. It is the *desk's* mask when following even in the
+moment another window has moved it under this tab's marquee, because a following tab's press acts
+on the desk's selection and must be masked as the desk is; the strip does not pre-filter on it, and
+a press outside it is refused by name rather than greyed out — but **row C's family pill reads that
+same pair** (`shownFamilies` in `programmer/SelectionBar.tsx`), drawn over a row-only selection
+too, so the one state where the two differ (another window's mask landed here as rows) is said on
+the bar rather than discovered from a 400. The kit's bar draws the pill outside its cell block for
+that reason; the plain lists keep the marquee's own reading, never bridging.
+
+What the desk does under a mask, per kind: a **template** is one family, so it lands whole or is
+400 `TEMPLATE_OUTSIDE_MASK` on every door, click and layer alike; a **Look** spans families, so its
+layer lands with `propertyMask = mask ∩ its families`, the cook skips the rows outside, and the
+response names them in `skippedFamilies` — nothing inside is 400 `LOOK_OUTSIDE_MASK`; a **cue**
+ignores it. The two refusals carry a message naming both families and reach the screen through
+`errorToastMiddleware`, which toasts every rejected mutation — which is why `useTemplatePress` no
+longer toasts its own failures: it said the same sentence twice.
+
+**The mask is tested on the on arm only, so never pre-refuse a press from the mask this tab holds.**
+A press that turns a lit record off answers `removed` under any mask (`routes/pressArm.kt` reads
+the arm before the press), and only the desk knows which arm a press is on — a lit Intensity pad
+must still release while a Colour marquee stands. Send it, and render the desk's answer.
+
+**The skip is toasted on the pressing window** (D6): `<Family> rows skipped — the selection is
+<Family>` from `skippedRowsMessage` (`lib/selectionMask.ts`), read off `skippedFamilies` on the busk
+press and Look toggle responses (the template toggle response is unchanged). It says **rows** and
+must keep saying rows: the layer's mask filters its rows, not its effects, so a Look's effect in a
+skipped family still runs while being named — promising the whole family was held back would be
+promising more than the desk does. The window that made the marquee learns the way it learns every
+layer: `programmer.layerState` carries the mask and `LookStack` draws the badge.
 
 ### Sheet kit
 
@@ -1402,6 +1444,48 @@ the cell door (`selectCells`) clears the rows only when a hit arrives and there 
 and every row door (`selectRow`, `selectAllRows`, `setRows`) clears the cells, whose `clear` bails
 when there are none. `cellRowIds` is identity-stable while its *members* are unchanged, or a drag
 would republish to the desk on every pointer move rather than at each row boundary.
+
+**The desk selection is one fact with three parts — targets, `families`, `source` — and a marquee
+publishes two of them** (multi-screen plan D2, D3, D7; backend af3575a). `selection.state` is
+`{targets, families?, source?}`, both new fields *omitted* when absent, never null: absent
+`families` is every attribute, absent `source` is nobody since the last clear. The rule that keeps
+the mask part of the selection rather than a second fact: `set` replaces the whole fact (no
+families = clear the mask), `toggle` keeps it, `clear` drops both. So `useDeskSelectionBridge`
+publishes `cellFamilies(cells)` beside the rows — `FixturesListContainer` hands it the cells — and a
+row selection with no cells publishes *no* mask, which is a `set` that clears the desk's. The
+publish is keyed on the mask's **key** (`familiesKey`, `lib/selectionMask.ts`), not on `cells`,
+because a drag mints a fresh `cells` array per frame; `normaliseFamilies` is the one spelling —
+none and all four are both `null`, declaration order — so an echo compares equal to what was sent.
+**The echo FIFO's key is targets *and* families**: a frame with the same heads and a different mask
+is exactly what a second window changing the mask under a standing marquee produces, and a key of
+the heads alone swallowed it as our own echo. It is applied as a **row** selection — this list
+cannot draw a mask it did not make as a marquee, so the marquee is dropped to its rows. A frame the
+FIFO *does* treat as an echo still lands its `source` in the cache, because the cache is
+`store/selection.ts`'s and is written before the bridge's effect runs (`decodeSelectionState` keeps
+the untouched parts' identities, so a source-only frame moves the chip and nothing else).
+`source` is stamped by the desk from the socket's own name, never sent: every `selection.set` /
+`selection.toggle` carries this tab's `sourceName` from `lib/windowIdentity.ts` — `?window=` read
+once at boot and stripped, else `Window` plus a suffix, in `sessionStorage` — and the desk
+remembers it per socket. **There is no `open`-branch re-send**, and it is not an omission: the
+shipped wire has no name-only frame, so a `selection.set` on connect would *replace* the desk's
+selection and make a reconnecting tab its last mover; a reconnected socket is named again by the
+first write it makes, and a socket that has made none stamps no source, which is the desk's rule.
+
+**Follow / local is a per-tab `sessionStorage` fact, default on** (`lib/deskFollow.ts`, D8), and it
+gates **both** directions of the bridge, since one bridge is both. `localStorage` is one value per
+origin per profile, and the two desk screens are two windows of one profile — `createSyncStore`
+took a `storage` parameter for exactly this. Unlinking snapshots the desk's targets *and* families
+into the tab's copy and leaves the desk's alone; re-linking adopts the desk's and publishes nothing
+(the bridge treats re-enable as a fresh mount, for the mount rule's reason: a window joining must
+not clear what another screen has selected). On the programmer the local selection *is* the list's
+own row selection — an unlinked window records and presses what it shows; on the busk view it is
+the copy in `deskFollow.ts`, read through `useSelectionPair`. **The desk chip**
+(`components/desk/DeskChip.tsx`) is the control and the readout: `Desk` when nobody has moved the
+selection or this window did, `Desk · from <name>` for another window, `Desk · from the desk` for
+a control surface, dashed `This window` when local; a click flips it. It sits on the programmer's
+row C between the family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only
+with a `projectId`) and in the busk band's label row beside the family pill, and nowhere else —
+the plain lists never bridge (D1), so a chip there would name a link that does not exist.
 
 **The checkbox column is gone, and a drag from the name column selects rows** — the same
 `useCellMarquee`, which decides at the press which side of the first value column it landed on and
@@ -2162,6 +2246,16 @@ Nothing is being migrated toward form 2. `import/no-cycle` is an ESLint **error*
 the precondition for the TDZ hazard — an import cycle through `api/lightingApi` — cannot reappear
 silently; the four deferred bridges stay deferred as defence in depth for the render-order half,
 which the lint rule does not see.
+
+**The beat subscriptions are still the only legitimate `open` re-send.** The multi-screen plan
+expected a second one — the window's name, re-announced on every connect so the desk can stamp
+`selection.state`'s `source` — but the wire that shipped (lighting7 af3575a) has no name-only frame:
+a socket names itself only by a `selection.set` or `selection.toggle` carrying `sourceName`, and
+sending either on `open` would be a *write* that replaces the desk's selection and makes a
+reconnecting tab its last mover. So `api/selectionApi.ts` has no `open` branch; the name rides every
+write instead (`store/selection.ts`), and a reconnected socket is named again by the first write it
+makes. Session 2's `windows.announce` — a frame that *is* a name and nothing else — is where that
+second `open` branch belongs.
 
 ## Patterns and Conventions
 

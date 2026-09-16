@@ -188,10 +188,23 @@ export interface ToggleLookTarget {
 
 export interface ToggleLookRequest {
   targets: ToggleLookTarget[]
+  /**
+   * The selection's attribute mask (multi-screen plan D4, D5): the layer lands with
+   * `propertyMask = mask ∩ the Look's families`, the cook skips the rows outside it, and the
+   * response names them; nothing inside is 400 `LOOK_OUTSIDE_MASK`. Absent is every attribute.
+   * Tested on the **on** arm only — an off press comes off under any mask.
+   */
+  families?: AttributeFamily[]
   beatDivision?: number
 }
 
 export interface ToggleLookResponse {
   action: 'applied' | 'removed'
   effectCount: number
+  /**
+   * The Look's families the mask left out, in declaration order — the pressing window's toast
+   * (D6). Empty for an unmasked press and on the off arm. Says *rows* when toasted: the layer's
+   * mask filters its rows, not its effects.
+   */
+  skippedFamilies: string[]
 }

@@ -249,6 +249,29 @@ export interface ApplyTemplateResponse {
   effectIds?: number[]
 }
 
+/**
+ * The click: literal values into Local. `families` is the selection's attribute mask (multi-screen
+ * plan D4) — a template is one family, so under a mask it lands whole or is refused by name, 400
+ * `TEMPLATE_OUTSIDE_MASK`, on both the value and the effect arm. Absent is every attribute.
+ */
+export interface ApplyTemplateRequest {
+  targets: TemplateTarget[]
+  fadeMs?: number
+  families?: AttributeFamily[]
+}
+
+/**
+ * ⌥click / hold: a layer that tracks the template. `propertyMask` is what this client believes
+ * the layer's mask is; the desk derives the real one and reports it back. `families` is the
+ * selection's mask, refused as on [ApplyTemplateRequest] — on the **on** arm only, since a press
+ * that takes the layer off comes off under any mask.
+ */
+export interface ToggleTemplateRequest {
+  targets: TemplateTarget[]
+  propertyMask?: string
+  families?: AttributeFamily[]
+}
+
 export interface ToggleTemplateResponse {
   action: 'applied' | 'removed'
   /**

@@ -19,6 +19,12 @@
  * Each caller declares its own `use…` hook over `subscribe` / `getSnapshot` — the factory can't,
  * because a hook has to be named for the linter to check it as one.
  */
+/** The default storage area: shared by every tab of the origin. */
+export const localStorageArea = (): Storage => window.localStorage
+
+/** One area per tab, surviving a reload of that tab and nothing else. */
+export const sessionStorageArea = (): Storage => window.sessionStorage
+
 export interface SyncStore<T> {
   /** `useSyncExternalStore`'s first argument. */
   subscribe: (onStoreChange: () => void) => () => void
@@ -36,11 +42,21 @@ export function createSyncStore<T>({
   key,
   fallback,
   parse,
+  storage = localStorageArea,
 }: {
   key: string
   fallback: T
   /** Narrow the parsed JSON, returning the fallback for anything unrecognised. */
   parse: (parsed: unknown) => T
+  /**
+   * Which storage area holds the key: `localStorage` by default, which every existing store means.
+   * A *per-tab* fact — follow/local, the window's name (multi-screen plan D8, D10) — passes
+   * `sessionStorageArea`: `localStorage` is one value per origin per profile, and the two desk
+   * screens are two windows of one profile, so a per-window flag kept there would be one flag for
+   * both. A thunk rather than the area itself, so a module can be imported where `window` does not
+   * exist (a node-environment test) without touching storage at import time.
+   */
+  storage?: () => Storage
 }): SyncStore<T> {
   let current: T | null = null
   const listeners = new Set<() => void>()
@@ -48,7 +64,7 @@ export function createSyncStore<T>({
   function readStored(): T {
     if (typeof window === 'undefined') return fallback
     try {
-      const raw = window.localStorage.getItem(key)
+      const raw = storage().getItem(key)
       if (raw == null) return fallback
       return parse(JSON.parse(raw))
     } catch {
@@ -73,7 +89,7 @@ export function createSyncStore<T>({
       if (getSnapshot() === next) return
       current = next
       try {
-        window.localStorage.setItem(key, JSON.stringify(next))
+        storage().setItem(key, JSON.stringify(next))
       } catch {
         // Quota exhausted or storage unavailable — the in-memory value still works.
       }

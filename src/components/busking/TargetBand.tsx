@@ -1,5 +1,8 @@
 import { Layers, LayoutGrid } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DeskChip } from '@/components/desk/DeskChip'
+import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { useGroupListQuery } from '@/store/groups'
 import { useFixtureListQuery } from '@/store/fixtures'
@@ -8,6 +11,8 @@ import { BuskLabel } from './BuskLabel'
 
 interface TargetBandProps {
   selectedTargets: Map<string, BuskingTarget>
+  /** The selection's attribute mask, drawn as a pill beside the count. Null is every attribute. */
+  families: AttributeFamily[] | null
   onToggle: (target: BuskingTarget) => void
   onClear: () => void
   /** Opens the narrow-width target sheet. Rendered only below `md`, where the sheet is the fallback. */
@@ -31,9 +36,15 @@ interface TargetBandProps {
  * right-click-toggle, which has no gesture on a touchscreen and was undiscoverable with a mouse.
  * `selectTarget` (replace) survives for the narrow-width sheet, where tapping a row and having the
  * sheet close on the one thing you picked is the right behaviour.
+ *
+ * **The label row carries the family pill and the desk chip** (multi-screen plan §4,
+ * `Screen2.dc.html`): the pill is the selection's attribute mask — a marquee over Colour cells on
+ * another screen lights these heads *and* says Colour here, which is what a pad press on this
+ * screen will be masked to — and the chip says whose selection it is and flips follow/local.
  */
 export function TargetBand({
   selectedTargets,
+  families,
   onToggle,
   onClear,
   onOpenPicker,
@@ -54,6 +65,15 @@ export function TargetBand({
       <div className="mb-2 flex items-baseline gap-2.5">
         <BuskLabel>Targets</BuskLabel>
         <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{summary}</span>
+        {families != null && families.length > 0 && (
+          <Badge
+            variant="outline"
+            className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
+          >
+            {formatFamilyList(families, ' · ')}
+          </Badge>
+        )}
+        <DeskChip />
         {/* The band is the picker at every width the rail is; below that the sheet still is. */}
         <Button variant="ghost" size="sm" className="h-6 px-2 text-xs md:hidden" onClick={onOpenPicker}>
           Pick targets…

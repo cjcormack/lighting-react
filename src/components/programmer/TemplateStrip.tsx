@@ -14,6 +14,7 @@ import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import { TemplatePicker } from './TemplatePicker'
 import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
+import { usePressFamilies } from '@/store/selection'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
 /**
@@ -107,7 +108,9 @@ export function TemplateStrip({
   const [pickerOpen, setPickerOpen] = useState(false)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const allRef = useRef<HTMLButtonElement>(null)
-  const press = useTemplatePress(projectId, targets)
+  // The mask the press carries: the desk's while following, the marquee's own when unlinked (D4).
+  const pressFamilies = usePressFamilies(askedFamilies)
+  const press = useTemplatePress(projectId, targets, pressFamilies)
 
   /**
    * The families the selection is asking about.

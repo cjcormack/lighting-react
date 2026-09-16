@@ -20,7 +20,9 @@ import {
   useBuskShowingPageQuery,
   setShowingBuskPage,
 } from '@/store/busk'
+import { toast } from 'sonner'
 import { libraryStarterLayout, recordsOnPage } from '@/lib/buskLayout'
+import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import { TargetList } from './TargetList'
@@ -69,6 +71,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
   const {
     selectedTargets,
     selectedLayerTargets,
+    families,
     selectTarget,
     toggleTarget,
     clearSelection,
@@ -176,8 +179,27 @@ export function BuskingView({ projectId }: { projectId: number }) {
         // A pad the layout write has not answered for yet has no id to press. It cannot be reached
         // in practice — presses are off while editing — but the guard keeps the type honest.
         if (pad.id == null) return
-        void pressPad({ projectId, padId: pad.id, targets: selectedLayerTargets })
+        // The pair a press acts on — the desk's while following, this tab's own when unlinked
+        // (multi-screen plan D4) — and never pre-refused from the mask held here: the mask is
+        // tested on the on arm only, so a lit pad still comes off under a mask that excludes it,
+        // and only the desk knows which arm this is. A refusal (`TEMPLATE_OUTSIDE_MASK`,
+        // `LOOK_OUTSIDE_MASK`) arrives as a 400 whose message names both families, and
+        // `errorToastMiddleware` toasts it as it toasts every rejected mutation.
+        void pressPad({
+          projectId,
+          padId: pad.id,
+          targets: selectedLayerTargets,
+          families: families ?? undefined,
+        })
           .unwrap()
+          .then((result) => {
+            // The skip is reported on the pressing window (D6) — this one. The marquee's window
+            // learns the way it learns every layer: `programmer.layerState` carries the mask, and
+            // `LookStack` draws the badge. *Rows*, not the family: the cook masks a layer's rows
+            // and not its effects, so a Look's effect in a skipped family still runs.
+            const message = skippedRowsMessage(result.skippedFamilies ?? [], families)
+            if (message != null) toast.warning(message)
+          })
           .catch(ignoreReportedError)
       },
       onInspect: (pad) => {
@@ -188,7 +210,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
         }
       },
     }),
-    [presenceOf, activeCueIds, pressPad, projectId, selectedLayerTargets, navigate],
+    [presenceOf, activeCueIds, pressPad, projectId, selectedLayerTargets, families, navigate],
   )
 
   const onPageKeys = useMemo(
@@ -226,6 +248,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
           >
             <TargetBand
               selectedTargets={selectedTargets}
+              families={families}
               onToggle={toggleTarget}
               onClear={clearSelection}
               onOpenPicker={() => setTargetSheetOpen(true)}

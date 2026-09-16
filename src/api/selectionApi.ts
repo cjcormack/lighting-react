@@ -3,6 +3,8 @@ import { Subscription } from './subscription'
 import { createWsSubscribable } from './wsSubscriptionFactory'
 import { sendGesture } from './wsGesture'
 import type { CueTarget } from './cuesApi'
+import type { AttributeFamily } from '../lib/attributeFamily'
+import { normaliseFamilies, parseFamilies, sameFamilies } from '../lib/selectionMask'
 
 /**
  * The **desk selection** — one selection per project, server-owned and shared by every client,
@@ -11,45 +13,127 @@ import type { CueTarget } from './cuesApi'
  * persisted) and a target that stops resolving is dropped from it server-side, so no client needs
  * a second rule for that.
  *
+ * **It is one fact with three parts** (multi-screen plan D2, D7): the `targets`, the attribute
+ * `families` a press on them is masked to, and the `source` that moved it last. The mask is part
+ * of the selection and not a second fact because a mask without targets means nothing and clearing
+ * the selection must clear it; the rule that keeps them one fact is the desk's: `set` replaces the
+ * whole fact (absent families = every attribute), `toggle` edits the heads and keeps the mask,
+ * `clear` drops both.
+ *
  * `selection.state` is both the snapshot on connect and the broadcast on every change — one frame
- * type, because it is a `StateFlow` and a delta frame would carry nothing the whole list doesn't.
- * The three writes get no reply; the state frame is the acknowledgement.
+ * type, because it is a `StateFlow` and a delta frame would carry nothing the whole fact doesn't.
+ * Both new fields are **omitted** when absent (the desk's Json drops defaults), never null: absent
+ * `families` is every attribute, absent `source` is nobody since the last clear. A `set` of the
+ * same heads from a different mover *does* emit a frame — that is what the desk chip reads.
+ *
+ * `source` is never sent: the desk stamps it from the socket's own name (D7), which this session is
+ * the `sourceName` a write carries (`lib/windowIdentity.ts`) and the desk remembers per socket. The
+ * three writes get no reply; the state frame is the acknowledgement.
  *
  * A group and one of its members are two separate entries: what the desk holds is what was
  * *said*, and expanding a group to its heads is a question asked later (server-side `coverage()`),
  * not a normalisation done on the way in. That is what lets a select button's LED light for the
  * group rather than for eight loose fixtures.
  */
-export interface SelectionWsApi {
+export interface SelectionSource {
+  /** A browser window, by the name it gave itself, or a control surface. */
+  kind: 'window' | 'surface'
+  /** The window's socket-minted identity once the registry exists (session 2); absent until then. */
+  id?: string
+  name: string
+}
+
+export interface DeskSelectionSnapshot {
   /** The desk selection, in the order targets were added. */
-  subscribe(fn: (targets: CueTarget[]) => void): Subscription
+  targets: CueTarget[]
+  /** The attribute mask. `null` is every attribute — the one spelling of "no mask". */
+  families: AttributeFamily[] | null
+  /** Who moved it last. `null` after a clear, a project switch, or a write from an unnamed socket. */
+  source: SelectionSource | null
+}
+
+export interface SelectionWsApi {
+  /** The whole fact, on connect and on every change. */
+  subscribe(fn: (snapshot: DeskSelectionSnapshot) => void): Subscription
   /**
    * The last frame, or null before the first. For a reader that is not a subscriber — an RTK
    * Query `queryFn` seeding its cache entry — the same value without one.
    */
-  getState(): CueTarget[] | null
+  getState(): DeskSelectionSnapshot | null
 
-  /** Replace the whole selection. */
-  set(targets: CueTarget[]): void
-  /** Add the target, or take it off if its heads are already covered. */
-  toggle(target: CueTarget): void
+  /**
+   * Replace the whole fact. [families] absent or null clears the mask; [sourceName] is what the
+   * desk stamps as the mover, and remembers for this socket's later writes.
+   */
+  set(targets: CueTarget[], families?: readonly AttributeFamily[] | null, sourceName?: string): void
+  /** Add the target, or take it off if its heads are already covered. The mask is kept. */
+  toggle(target: CueTarget, sourceName?: string): void
+  /** Nothing selected, no mask, no mover. */
   clear(): void
 }
 
 interface SelectionStateMessage {
   type: 'selection.state'
   targets: CueTarget[]
+  families?: unknown
+  source?: unknown
+}
+
+/** Read the frame's `source`, or null for anything that is not one. */
+export function parseSelectionSource(raw: unknown): SelectionSource | null {
+  if (raw == null || typeof raw !== 'object') return null
+  const { kind, id, name } = raw as { kind?: unknown; id?: unknown; name?: unknown }
+  if ((kind !== 'window' && kind !== 'surface') || typeof name !== 'string') return null
+  return typeof id === 'string' ? { kind, id, name } : { kind, name }
+}
+
+export function sameSelectionSource(a: SelectionSource | null, b: SelectionSource | null): boolean {
+  if (a == null || b == null) return a === b
+  return a.kind === b.kind && a.id === b.id && a.name === b.name
+}
+
+function sameTargets(a: readonly CueTarget[], b: readonly CueTarget[]): boolean {
+  return a.length === b.length && a.every((t, i) => t.type === b[i]!.type && t.key === b[i]!.key)
+}
+
+/** Whole-fact equality — what "did the selection actually change?" means for every reader. */
+export function sameSelectionSnapshot(a: DeskSelectionSnapshot, b: DeskSelectionSnapshot): boolean {
+  return (
+    sameTargets(a.targets, b.targets) &&
+    sameFamilies(a.families, b.families) &&
+    sameSelectionSource(a.source, b.source)
+  )
+}
+
+/**
+ * The frame as a snapshot, **keeping the previous frame's identities for the parts that did not
+ * move**. A source-only frame (another window set the same heads) then hands every reader keyed on
+ * `targets` the same array it already had, so the bridge's apply effect and the busk band's
+ * rehydration do not re-run for a change that is only the chip's.
+ */
+export function decodeSelectionState(
+  message: SelectionStateMessage,
+  previous: DeskSelectionSnapshot | null,
+): DeskSelectionSnapshot {
+  const targets = message.targets ?? []
+  const families = parseFamilies(message.families)
+  return {
+    targets: previous != null && sameTargets(previous.targets, targets) ? previous.targets : targets,
+    families:
+      previous != null && sameFamilies(previous.families, families) ? previous.families : families,
+    source: parseSelectionSource(message.source),
+  }
 }
 
 export function createSelectionWsApi(conn: InternalApiConnection): SelectionWsApi {
-  const selection = createWsSubscribable<CueTarget[]>()
-  let last: CueTarget[] | null = null
+  const selection = createWsSubscribable<DeskSelectionSnapshot>()
+  let last: DeskSelectionSnapshot | null = null
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== 'message') return
     const message = frame as SelectionStateMessage | null
     if (message?.type !== 'selection.state') return
-    last = message.targets ?? []
+    last = decodeSelectionState(message, last)
     selection.notify(last)
   })
 
@@ -60,8 +144,16 @@ export function createSelectionWsApi(conn: InternalApiConnection): SelectionWsAp
       return sub
     },
     getState: () => last,
-    set: (targets) => sendGesture(conn, { type: 'selection.set', targets }),
-    toggle: (target) => sendGesture(conn, { type: 'selection.toggle', target }),
+    set: (targets, families, sourceName) =>
+      sendGesture(conn, {
+        type: 'selection.set',
+        targets,
+        // The one spelling: none or all four is no mask, and the desk would fold either to null
+        // anyway — sending it folded is what lets the echo compare equal to what was sent.
+        families: normaliseFamilies(families) ?? undefined,
+        sourceName,
+      }),
+    toggle: (target, sourceName) => sendGesture(conn, { type: 'selection.toggle', target, sourceName }),
     clear: () => sendGesture(conn, { type: 'selection.clear' }),
   }
 }

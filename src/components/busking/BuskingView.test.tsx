@@ -22,7 +22,10 @@ import { store } from '@/store'
 import { restApi } from '@/store/restApi'
 import { lightingApi } from '@/api/lightingApi'
 import { BuskingView } from './BuskingView'
-import type { BuskPage } from '@/api/buskApi'
+import type { BuskPage, BuskPressResponse } from '@/api/buskApi'
+import { selectionWs } from '@/test/backendMock'
+import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { toast } from 'sonner'
 
 const emptyPage: BuskPage = { id: 4, uuid: 'p4', name: 'Ballads', sortOrder: 0, rows: [] }
 const second: BuskPage = { id: 5, uuid: 'p5', name: 'Dance', sortOrder: 1, rows: [] }
@@ -44,18 +47,86 @@ const generated: BuskPage = {
   ],
 }
 
+/** A page holding one colour template pad, for the press tests. */
+const warmAmber = {
+  id: 7,
+  uuid: 't7',
+  name: 'Warm Amber',
+  notes: null,
+  family: 'COLOUR',
+  kind: 'value',
+  isGeneric: true,
+  rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
+  effect: null,
+  requiredEmitters: [],
+  lastPressedAt: null,
+  layerCount: 0,
+} as never
+const padPage: BuskPage = {
+  ...emptyPage,
+  rows: [
+    {
+      columns: [
+        {
+          id: 11,
+          uuid: 'c11',
+          width: 12,
+          banks: [
+            {
+              id: 21,
+              uuid: 'b21',
+              name: 'Colour',
+              solo: false,
+              flow: 'WRAP',
+              pads: [{ id: 31, uuid: 'pd31', kind: 'TEMPLATE', template: warmAmber }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+}
+
+/** The rig the busk selection rehydrates against — a target the lists cannot resolve is not sent. */
+const rig = {
+  fixtures: [{ key: 'par-1', name: 'PAR 1', typeKey: 'par' }],
+  groups: [
+    { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  ],
+}
+
+/** What the press route answers; a test overrides `skippedFamilies` for the Look case. */
+let pressAnswer: BuskPressResponse = {
+  kind: 'TEMPLATE',
+  action: 'applied',
+  effectCount: 0,
+  released: 0,
+  skippedFamilies: [],
+}
+
 function draw(pages: BuskPage[], path = '/projects/1/busk') {
-  const calls: { url: string; method: string }[] = []
+  const calls: { url: string; method: string; body?: string }[] = []
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const request = input as Request
-    calls.push({ url: request.url, method: request.method })
-    const body = request.url.includes('/busk/pages') && request.method === 'GET' ? pages : []
+    const sent = request.method === 'POST' ? await request.clone().text() : undefined
+    calls.push({ url: request.url, method: request.method, body: sent })
+    const body =
+      request.method !== 'GET'
+        ? []
+        : request.url.includes('/busk/pages')
+          ? pages
+          : request.url.endsWith('/fixtures')
+            ? rig.fixtures
+            : request.url.endsWith('/groups')
+              ? rig.groups
+              : []
     const created = request.method === 'POST' && request.url.endsWith('/busk/pages')
     const written = request.method === 'PUT' && request.url.includes('/layout')
-    return new Response(JSON.stringify(created ? emptyPage : written ? generated : body), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const pressed = request.method === 'POST' && request.url.includes('/busk/pads/')
+    return new Response(
+      JSON.stringify(created ? emptyPage : written ? generated : pressed ? pressAnswer : body),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
   })
   vi.stubGlobal('fetch', fetchMock)
 
@@ -94,6 +165,12 @@ describe('the busk view', () => {
     cleanup()
     store.dispatch(restApi.util.resetApiState())
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    selectionWs.last = null
+    selectionWs.callback = null
+    window.sessionStorage.clear()
+    resetDeskFollowStores()
+    pressAnswer = { kind: 'TEMPLATE', action: 'applied', effectCount: 0, released: 0, skippedFamilies: [] }
     // A couple of tests below monkey-patch the mock's `buskPage` namespace directly (there's no
     // per-test way to seed a WS snapshot otherwise); put it back so test order can't matter.
     lightingApi.buskPage.getState = () => null
@@ -204,6 +281,71 @@ describe('the busk view', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete page' }))
     await waitFor(() => expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(1))
+  })
+
+  /**
+   * A press sends the pair it is acting on (multi-screen plan D4): the desk's targets and mask
+   * while this tab follows the desk, the tab's own once unlinked (D8). And the skip is toasted on
+   * the pressing window (D6), in the desk's words plus *rows*.
+   */
+  describe('a pad press', () => {
+    async function press(calls: { url: string; method: string; body?: string }[]) {
+      // A pad presses on the pointer pair, not on click — `useLongPress` owns the gesture.
+      const pad = await screen.findByTitle('Warm Amber')
+      fireEvent.pointerDown(pad, { clientX: 0, clientY: 0 })
+      fireEvent.pointerUp(pad)
+      await waitFor(() => expect(calls.some((c) => c.url.includes('/busk/pads/31/press'))).toBe(true))
+      return JSON.parse(calls.find((c) => c.url.includes('/busk/pads/31/press'))!.body!)
+    }
+
+    it('sends the desk’s targets and mask while following', async () => {
+      selectionWs.last = {
+        targets: [{ type: 'fixture', key: 'par-1' }],
+        families: ['COLOUR'],
+        source: null,
+      }
+      const { calls } = draw([padPage])
+      expect(await press(calls)).toEqual({
+        targets: [{ type: 'fixture', key: 'par-1' }],
+        families: ['COLOUR'],
+      })
+    })
+
+    it('sends no families for an unmasked selection', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: null, source: null }
+      const { calls } = draw([padPage])
+      expect(await press(calls)).toEqual({ targets: [{ type: 'fixture', key: 'par-1' }] })
+    })
+
+    it('sends this tab’s own pair once unlinked, whatever the desk holds', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'] })
+      const { calls } = draw([padPage])
+      expect(await press(calls)).toEqual({
+        targets: [{ type: 'group', key: 'Movers' }],
+        families: ['POSITION'],
+      })
+    })
+
+    it('toasts the rows a masked Look skipped, saying rows', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      pressAnswer = { kind: 'LOOK', action: 'applied', effectCount: 0, released: 0, skippedFamilies: ['POSITION'] }
+      const warning = vi.spyOn(toast, 'warning').mockImplementation(() => '' as never)
+      const { calls } = draw([padPage])
+      await press(calls)
+      await waitFor(() =>
+        expect(warning).toHaveBeenCalledWith('Position rows skipped — the selection is Colour'),
+      )
+    })
+
+    it('toasts nothing for a press that skipped nothing', async () => {
+      selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      const warning = vi.spyOn(toast, 'warning').mockImplementation(() => '' as never)
+      const { calls } = draw([padPage])
+      await press(calls)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(warning).not.toHaveBeenCalled()
+    })
   })
 
   it('leaves edit mode when the view unmounts, so no other surface keeps drawing it', async () => {

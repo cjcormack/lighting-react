@@ -43,6 +43,16 @@ export interface SelectionBarProps {
   /** The two keyboard hints, each drawn only where the surface's permission allows the key. */
   hints: { entry: boolean; clear: boolean }
   /**
+   * A chip after the family pill and the hints, before the strip — the programmer's desk chip
+   * (`components/desk/DeskChip.tsx`), which says whose selection this is. Drawn in the reserved
+   * arm too, since a window can unlink with nothing selected — with one limit it shares with the
+   * whole bar: on a short viewport with nothing selected the bar is out of the flow altogether
+   * (`selectionBandState`'s `absent`, the space plan's call that 40px is worth more there), so
+   * the chip is not on screen until something is selected. The busk band's chip has no such
+   * arm. Absent on every other sheet.
+   */
+  chip?: ReactNode
+  /**
    * What rides the bar between the counts and the verbs — the programmer's template strip, the
    * cue sheet's lock note. Absent leaves the slack to `ml-auto` below.
    */
@@ -105,6 +115,7 @@ export function SelectionBar({
   cellTitle,
   family,
   hints,
+  chip,
   strip,
   verbs,
   marqueeDragging,
@@ -139,6 +150,7 @@ export function SelectionBar({
       <div className={cn(CHROME_ROW_CLASS, 'min-w-0 text-muted-foreground')}>
         <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
         <span className="text-xs">Nothing selected</span>
+        {chip}
       </div>
     )
   }
@@ -173,14 +185,22 @@ export function SelectionBar({
           <span className="whitespace-nowrap text-xs font-semibold tabular-nums" title={cellTitle}>
             {cellLabel}
           </span>
-          {family != null && (
-            <Badge
-              variant="outline"
-              className={cn('shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]', PHONE_FOLDED_CLASS)}
-            >
-              {family}
-            </Badge>
-          )}
+        </>
+      )}
+      {/* The family pill sits outside the cell block: on the programmer it is the mask the next
+          press carries, which while following the desk can stand over a row-only selection (the
+          bridge lands another window's mask as rows). Every other sheet passes null with no
+          cells, so nothing changes there. */}
+      {family != null && (
+        <Badge
+          variant="outline"
+          className={cn('shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]', PHONE_FOLDED_CLASS)}
+        >
+          {family}
+        </Badge>
+      )}
+      {cellLabel != null && (
+        <>
           {/* The keyboard half: the two keys that reach the marquee's editor from the grid. Both
               hints follow the surface's own answer — each flag is false where its key is refused —
               so this cannot advertise a key that does nothing. A hint, not a control, so on a bar
@@ -201,6 +221,7 @@ export function SelectionBar({
           )}
         </>
       )}
+      {chip}
       {strip}
       {/* `ml-auto`, not a `flex-1` spacer. A strip's chip scroller is itself `flex-1`, and two
           `flex: 1 1 0%` siblings *split* the row's free space rather than one of them taking it

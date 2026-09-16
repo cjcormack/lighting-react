@@ -73,6 +73,7 @@ import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
 import { useDeskSelectionBridge } from './useDeskSelectionBridge'
+import { useDeskFollow } from '@/lib/deskFollow'
 import type {
   CellCommit,
   FixtureRow,
@@ -456,10 +457,19 @@ export function FixturesListContainer({
   // are all COLOUR. Derived from the same list for the same reason the families are.
   const templateEmitters = useMemo(() => targetEmitters(templateWriteTargets), [templateWriteTargets])
 
-  // One desk, one selection (plan D2) — the programmer scope only; see the hook. It sees the
-  // unified ids, so a marquee lights the strip's select LEDs for its rows, and a select button
-  // pressed on the desk lands as a row selection (which drops the marquee, as any row door does).
-  useDeskSelectionBridge(selectionScope === 'programmer', rows, selectedRowIds, setRows)
+  // One desk, one selection (plan D2) — the programmer scope only, and only while this tab
+  // follows the desk (multi-screen plan D8); see the hook. It sees the unified ids, so a marquee
+  // lights the strip's select LEDs for its rows, and a select button pressed on the desk lands as
+  // a row selection (which drops the marquee, as any row door does). The cells go with the ids:
+  // a marquee is targets × families, and the families are the desk's attribute mask (D2, D3).
+  const followingDesk = useDeskFollow()
+  useDeskSelectionBridge(
+    selectionScope === 'programmer' && followingDesk,
+    rows,
+    selectedRowIds,
+    cellSelection.cells,
+    setRows,
+  )
 
   const writers = useCellWriters()
 

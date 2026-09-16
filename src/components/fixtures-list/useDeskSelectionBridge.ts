@@ -1,19 +1,34 @@
-import { useEffect, useRef } from 'react'
-import { setDeskSelection, useDeskSelection } from '../../store/selection'
+import { useEffect, useMemo, useRef } from 'react'
+import { setDeskSelection, useDeskSelectionSnapshot } from '../../store/selection'
 import type { LocateTarget } from '../../store/locate'
+import { familiesKey, normaliseFamilies } from '../../lib/selectionMask'
+import type { CellRef } from '../sheet/cellSelectionModel'
+import { cellFamilies, type ColumnKey } from './columns'
 import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './rowModel'
 
 /**
- * The programmer list ↔ desk selection bridge (`midi-surface-plan.md` §3.2).
+ * The programmer list ↔ desk selection bridge (`midi-surface-plan.md` §3.2, multi-screen plan
+ * §3.2).
  *
  * One desk, one selection (D2). A marquee here lights the strip select LEDs on an attached surface
  * and fills the busk view's target band; a select button pressed on the surface lights the rows
  * here. `selectionSlice` keeps what only a list has — anchor, ranges, row ids — and this is the
- * two-way wiring between it and the server-owned list.
+ * two-way wiring between it and the server-owned fact.
  *
- * **Only the `programmer` scope.** `/fixtures/list` and `/groups/list` are browsing surfaces whose
- * selection scopes a Record or a locate; making either of them move the desk's selection would give
- * the operator two lists that fight over one fact.
+ * **Only the `programmer` scope, and only while this tab follows the desk.** `/fixtures/list` and
+ * `/groups/list` are browsing surfaces whose selection scopes a Record or a locate; making either
+ * of them move the desk's selection would give the operator two lists that fight over one fact.
+ * And a tab that has unlinked (`lib/deskFollow.ts`, plan D8) keeps its own row selection: [enabled]
+ * gates **both** directions, since one bridge is both. Re-enabling is treated as a fresh mount —
+ * the desk's fact is applied and nothing is published — for the mount rule's own reason.
+ *
+ * **The mask rides the publish** (D2, D3). A marquee is targets × families, so beside the rows
+ * this publishes `cellFamilies(cells)` — the union under a ⌘-union of two rectangles over
+ * different columns, an accepted approximation, since the press it feeds can only apply one
+ * `propertyMask` per layer. A row selection with no cells publishes no mask, which is a `set`
+ * that clears the desk's: a row selection has no column axis to speak with. The publish is keyed
+ * on the mask's *key*, not on `cells`, because a marquee drag mints a fresh `cells` array every
+ * animation frame and only the families it names are the desk's business.
  *
  * Four things are load-bearing, and three of them fail silently:
  *
@@ -45,18 +60,38 @@ import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './ro
  *   groups answers `rowIdsForTargets` as two rows, so even the *final* echo can resolve to a
  *   different id set than the one that produced it. Both are one problem — "is this frame mine?" —
  *   and both close at the **target** level, where our own `set` echoes verbatim: `publishedRef` is
- *   a short FIFO of the target sets sent and not yet seen back; a frame matching any of them (or a
- *   subset, since the desk drops a target it cannot resolve) is an echo, everything up to and
+ *   a short FIFO of what was sent and not yet seen back; a frame matching any entry (or a subset of
+ *   its targets, since the desk drops a target it cannot resolve) is an echo, everything up to and
  *   including it is acknowledged, and nothing is applied. A desk-side change that happens to equal
  *   a pending publish is skipped, which is a no-op.
+ *
+ *   **The FIFO key is targets *and* families.** A frame with the same heads and a different mask
+ *   is not an echo — it is exactly what a second window changing the mask under a standing
+ *   marquee produces, and a key of the heads alone would swallow it. It is applied as a **row**
+ *   selection: this tab cannot draw a mask it did not make as a marquee (there is no column model
+ *   to fold one into), so the marquee is dropped to its rows, the honest local reading of "these
+ *   heads, masked by someone else". The `source` of any frame — echo or not — is the store's to
+ *   record, not this hook's to decide; the cache is written by `store/selection.ts` before this
+ *   effect runs, so the chip is right whether or not the heads were an echo.
  */
 export function useDeskSelectionBridge(
   enabled: boolean,
   rows: readonly Row[],
   selectedIds: ReadonlySet<RowId>,
+  cells: readonly CellRef<ColumnKey>[],
   setSelection: (ids: readonly RowId[]) => void,
 ): void {
-  const targets = useDeskSelection()
+  const { targets, families } = useDeskSelectionSnapshot()
+
+  // The mask this list would publish: the marquee's families, folded to the one spelling. A string
+  // rather than the list so that a drag that mints a fresh `cells` array per frame changes nothing
+  // here until the families it names change.
+  const localFamilies = useMemo(
+    () => (cells.length > 0 ? normaliseFamilies(cellFamilies(cells)) : null),
+    [cells],
+  )
+  const localKey = familiesKey(localFamilies)
+  const hasCells = cells.length > 0
 
   // Read through refs: both effects want the *current* value of the other's input without
   // re-running when it moves, which is the whole point of keying each on one thing.
@@ -64,6 +99,12 @@ export function useDeskSelectionBridge(
   rowsRef.current = rows
   const selectedRef = useRef(selectedIds)
   selectedRef.current = selectedIds
+  const localKeyRef = useRef(localKey)
+  localKeyRef.current = localKey
+  const localFamiliesRef = useRef(localFamilies)
+  localFamiliesRef.current = localFamilies
+  const hasCellsRef = useRef(hasCells)
+  hasCellsRef.current = hasCells
 
   /** Ids the apply effect has dispatched and is waiting to see land, or null. */
   const pendingRef = useRef<RowId[] | null>(null)
@@ -74,8 +115,8 @@ export function useDeskSelectionBridge(
    */
   const dispatchedOverRef = useRef<ReadonlySet<RowId> | null>(null)
   const publishedOnceRef = useRef(false)
-  /** Target sets this bridge has sent and not yet seen echoed, oldest first. See the docblock. */
-  const publishedRef = useRef<Set<string>[]>([])
+  /** What this bridge has sent and not yet seen echoed, oldest first. See the docblock. */
+  const publishedRef = useRef<PublishedEntry[]>([])
 
   // Desk → list. Declared first so a frame and the publish that would answer it resolve in that
   // order within one commit.
@@ -87,10 +128,21 @@ export function useDeskSelectionBridge(
   // `targets` is permanently empty) it would clear the operator's own selection.
   const rowsEmpty = rows.length === 0
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      // Unlinked: forget everything in flight, so re-linking reads as a fresh mount — the desk's
+      // fact is applied, and the local selection is not published over it (D8).
+      publishedOnceRef.current = false
+      publishedRef.current = []
+      pendingRef.current = null
+      dispatchedOverRef.current = null
+      return
+    }
     // Our own echo: acknowledge it and every publish before it, and apply nothing.
     const frame = new Set(targets.map(targetKey))
-    const echoOf = publishedRef.current.findIndex((sent) => isSubset(frame, sent))
+    const frameFamilies = familiesKey(families)
+    const echoOf = publishedRef.current.findIndex(
+      (sent) => sent.families === frameFamilies && isSubset(frame, sent.targets),
+    )
     if (echoOf !== -1) {
       publishedRef.current.splice(0, echoOf + 1)
       return
@@ -98,13 +150,18 @@ export function useDeskSelectionBridge(
     const ids = rowIdsForTargets(rowsRef.current, targets)
     const current = selectedRef.current
     if (ids.length === current.size && ids.every((id) => current.has(id))) {
-      pendingRef.current = null
-      return
+      // Same heads. If this list is drawing them as a marquee whose families are not the desk's,
+      // the mask moved under it — drop the marquee to its rows (see the docblock). Otherwise there
+      // is nothing to do: a source-only frame lands here.
+      if (!hasCellsRef.current || localKeyRef.current === frameFamilies) {
+        pendingRef.current = null
+        return
+      }
     }
     pendingRef.current = ids
     dispatchedOverRef.current = current
     setSelection(ids)
-  }, [enabled, targets, rowsEmpty, setSelection])
+  }, [enabled, targets, families, rowsEmpty, setSelection])
 
   // List → desk.
   useEffect(() => {
@@ -129,15 +186,21 @@ export function useDeskSelectionBridge(
       if (landed) return
     }
     const published = selectedRowTargets(rowsRef.current, selectedIds)
-    publishedRef.current.push(new Set(published.map(targetKey)))
+    publishedRef.current.push({ targets: new Set(published.map(targetKey)), families: localKey })
     // A bounded memory: an echo that never comes (the socket dropped mid-drag) must not let the
     // list grow for the life of the page. Well past the frames a drag can have in flight.
     if (publishedRef.current.length > MAX_PENDING_PUBLISHES) publishedRef.current.shift()
-    setDeskSelection(published)
-  }, [enabled, selectedIds])
+    setDeskSelection(published, localFamiliesRef.current)
+  }, [enabled, selectedIds, localKey])
 }
 
 const MAX_PENDING_PUBLISHES = 64
+
+interface PublishedEntry {
+  targets: Set<string>
+  /** `familiesKey` of the mask sent — `''` for none. */
+  families: string
+}
 
 function targetKey(target: LocateTarget): string {
   return `${target.type}:${target.key}`

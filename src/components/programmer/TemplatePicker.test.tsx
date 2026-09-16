@@ -39,6 +39,8 @@ vi.mock('@/store/templates', () => ({
 }))
 
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
+// The mask a press carries — none here; `TemplateStrip.test.tsx` pins the masked send.
+vi.mock('@/store/selection', () => ({ usePressFamilies: () => null }))
 
 // Counted, not stubbed: the real ordering still runs, but the picker must not call it while shut.
 const recentTemplatesSpy = vi.hoisted(() => vi.fn())

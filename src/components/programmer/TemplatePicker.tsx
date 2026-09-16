@@ -27,6 +27,7 @@ import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import { templatePressTitle, useTemplatePress, useTemplatePressHandlers } from './useTemplatePress'
+import { usePressFamilies } from '@/store/selection'
 import type { EffectPresence } from '@/components/busking/buskingTypes'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
@@ -207,7 +208,8 @@ export function TemplatePicker({
   if (sections !== NO_SECTIONS) lastSections.current = sections
   const drawnSections = sections === NO_SECTIONS ? lastSections.current : sections
 
-  const press = useTemplatePress(projectId, targets)
+  const pressFamilies = usePressFamilies(askedFamilies)
+  const press = useTemplatePress(projectId, targets, pressFamilies)
 
   /**
    * The presence ring, folded **once** for the whole grid.

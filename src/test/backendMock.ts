@@ -219,6 +219,23 @@ export const statusWs: {
 
 const noopSub = () => ({ unsubscribe: () => {} })
 
+/**
+ * `selection.state` frames, so a test can drive `store/selection.ts`'s cache entry: `fire` delivers
+ * a snapshot to the entry's subscriber and remembers it as the connect snapshot `getState` seeds.
+ */
+export const selectionWs: {
+  callback: null | ((snapshot: unknown) => void)
+  last: unknown
+  fire: (snapshot: unknown) => void
+} = {
+  callback: null,
+  last: null,
+  fire: (snapshot) => {
+    selectionWs.last = snapshot
+    selectionWs.callback?.(snapshot)
+  },
+}
+
 /** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
 export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
@@ -390,8 +407,16 @@ export function lightingApiMock() {
       // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which
       // then reaches `useBuskingSelection` as a list of targets and is not iterable.
       selection: {
-        getState: () => null,
-        subscribe: noopSub,
+        getState: () => selectionWs.last,
+        subscribe: (fn: (snapshot: unknown) => void) => {
+          selectionWs.callback = fn
+          if (selectionWs.last != null) fn(selectionWs.last)
+          return {
+            unsubscribe: () => {
+              selectionWs.callback = null
+            },
+          }
+        },
         set: () => {},
         toggle: () => {},
         clear: () => {},

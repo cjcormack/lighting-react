@@ -3,12 +3,14 @@ import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type {
+  ApplyTemplateRequest,
   ApplyTemplateResponse,
   TemplateInput,
   TemplateResolveRequest,
   TemplateResolveResponse,
   TemplateSummary,
   TemplateTarget,
+  ToggleTemplateRequest,
   ToggleTemplateResponse,
 } from '../api/templatesApi'
 
@@ -176,7 +178,7 @@ export const templatesApi = restApi.injectEndpoints({
      */
     applyTemplate: build.mutation<
       ApplyTemplateResponse,
-      { projectId: number; templateId: number; targets: TemplateTarget[]; fadeMs?: number }
+      { projectId: number; templateId: number } & ApplyTemplateRequest
     >({
       query: ({ projectId, templateId, ...body }) => ({
         url: `projects/${projectId}/templates/${templateId}/apply`,
@@ -244,7 +246,7 @@ export const templatesApi = restApi.injectEndpoints({
      */
     toggleTemplate: build.mutation<
       ToggleTemplateResponse,
-      { projectId: number; templateId: number; targets: TemplateTarget[]; propertyMask?: string }
+      { projectId: number; templateId: number } & ToggleTemplateRequest
     >({
       query: ({ projectId, templateId, ...body }) => ({
         url: `projects/${projectId}/templates/${templateId}/toggle`,

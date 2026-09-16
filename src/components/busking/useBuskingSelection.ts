@@ -5,18 +5,28 @@ import {
   clearDeskSelection,
   setDeskSelection,
   toggleDeskSelection,
-  useDeskSelection,
+  useSelectionPair,
 } from '@/store/selection'
+import { getLocalSelection, setLocalSelection, useDeskFollow } from '@/lib/deskFollow'
 import { buskingTargetKey, lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
 /**
- * Which targets the pad is aimed at — **the desk's selection**, not this tab's.
+ * Which targets the pad is aimed at, and under which attribute mask — **the desk's selection**
+ * while this tab follows the desk, and the tab's own when it has unlinked (multi-screen plan D8).
  *
  * It was local `useState` until the MIDI surface arrived, and the move is plan D2: one desk, one
  * selection, server-owned. The composition model's argument for one programmer applies verbatim —
  * DMX is one byte per channel, so two selections would force a "whose press wins?" policy nothing
  * expresses — and the practical consequence is that a select button on a control surface, a
  * marquee in the programmer's list and a pad in the target band are three ways to say one thing.
+ *
+ * **The local arm is the exception, and it is per tab.** Clicking the desk chip to *This window*
+ * snapshots the desk's targets and mask into `lib/deskFollow.ts`'s copy and stops following; the
+ * three writes then edit that copy and the desk's is untouched, and a press sends the copy as its
+ * pair. Re-linking drops the copy and adopts the desk's. Two things the local arm does more simply
+ * than the desk does, on purpose: its toggle is add-or-remove by key, without the desk's head-by-
+ * head narrowing of a partly covered group (the desk owns that rule and a client copy would drift),
+ * and its replace clears the mask exactly as the desk's `set` does (D2).
  *
  * **This is not a thin wrapper over the cache.** The cache holds `{ type, key }`; the band and the
  * pads want a whole `GroupSummary` or `Fixture` (a member count, a name, an icon), so this
@@ -30,7 +40,8 @@ import { buskingTargetKey, lookLayerTarget, type BuskingTarget } from './busking
  * name.
  */
 export function useBuskingSelection() {
-  const targets = useDeskSelection()
+  const following = useDeskFollow()
+  const { targets, families } = useSelectionPair()
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
 
@@ -50,25 +61,48 @@ export function useBuskingSelection() {
     return out
   }, [targets, groups, fixtures])
 
-  /** Replace the selection with exactly this target. */
-  const selectTarget = useCallback((target: BuskingTarget) => {
-    setDeskSelection([lookLayerTarget(target)])
-  }, [])
+  /** Replace the selection with exactly this target — and, as a replace, clear the mask (D2). */
+  const selectTarget = useCallback(
+    (target: BuskingTarget) => {
+      if (following) setDeskSelection([lookLayerTarget(target)])
+      else setLocalSelection({ targets: [lookLayerTarget(target)], families: null })
+    },
+    [following],
+  )
 
   const clearSelection = useCallback(() => {
-    clearDeskSelection()
-  }, [])
+    if (following) clearDeskSelection()
+    else setLocalSelection({ targets: [], families: null })
+  }, [following])
 
   /**
-   * Add or remove one target.
+   * Add or remove one target, keeping the mask.
    *
-   * The desk decides what "remove" means, and it is not symmetric with "add": a fixture already
-   * covered by a selected group is narrowed *out of that group's coverage* rather than removed as
-   * an entry. Doing it here would need the group's members, which `GroupSummary` does not carry.
+   * On the desk's arm the desk decides what "remove" means, and it is not symmetric with "add": a
+   * fixture already covered by a selected group is narrowed *out of that group's coverage* rather
+   * than removed as an entry. Doing it here would need the group's members, which `GroupSummary`
+   * does not carry — which is also why the local arm does not try to.
    */
-  const toggleTarget = useCallback((target: BuskingTarget) => {
-    toggleDeskSelection(lookLayerTarget(target))
-  }, [])
+  const toggleTarget = useCallback(
+    (target: BuskingTarget) => {
+      const layerTarget = lookLayerTarget(target)
+      if (following) {
+        toggleDeskSelection(layerTarget)
+        return
+      }
+      const local = getLocalSelection()
+      const present = local.targets.some(
+        (t) => t.type === layerTarget.type && t.key === layerTarget.key,
+      )
+      setLocalSelection({
+        targets: present
+          ? local.targets.filter((t) => !(t.type === layerTarget.type && t.key === layerTarget.key))
+          : [...local.targets, layerTarget],
+        families: local.families,
+      })
+    },
+    [following],
+  )
 
-  return { selectedTargets, selectTarget, toggleTarget, clearSelection }
+  return { selectedTargets, families, selectTarget, toggleTarget, clearSelection }
 }

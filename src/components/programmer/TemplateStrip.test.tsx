@@ -56,6 +56,10 @@ vi.mock('@/store/templates', () => ({
 // The picker's pads read the desk's resolved applied state for their presence ring. Nothing here
 // is about the ring, so an empty list is the whole mock.
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
+// The mask a press carries (multi-screen plan D4): the desk's while following, the marquee's own
+// when unlinked. Null — no mask — unless a test says otherwise, so the presses below stay exact.
+const pressFamilies = vi.hoisted(() => ({ current: null as AttributeFamily[] | null }))
+vi.mock('@/store/selection', () => ({ usePressFamilies: () => pressFamilies.current }))
 
 const newSheetProps = vi.fn()
 vi.mock('./NewTemplateFromSelectionSheet', () => ({
@@ -151,6 +155,7 @@ const BREATHE = template({
 beforeEach(() => {
   applyTemplate.mockClear()
   toggleTemplate.mockClear()
+  pressFamilies.current = null
   toastSuccess.mockClear()
   toastWarning.mockClear()
   applyResult = { written: 1, skipped: [] }
@@ -294,6 +299,28 @@ describe('TemplateStrip', () => {
       propertyMask: 'COLOUR',
     })
     expect(applyTemplate).not.toHaveBeenCalled()
+  })
+
+  it('sends the selection’s mask on both presses, and never pre-refuses from it', () => {
+    // The mask is tested on the on arm only, and only the desk knows which arm a press is on — so
+    // a press outside the mask still goes out, and the desk's refusal is what the operator reads.
+    pressFamilies.current = ['POSITION']
+    render(strip(COLOUR_CELL))
+    fireEvent.click(screen.getByText('Amber Key'))
+    expect(applyTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 1,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+      families: ['POSITION'],
+    })
+    fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
+    expect(toggleTemplate).toHaveBeenCalledWith({
+      projectId: 1,
+      templateId: 1,
+      targets: [{ type: 'fixture', key: 'hex-1' }],
+      propertyMask: 'COLOUR',
+      families: ['POSITION'],
+    })
   })
 
   it('keeps the half-typed template when the selection is pulled out from under it', () => {
