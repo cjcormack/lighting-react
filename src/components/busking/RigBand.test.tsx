@@ -7,6 +7,7 @@ import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { resetDeskFollowStores } from '@/lib/deskFollow'
+import { getBuskFocus, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
@@ -118,6 +119,7 @@ function draw(
         onClear={handlers.onClear ?? (() => {})}
         editing={handlers.editing ?? false}
         compact={handlers.compact ?? false}
+        focus={handlers.focus ?? 'split'}
       />
     </DndContext>,
   )
@@ -128,6 +130,17 @@ const tileButtons = () =>
     .filter((b) => b.getAttribute('aria-pressed') != null && !b.textContent?.startsWith('Targets') && !b.textContent?.startsWith('Cells'))
 
 beforeEach(() => {
+  // A desk screen: wide, tall, so the split defaults to three rows (`lib/buskWindow.ts`'s ladder).
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.startsWith('(min-width'),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    onchange: null,
+    dispatchEvent: () => false,
+  }))
   snapshot = { targets: [], families: null, source: null }
   groups = [group('Front wash', 6)]
   fixtures = [barFixture, parFixture]
@@ -144,6 +157,8 @@ afterEach(() => {
   vi.clearAllMocks()
   window.sessionStorage.clear()
   resetDeskFollowStores()
+  resetBuskWindowStores()
+  vi.unstubAllGlobals()
 })
 
 describe('the rig band', () => {
@@ -260,22 +275,56 @@ describe('the rig band', () => {
     expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
   })
 
-  it('clamps the rows handle to 1…N', () => {
+  it('clamps the rows handle to 1…N, and the handle writes the window’s fact', () => {
     rigData = builtRig()
+    setBuskRigRows(3)
     draw()
     expect(screen.getByText('3 of 4 rows')).toBeInTheDocument()
     expect(screen.queryByText('Four')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
     expect(screen.getByText('4 of 4 rows')).toBeInTheDocument()
     expect(screen.getByText('Four')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show one row more' })).toBeDisabled()
+    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
     const fewer = screen.getByRole('button', { name: 'Show one row fewer' })
     fireEvent.click(fewer)
     fireEvent.click(fewer)
     fireEvent.click(fewer)
     expect(screen.getByText('1 of 4 rows')).toBeInTheDocument()
-    expect(fewer).toBeDisabled()
+    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('1')
     expect(screen.queryByText('Cells')).not.toBeInTheDocument()
+  })
+
+  it('snaps past the ends of the handle into Rig and Pads focus (D6)', () => {
+    rigData = builtRig()
+    setBuskRigRows(4)
+    draw()
+    expect(screen.getByText('4 of 4 rows')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
+    expect(getBuskFocus()).toBe('rig')
+    // The wish is untouched: back in Split the band shows the same four rows.
+    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
+
+    setBuskFocus('split')
+    setBuskRigRows(1)
+    cleanup()
+    draw()
+    expect(screen.getByText('1 of 4 rows')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show one row fewer' }))
+    expect(getBuskFocus()).toBe('pads')
+  })
+
+  it('shows every row with no handle in Rig focus, filling the body — below md too', () => {
+    rigData = builtRig()
+    setBuskRigRows(1)
+    draw([], { focus: 'rig' })
+    expect(screen.getByText('Four')).toBeInTheDocument()
+    expect(screen.queryByText(/of 4 rows/)).not.toBeInTheDocument()
+    expect(document.querySelector('[data-rig-band="rig"]')!.className).toContain('flex-1')
+
+    cleanup()
+    draw([], { focus: 'rig', compact: true })
+    expect(screen.getByText('Four')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Row:/ })).not.toBeInTheDocument()
   })
 
   it('is one row with a row chip below md, the verbs in a menu', () => {

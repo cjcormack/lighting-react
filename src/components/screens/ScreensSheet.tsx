@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Copy, Maximize2, Minimize2, MonitorUp } from 'lucide-react'
+import { Check, Copy, Link, Maximize2, Minimize2, MonitorUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,13 +32,24 @@ import {
   newWindowUrl,
   nextScreenName,
   openWindowOn,
+  windowSetupUrl,
   type DisplayChoice,
 } from '@/lib/screens'
-import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from '@/lib/windowViews'
+import {
+  WINDOW_VIEWS,
+  projectIdOfPath,
+  windowViewOf,
+  windowViewPath,
+  type WindowView,
+  type WindowViewOption,
+} from '@/lib/windowViews'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useBuskPagesQuery, useBuskShowingPageQuery } from '@/store/busk'
 import { useViewedProject } from '@/ProjectSwitcher'
 import {
   renameWindowRow,
   setWindowFullscreen,
+  setWindowViewOptions,
   showOnWindow,
   thisWindowRow,
   useDeskWindows,
@@ -57,6 +68,19 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * of this tab goes out and comes back like any other and there is one path, not two. The one
  * thing read locally is this window's own full-screen state, which `fullscreenchange` knows before
  * the registry does.
+ *
+ * **A row also draws its view's options, generically** (busk-further plan D13). Each entry in
+ * `lib/windowViews.ts` may carry an `options` descriptor, and the row renders whatever its
+ * *current* view contributes — a busk row's Focus and Sheet segments and its Page picker, a Prompt
+ * Book row nothing — from the values the window announced (`row.viewOptions`), so the sheet never
+ * learns the word busk. The write is one command, `windows.viewOptions {targetId, view, options}`,
+ * and the target applies it to its own tab facts and re-announces, so the row is drawn from the
+ * registry and never from a guess. **Page is settable**, and a remote set unlinks that window
+ * onto the page exactly as arriving with `?page=` does; a following row shows the desk's page and
+ * says *follows the desk*, an unlinked one its own and *own page* (the wording of the row's *own
+ * selection* line above it). What is *not* on the row is anything a remote set could lose for the operator at that
+ * window — selection follow, the split's rows, the documents themselves. *Copy link for <name>*
+ * mints the row's whole setup, `?window=…&page=…&focus=…&sheet=…`.
  *
  * Below the rows, the two ways to make a new window:
  *
@@ -213,7 +237,118 @@ function WindowRow({
           </Button>
         )}
       </div>
+      {view?.options != null && <ViewOptionsRows row={row} view={view} projectId={projectId} />}
     </li>
+  )
+}
+
+/**
+ * The row's view options, one control per descriptor entry, and the link that carries them. Only
+ * mounted for a view that contributes any, so the page query below never runs for a Prompt Book
+ * row.
+ */
+function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: WindowView; projectId: number | null }) {
+  const options = row.viewOptions ?? {}
+  const [copied, setCopied] = useState(false)
+  const { data: deskPageId } = useBuskShowingPageQuery()
+  const { data: pages } = useBuskPagesQuery(projectId ?? 0, { skip: projectId == null })
+  const set = (key: string, value: string) => setWindowViewOptions(row.id, row.view, { [key]: value })
+
+  // A following row's page is the desk's, which the announce does not carry (it is the desk's to
+  // say); an unlinked row announced its own.
+  const pageFollows = options.pageFollows !== 'false'
+  const shownPageId = pageFollows ? (deskPageId ?? null) : Number(options.page ?? NaN)
+  const shownPage = pages?.find((page) => page.id === shownPageId) ?? null
+
+  // A following row's link carries no page on purpose: a null desk page is *not* the first page
+  // (§The busk layout), and writing the fallback would unlink the new window where this one
+  // follows. "Copied" is a claim about *this* link, so it clears the moment the link changes.
+  const link = windowSetupUrl(row.name, row.view, {
+    ...options,
+    ...(shownPage == null ? {} : { page: String(shownPage.id) }),
+  })
+  useEffect(() => setCopied(false), [link])
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopied(true)
+    } catch {
+      toast.error('Could not copy the link')
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2" data-view-options={view.id}>
+      {view.options!.map((option) =>
+        option.kind === 'enum' ? (
+          <EnumOption key={option.key} option={option} rowName={row.name} value={options[option.key] ?? ''} onSet={(v) => set(option.key, v)} />
+        ) : (
+          <label key={option.key} className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">{option.label}</span>
+            <Select
+              value={shownPage == null ? '' : String(shownPage.id)}
+              onValueChange={(v) => set(option.key, v)}
+              disabled={pages == null || pages.length === 0}
+            >
+              <SelectTrigger className="h-7 min-w-[8rem]" aria-label={`${option.label} on ${row.name}`}>
+                <SelectValue placeholder={shownPage == null ? '—' : undefined} />
+              </SelectTrigger>
+              <SelectContent>
+                {(pages ?? []).map((page) => (
+                  <SelectItem key={page.id} value={String(page.id)}>
+                    {page.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground">{pageFollows ? 'follows the desk' : 'own page'}</span>
+          </label>
+        ),
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        onClick={() => void copy()}
+        title="A link that opens a window on another device with this one's view, page, focus and sheet"
+      >
+        {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
+        {copied ? 'Copied' : `Copy link for ${row.name}`}
+      </Button>
+    </div>
+  )
+}
+
+function EnumOption({
+  option,
+  rowName,
+  value,
+  onSet,
+}: {
+  option: Extract<WindowViewOption, { kind: 'enum' }>
+  rowName: string
+  value: string
+  onSet: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <span className="text-muted-foreground">{option.label}</span>
+      <ToggleGroup
+        type="single"
+        size="sm"
+        value={value}
+        onValueChange={(next) => next !== '' && onSet(next)}
+        aria-label={`${option.label} on ${rowName}`}
+        className="h-7 gap-0.5 p-0.5"
+      >
+        {option.values.map((v) => (
+          <ToggleGroupItem key={v} value={v} aria-label={v} className="h-6 px-2 text-xs capitalize">
+            {v}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
   )
 }
 

@@ -8,6 +8,7 @@ import layoutSrc from './Layout.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
 import selectionBarSrc from './components/sheet/SelectionBar.tsx?raw'
 import cellEditorSurfaceSrc from './components/sheet/cells/CellEditorSurface.tsx?raw'
+import buskWindowSrc from './lib/buskWindow.ts?raw'
 
 /**
  * The short-viewport fold is one decision written in three places, and this is what keeps them one
@@ -68,9 +69,20 @@ describe('the short-viewport fold', () => {
     // the three strings to one *spelling*, which the number check cannot see.
     //
     // Like `SelectionBar`, the third is pinned by spelling and not by `SITES`: it carries no
-    // Tailwind variant, and `SITES` is also what the class-name test below slices.
-    for (const src of [programmerPageSrc, selectionBarSrc, cellEditorSurfaceSrc]) {
+    // Tailwind variant, and `SITES` is also what the class-name test below slices. The fourth is
+    // `lib/buskWindow.ts`, whose defaults ladder (busk-further plan §3.4) folds the busk view's
+    // focus and sheet on the same height — its own copy, by the convention this file enforces.
+    for (const src of [programmerPageSrc, selectionBarSrc, cellEditorSurfaceSrc, buskWindowSrc]) {
       expect(src).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
+    }
+  })
+
+  it('spells the cramped fold the same way at both sites that ask it', () => {
+    // 750 is the colour editor's compact fold (`CellEditorSurface`), and the busk view's
+    // two-rows-not-three default (`buskWindow`). Neither file can sit in `SITES` — each carries a
+    // second `max-height` — so the two copies are held to one spelling here instead.
+    for (const src of [cellEditorSurfaceSrc, buskWindowSrc]) {
+      expect(src).toContain("const CRAMPED_VIEWPORT = '(max-height: 750px)'")
     }
   })
 

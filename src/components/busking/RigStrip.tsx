@@ -11,8 +11,8 @@ import { summariseSelection, type BuskingTarget } from './buskingTypes'
  *
  * It keeps what a press needs to be honest about: the selection summary, the family pill and the
  * desk chip. It cannot select — that is the other screen's job, or a tap on the chevron to unfold
- * Split. Built here so the band and its strip are one file apart and share one summary; **session
- * 4 mounts it** when `busk.focus` arrives. Nothing else does yet.
+ * Split. Built here so the band and its strip are one file apart and share one summary;
+ * `BuskingView` mounts it in place of the band while `busk.focus` is `pads`.
  */
 export function RigStrip({
   selectedTargets,

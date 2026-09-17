@@ -5,7 +5,8 @@ import { announceFrame, createWindowsWsApi, parseDeskWindow, type WindowAnnounce
 
 /**
  * The `windows.*` wire as this side speaks it (multi-screen plan §3.4, lighting7 d774fd9) — pinned
- * by frame. Two things here are load-bearing: the announce carries **exactly five keys**, because
+ * by frame. Two things here are load-bearing: the announce carries **exactly five keys** — six
+ * with `viewOptions`, and only when the view contributes any (busk-further plan §3.5) — because
  * the desk's Json refuses an unknown one and drops the whole frame; and it is re-sent on every
  * `open`, because the registry keys by socket and a reconnect is a new socket.
  */
@@ -24,6 +25,16 @@ describe('the announce', () => {
     // A caller that hands over a wider object (a registry row, say) must not leak its extra keys.
     const row = { ...ME, id: 'socket-1', user: 'Chris' }
     expect(Object.keys(announceFrame(row))).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows'])
+  })
+
+  it('carries viewOptions as a seventh key only when the view contributes any, copied', () => {
+    const options = { focus: 'pads', sheet: 'none', rigRows: '2', pageFollows: 'true' }
+    const frame = announceFrame({ ...ME, view: '/projects/1/busk', viewOptions: options })
+    expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
+    expect(frame.viewOptions).toEqual(options)
+    expect(frame.viewOptions).not.toBe(options)
+    // Absent stays absent: a window on the Prompt Book sends the five-key frame it always did.
+    expect(Object.keys(announceFrame({ ...ME, viewOptions: undefined }))).toHaveLength(6)
   })
 
   it('is sent at once while the socket is open, as the frame the desk declares', () => {
@@ -82,20 +93,23 @@ describe('windows.state', () => {
       type: 'windows.state',
       windows: [
         { id: 's-1', windowId: 'w-1', name: 'Screen 1', view: '/projects/1/programmer' },
-        { id: 's-2', windowId: 'w-2', name: 'iPad', view: '/projects/1/busk', fullscreen: true, follows: false, user: 'Chris' },
+        { id: 's-2', windowId: 'w-2', name: 'iPad', view: '/projects/1/busk', fullscreen: true, follows: false, user: 'Chris', viewOptions: { focus: 'pads', sheet: 'none' } },
+        { id: 's-3', windowId: 'w-3', name: 'Odd', view: '/projects/1/busk', viewOptions: { focus: 7 } },
         { id: 3, name: 'junk' },
       ],
     })
 
     expect(api.getState()).toEqual([
-      { id: 's-1', windowId: 'w-1', name: 'Screen 1', view: '/projects/1/programmer', fullscreen: false, follows: true, user: null },
-      { id: 's-2', windowId: 'w-2', name: 'iPad', view: '/projects/1/busk', fullscreen: true, follows: false, user: 'Chris' },
+      { id: 's-1', windowId: 'w-1', name: 'Screen 1', view: '/projects/1/programmer', fullscreen: false, follows: true, user: null, viewOptions: null },
+      { id: 's-2', windowId: 'w-2', name: 'iPad', view: '/projects/1/busk', fullscreen: true, follows: false, user: 'Chris', viewOptions: { focus: 'pads', sheet: 'none' } },
+      // A map with a non-string value is not the wire's `Map<String, String>`: read as none.
+      { id: 's-3', windowId: 'w-3', name: 'Odd', view: '/projects/1/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
     ])
 
     const seen = vi.fn()
     api.subscribe(seen)
     expect(seen).toHaveBeenCalledTimes(1)
-    expect(seen.mock.calls[0]![0]).toHaveLength(2)
+    expect(seen.mock.calls[0]![0]).toHaveLength(3)
   })
 
   it('reads an absent or non-list `windows` as no windows', () => {
@@ -108,7 +122,7 @@ describe('windows.state', () => {
 })
 
 describe('the commands', () => {
-  it('delivers the three rebroadcast commands, this window’s own included, as parsed', () => {
+  it('delivers the four rebroadcast commands, this window’s own included, as parsed', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createWindowsWsApi(conn)
     const seen = vi.fn()
@@ -117,25 +131,31 @@ describe('the commands', () => {
     frame({ type: 'windows.show', targetId: 's-2', view: '/projects/1/busk' })
     frame({ type: 'windows.rename', targetId: 's-2', name: 'iPad' })
     frame({ type: 'windows.fullscreen', targetId: 's-2', on: false })
+    frame({ type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 'rig' } })
     frame({ type: 'windows.show', targetId: 7, view: '/x' })
+    frame({ type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 1 } })
+    frame({ type: 'windows.viewOptions', targetId: 's-2', options: { focus: 'rig' } })
 
     expect(seen.mock.calls.map((c) => c[0])).toEqual([
       { type: 'show', targetId: 's-2', view: '/projects/1/busk' },
       { type: 'rename', targetId: 's-2', name: 'iPad' },
       { type: 'fullscreen', targetId: 's-2', on: false },
+      { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 'rig' } },
     ])
   })
 
-  it('sends the three commands by row id, as gestures', () => {
+  it('sends the four commands by row id, as gestures', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createWindowsWsApi(conn)
     api.show('s-2', '/projects/1/busk')
     api.rename('s-2', 'iPad')
     api.fullscreen('s-2', true)
+    api.viewOptions('s-2', '/projects/1/busk', { sheet: 'toggle' })
     expect(sent).toEqual([
       { type: 'windows.show', targetId: 's-2', view: '/projects/1/busk' },
       { type: 'windows.rename', targetId: 's-2', name: 'iPad' },
       { type: 'windows.fullscreen', targetId: 's-2', on: true },
+      { type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { sheet: 'toggle' } },
     ])
   })
 })

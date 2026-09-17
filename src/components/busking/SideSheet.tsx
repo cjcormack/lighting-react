@@ -1,0 +1,161 @@
+import { Gauge, Palette, PanelRightClose, Waves, type LucideIcon } from 'lucide-react'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { useCellEditorForm, type CellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { LIVE_SHEET_TABS, setBuskSheet, useBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
+import { cn } from '@/lib/utils'
+import { BuskSpeedRail } from './BuskSpeedRail'
+import { SideSheetFold } from './SideSheetFold'
+import type { BuskingTarget } from './buskingTypes'
+
+/**
+ * The busk view's **side sheet** — one rail, three tabs, one fold, one fact (busk-further plan
+ * D7; `Sheets.dc.html` is the authority on layout).
+ *
+ * **Speed is `BuskSpeedRail` unchanged**, mounted here and nowhere else in play mode. Colour and
+ * Spread are sessions 5 and 6, and until they land the strip **hides** them rather than drawing a
+ * tab with an empty state (`LIVE_SHEET_TABS` in `lib/buskWindow.ts` is the one list): a tab that
+ * opens onto nothing is a promise the desk cannot keep. So this session's sheet is one live tab
+ * and the fold.
+ *
+ * **The sheet is one fact, `busk.sheet`, and the fold is `none`.** There is no `sheetOpen`
+ * beside it, whatever `Focus.dc.html`'s older sketch lists — the fold chevron writes `none`, a tab
+ * glyph on the fold writes its tab, and both are the same store every other reader of the fact
+ * uses (the announce, ⌘K, the Screens sheet, a MIDI `BuskSheetToggle`). A fact naming a tab that
+ * has not landed draws the fold, so a `sheet=colour` link arriving early is quiet rather than
+ * broken.
+ *
+ * **Below `md` the rail is not drawn**, as it never was: the sheet is a bottom sheet on an upright
+ * phone and a right-hand overlay where the viewport is short, through `useCellEditorForm`'s three
+ * forms — the fold decides the form, the window decides the tab — and it carries **no Speed tab**,
+ * because Speed is the ShowBar's chip there. With Colour and Spread still to land that sheet has
+ * nothing to show yet, so `SideSheetOverlay` renders nothing and the page strip's button says why.
+ *
+ * The palette still replaces this whole region while editing; that swap is `BuskingView`'s.
+ */
+
+interface TabSpec {
+  id: BuskSheetTab
+  label: string
+  icon: LucideIcon
+}
+
+export const SIDE_SHEET_TABS: readonly TabSpec[] = [
+  { id: 'speed', label: 'Speed', icon: Gauge },
+  { id: 'colour', label: 'Colour', icon: Palette },
+  { id: 'spread', label: 'Spread', icon: Waves },
+]
+
+/**
+ * Which tabs a sheet offers in a given form: the landed ones, docked; the landed ones **minus
+ * Speed** in every overlay form below `md`, where the ShowBar's chip already reaches every master
+ * (D7). `'popover'` is an overlay form too, not a second name for docked: `useCellEditorForm`
+ * answers it for any viewport 640px and wider that is not short, which includes the 640–767px
+ * band where the rail is still not drawn — and an overlay with a Speed tab and no rail behind it
+ * would open onto nothing.
+ */
+export function sideSheetTabs(form: 'docked' | CellEditorForm): readonly TabSpec[] {
+  const live = SIDE_SHEET_TABS.filter((tab) => LIVE_SHEET_TABS.includes(tab.id))
+  return form === 'docked' ? live : live.filter((tab) => tab.id !== 'speed')
+}
+
+export interface SideSheetProps {
+  projectId: number
+  selectedTargets: Map<string, BuskingTarget>
+}
+
+/** The docked sheet, `md` and up: the fold when `busk.sheet` is `none`, else the tab strip and the tab. */
+export function SideSheet({ projectId, selectedTargets }: SideSheetProps) {
+  const sheet = useBuskSheet()
+  const tabs = sideSheetTabs('docked')
+  const open = tabs.find((tab) => tab.id === sheet)
+  if (open == null) {
+    return <SideSheetFold projectId={projectId} selectedTargets={selectedTargets} tabs={tabs} />
+  }
+  return (
+    <div data-side-sheet={open.id} className="hidden w-72 shrink-0 flex-col md:flex">
+      <div role="tablist" aria-label="Side sheet" className="flex h-9 shrink-0 items-center gap-0.5 border-b border-l px-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={tab.id === open.id}
+            onClick={() => setBuskSheet(tab.id)}
+            className={cn(
+              'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors',
+              tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <tab.icon className="size-3.5" />
+            {tab.label}
+          </button>
+        ))}
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => setBuskSheet('none')}
+          aria-label="Fold the side sheet"
+          title="Fold the sheet to its 44px strip"
+          className="rounded p-1 text-muted-foreground hover:text-foreground"
+        >
+          <PanelRightClose className="size-4" />
+        </button>
+      </div>
+      {/* The rail sizes itself and scrolls itself; the wrapper only hands it the column's height.
+          Its own `border-l` continues the strip's, so the region has one left edge, not two. */}
+      <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1">
+        {open.id === 'speed' && <BuskSpeedRail />}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The sheet below `md`, as a bottom sheet or a right-hand sheet. Open while `busk.sheet` names a
+ * tab this form offers; closing writes `none`, the same fact the fold chevron writes. Nothing to
+ * show until Colour or Spread lands, so today it renders no content and never opens.
+ */
+export function SideSheetOverlay() {
+  const form = useCellEditorForm()
+  const sheet = useBuskSheet()
+  const tabs = sideSheetTabs(form)
+  const open = tabs.find((tab) => tab.id === sheet)
+  return (
+    <Sheet open={open != null} onOpenChange={(next) => !next && setBuskSheet('none')}>
+      <SheetContent
+        side={form === 'bottom-sheet' ? 'bottom' : 'right'}
+        className={cn('flex flex-col gap-0 p-0', form === 'bottom-sheet' ? 'h-[66vh] rounded-t-xl' : 'w-72')}
+        style={{ maxWidth: 'none' }}
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>{open?.label ?? 'Side sheet'}</SheetTitle>
+          <SheetDescription>The busk view’s side sheet</SheetDescription>
+        </SheetHeader>
+        <div role="tablist" aria-label="Side sheet" className="flex h-11 shrink-0 items-center gap-0.5 border-b px-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={tab.id === open?.id}
+              onClick={() => setBuskSheet(tab.id)}
+              className={cn(
+                'inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-semibold',
+                tab.id === open?.id ? 'bg-muted text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              <tab.icon className="size-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}

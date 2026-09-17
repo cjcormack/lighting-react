@@ -784,6 +784,67 @@ lives in `store/buskEditSlice.ts` rather than a React context, because the cue-s
 view. It is never persisted, and `BuskingView` **must** exit it on unmount, or that overlay keeps
 drawing crosses on whatever page the operator went to next.
 
+### Focus and the side sheet
+
+**Each window gives the busk view its own shape, and the shape is three per-tab facts**
+(busk-further plan D5–D7, `lib/buskWindow.ts`): `busk.focus` (`split` · `pads` · `rig`),
+`busk.rigRows` (how many rig rows the split shows) and `busk.sheet` (`none` · `speed` · `colour` ·
+`spread`, where `none` is the fold). They sit on `buskPageFollow.ts`'s model and **beside** it —
+per-tab `sessionStorage` through `createSyncStore`, never `localStorage`, never the desk's — and
+nothing here reads the selection's follow flag or the page's. The reason is the reason focus
+exists: two screens at one desk showing two shapes of one view, pressed onto one selection.
+
+**Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
+folds the rig to `RigStrip` (the summary, the family pill, the desk chip — what a press needs to
+be honest about — and a chevron that unfolds Split) and the page fills the body; **Rig** fills the
+body with every row and folds the page to `BuskPageStrip` at the bottom. **The Focus control is
+on the page strip in every shape** — below the band in Split and Pads, on the folded strip at the
+bottom in Rig, so Rig focus always has its way back — one strip component, placed twice, the
+control travelling with it through its `controls` slot; `RigStrip` carries only its chevron. The handle and the segmented control are **one setting** (D6): one
+more than the last row is Rig focus, one fewer than the first is Pads, so the handle's buttons are
+never disabled at the ends. **Edit mode forces Split** for its duration, because a palette drag
+needs both regions, and restores the window's focus on Done by never having written it; the
+control is disabled while editing rather than hidden, still lighting the stored focus, which is
+what Done returns to. A project with **no pages** forces Split too: its first-open screen lives in
+the page column, and a folded page strip has nothing to create a page from.
+
+**A default is only a default.** Each store rests at `null` — *this window has not chosen* — and
+the reader resolves it against the surface through the module's own copies of the short (500) and
+cramped (750) height queries (`shortViewport.test.ts` pins both spellings) plus Tailwind's `lg`
+for width: focus defaults to `pads` on a short viewport; the sheet to `speed` where docking the
+288px rail leaves the page its 600px (`lg` and up), `none` where it would stack the page (iPad
+portrait) or the viewport is short; the rows to three on a desk screen and two where cramped or
+below `lg`. `lg` rather than a measured body because the default has to be answerable off the busk
+view: the announce carries these values from `Layout`, where there is no body to measure. Once the
+window has chosen, the tab fact wins and survives a reload.
+
+**`?focus=` and `?sheet=` are this window's on arrival, once, like `?page=`.** `BuskingView`
+latches both raw strings at mount, `applyBuskArrival` applies the valid ones and marks the tab
+**decided** whatever they held (both arms write it — a window arriving with neither has decided
+too), and the view mirrors the two facts back into the URL with `replace`, gated on the
+**rendered** tri-state `useBuskWindowDecided` for `useBuskPageDecided`'s reason. So the view's
+address always carries both, a copied link reproduces the shape, and a reload finds the mirror's
+own writes and is never an arrival.
+
+**The sheet is one fact, and the fold is `none`.** There is no `sheetOpen` beside it, whatever
+`Focus.dc.html`'s older sketch lists — `SideSheet` (`components/busking/SideSheet.tsx`) draws the
+tab strip and the tab when the fact names a live tab and `SideSheetFold` (44px: the beat, master
+1's tempo, one glyph per live tab, the selection's colour off the stage's colour dispatch, the head
+count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
+so a MIDI `{sheet: 'toggle'}` unfolds onto the tab the operator had. **Speed is `BuskSpeedRail`
+mounted unchanged** inside the sheet; Colour and Spread are sessions 5 and 6 and the strip
+**hides** them until then (`LIVE_SHEET_TABS`): a tab with an empty state is a promise the desk
+cannot keep, and a fact naming a hidden tab draws the fold. Below `md` the sheet is a bottom sheet
+or a right-hand overlay through `useCellEditorForm`'s forms, opened from the page strip's button,
+and carries **no Speed tab** (Speed is the ShowBar's chip there) — which leaves it nothing to show
+this session, so the button is drawn inert with the reason on its title. The palette still
+replaces the whole region while editing.
+
+**The facts ride the announce and the Screens sheet sets them** — see §Windows, full screen and
+the hand for `viewOptions`, and `lib/windowViews.ts` for the descriptor the sheet renders from.
+⌘K offers *Split · Focus pads · Focus rig* for this window only while it is on the busk view, and
+*Show Busk on <window> · Focus …* as a two-frame arm on the show (`buildWindowCommands`).
+
 **The columns of a row stack below 600px of the page body's width, and editing is desktop-only.**
 `PageRow` hands its twelfths → `fr` tracks to the grid through a CSS variable so a container query
 (`@max-[600px]:grid-cols-1`, on `BuskPageBody`'s `@container`) can override them — an inline
@@ -842,7 +903,8 @@ label row has its shape, disabled with the session that lands them on their `tit
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
 leaf per fixture tile — the third reader of `components/fixtures/fixtureAppearance.tsx` beside the
-DOM marker and the 2D plot (the cues' `MiniStage` borrows only its default colour) — and a cell or run tile draws its own cells' colours off
+DOM marker and the 2D plot (the cues' `MiniStage` borrows only its default colour; the side sheet's
+fold is the fourth, one leaf for the selection's colour dot) — and a cell or run tile draws its own cells' colours off
 the parent's per-element `segments` by the element's **position in the patch's cell list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
 
@@ -870,9 +932,10 @@ is created by the first thing dropped into it** (`rnewrow`): the server refuses 
 `+ Row` is the new-row zone rather than a button that mints a placeholder, and `normaliseRig` drops
 an empty row while keeping an empty rig. Rows reorder by their grip onto the gaps drawn while a row
 is lifted; `NameField` (extracted from `BuskBank`'s private `BankNameField`) is the row's name as it
-is the bank's. The `n of N rows` handle (D6) draws and clamps here and is local state until session
-4 gives it `busk.rigRows`; edit mode shows every row, since a hidden one cannot take a drop. Below
-`md` the band is one row with a row chip and the verbs in a menu, and there is no editing there.
+is the bank's. The `n of N rows` handle (D6) reads and writes the window's `busk.rigRows`
+(§Focus and the side sheet) and snaps at both ends; edit mode shows every row, since a hidden one
+cannot take a drop. Below `md` the band is one row with a row chip and the verbs in a menu, and
+there is no editing there.
 
 ### The hand
 
@@ -2316,15 +2379,36 @@ once at boot before the router is created (`main.tsx`) and stripped, else *Windo
 and it can be renamed (`renameWindow`, a subscribable so the chip, the user menu and the announce
 all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.ts`):
 
-- **The announce carries exactly `windowId`, `name`, `view`, `fullscreen`, `follows`.** The desk's
-  Json is bare — no `ignoreUnknownKeys` — so one extra key makes the whole frame undeserializable and
-  it is dropped with a server-side log line only. The symptom is a window that never appears in
-  `windows.state`; `windowsApi.test.ts` pins the key set, and `id` and `user` are the server's to
-  say. It goes out on every `Status.OPEN` (the second legitimate `open` re-send, §Where a WS bridge
-  subscribes) and on every change — route, full screen, follow, rename — from one effect in
-  `useWindowsBridge`. It is **handled only once the show is warm**: the frame waits in the socket's
-  incoming channel through boot, so `windows.state` arrives empty behind the boot overlay and fills
-  itself when the show is ready. There is no retry timer; do not add one.
+- **The announce carries exactly `windowId`, `name`, `view`, `fullscreen`, `follows` — and
+  `viewOptions` only while the view contributes any.** The desk's Json is bare — no
+  `ignoreUnknownKeys` — so one extra key makes the whole frame undeserializable and it is dropped
+  with a server-side log line only. The symptom is a window that never appears in `windows.state`;
+  `windowsApi.test.ts` pins the key set — five keys plus `type`, or six with `viewOptions` — and
+  `id` and `user` are the server's to say. It goes out on every `Status.OPEN` (the second legitimate
+  `open` re-send, §Where a WS bridge subscribes) and on every change — route, full screen, follow,
+  rename, a busk fact — from one effect in `useWindowsBridge`. It is **handled only once the show
+  is warm**: the frame waits in the socket's incoming channel through boot, so `windows.state`
+  arrives empty behind the boot overlay and fills itself when the show is ready. There is no retry
+  timer; do not add one.
+- **`viewOptions` is a free `string → string` map, and the registry never learns its vocabulary**
+  (busk-further plan D13; lighting7 `6e2cc72`). On the busk view it carries `focus`, `rigRows`,
+  `sheet`, `pageFollows` and — only while the page is unlinked — `page`; a following window
+  announces no page, because the desk's showing page is the desk's to say and the Screens sheet
+  reads it for every following row alike. It rides back on `windows.state`, which is what the
+  Screens sheet draws a row's Focus · Sheet · Page controls from — generically, off the `options`
+  descriptor on the row's *current* entry in `lib/windowViews.ts`, so a Prompt Book row draws none
+  and the sheet never learns the word busk. The fourth command, **`windows.viewOptions {targetId,
+  view, options}`**, is rebroadcast like the other three; the named window applies it **for that
+  view only** — a busk frame arriving at a window on the Prompt Book is ignored rather than stored
+  for a later visit — through `applyBuskViewOptions`, and re-announces. `{sheet: 'toggle'}` flips
+  the fold and the last open tab (a MIDI `BuskSheetToggle`'s spelling); `{page: n}` **unlinks**
+  that window onto the page exactly as arriving with `?page=` does. The current view is read at
+  command time through a ref, because a ⌘K *Show Busk on X · Focus pads* is two frames in a row
+  and the second must see the route the first moved the window to. *Copy link for <name>* on a row
+  mints `?window=…&page=…&focus=…&sheet=…` (`windowSetupUrl`): the row's whole setup, which a
+  fresh window latches on arrival — the page only while the row holds one of its own, since a
+  following row's null desk page is not "the first page" and writing it would unlink the new
+  window where this one follows.
 - **The row's `id` is socket-minted and is what every command addresses**; the `windowId` is how a
   tab recognises its own row (`thisWindowRow`, first match). A duplicated tab copies its storage, so
   two rows can share a `windowId` and cannot be told apart from this side — D9 accepts that, the
@@ -2927,7 +3011,7 @@ path may quietly change where it lands.
   `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
 
   **Busk is `/projects/:id/busk`** (`routes/Busk.tsx` → `components/busking/BuskingView`):
-  the target band, the page the operator built and the speed rail, under the same `ShowHeader` and
+  the rig band, the page the operator built and the side sheet, under the same `ShowHeader` and
   `ShowBar` as the other three, from the same `useShowBarProps`. The page itself is §The busk
   layout; this section is the route and the surface around it. It was `/fx`, which named
   the machinery rather than the job and sat one hyphen from `/fx-library` — the collision

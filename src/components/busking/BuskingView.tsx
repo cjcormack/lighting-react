@@ -31,6 +31,17 @@ import {
   useBuskPageFollow,
   useLocalBuskPage,
 } from '@/lib/buskPageFollow'
+import {
+  applyBuskArrival,
+  setBuskFocus,
+  setBuskSheet,
+  useBuskFocus,
+  useBuskSheet,
+  useBuskWindowDecided,
+} from '@/lib/buskWindow'
+import { useCellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { Button } from '@/components/ui/button'
+import { PanelBottomOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
 import { recordsOnRig } from '@/lib/buskRig'
@@ -39,7 +50,9 @@ import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import { RigBand } from './RigBand'
-import { BuskSpeedRail } from './BuskSpeedRail'
+import { RigStrip } from './RigStrip'
+import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
+import { BuskFocusControl } from './BuskFocusControl'
 import { BuskEditProvider } from './BuskEditProvider'
 import { BuskPageBody } from './BuskPage'
 import { BuskPageStrip } from './BuskPageStrip'
@@ -50,13 +63,32 @@ import type { PadBehaviour } from './padBehaviour'
 import { type EffectPresence } from './buskingTypes'
 
 /**
- * The busk view's body: the rig band, the page the operator built, and the speed rail — or, in
- * edit mode, the palette in the rail's place, with a Library tab for the page and a Rig tab for
+ * The busk view's body: the rig band, the page the operator built, and the side sheet — or, in
+ * edit mode, the palette in the sheet's place, with a Library tab for the page and a Rig tab for
  * the band.
  *
- * **There is no narrow-width target sheet any more** (busk-further plan D15): below `md` the band
- * itself is one row with a row chip, and Rig focus — the whole rig stacked — arrives in session 4.
- * `isDesktop` stays, as the one query that says which board this is.
+ * **The view has three shapes, and which one is this window's fact** (busk-further plan D5–D7,
+ * `lib/buskWindow.ts`): **Split** — the band showing `busk.rigRows` rows over the page, the
+ * handle between; **Pads** — the page fills the body and the rig folds to `RigStrip`, whose chevron
+ * unfolds Split; **Rig** — the band fills the body with every row and the page folds to its strip
+ * at the bottom. The Focus control is on the page strip in every shape — below the band in Split
+ * and Pads, on the folded strip at the bottom in Rig — so one strip component, placed twice,
+ * carries it. Edit mode **forces Split** for its duration, because a palette drag needs both
+ * regions on screen, and restores the window's focus on Done by never having written it; so does
+ * a project with no pages, whose first-open screen lives in the page column. The side sheet is
+ * `busk.sheet`'s: a tab, or `none` for the fold.
+ *
+ * **`?focus=` and `?sheet=` are this window's on arrival**, latched once per tab exactly as
+ * `?page=` is below — the raw strings read at mount, applied through `applyBuskArrival`, which
+ * marks the tab decided whatever they held — and mirrored back with `replace`, gated on the
+ * *rendered* decided flag for `useBuskPageDecided`'s reason. So the view's address always carries
+ * both, a copied link reproduces the shape, and a reload is never an arrival.
+ *
+ * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
+ * a row chip, and Rig focus is the whole rig stacked. `isDesktop` stays, as the one query that
+ * says which board this is; below it the side sheet is a bottom sheet or a right-hand overlay
+ * through `useCellEditorForm`, opened from the page strip's button — which is inert until Colour
+ * or Spread lands, since that sheet carries no Speed tab (D7).
  *
  * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
  * live view.
@@ -83,6 +115,9 @@ export function BuskingView({ projectId }: { projectId: number }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [searchParams, setSearchParams] = useSearchParams()
+  const focus = useBuskFocus()
+  const sheet = useBuskSheet()
+  const sheetForm = useCellEditorForm()
 
   const {
     selectedTargets,
@@ -203,18 +238,43 @@ export function BuskingView({ projectId }: { projectId: number }) {
   // lags by one render; see its doc for why neither the live read nor `useBuskPageFollow` can
   // stand in for it here.
   const pageDecided = useBuskPageDecided()
+
+  // The window's shape: `?focus=` and `?sheet=` latched at mount as raw strings, for the same
+  // reason `launchPageId` is, and applied once per tab — `applyBuskArrival` is a no-op once the tab
+  // has decided, so a reload finds the mirror's own writes and leaves them be.
+  const [launchShape] = useState(() => ({ focus: searchParams.get('focus'), sheet: searchParams.get('sheet') }))
   useEffect(() => {
-    if (!pageDecided || activePage == null || activePage.id === requestedPageId) return
-    // `replace`, never `push`: flipping between pages is not a history entry.
+    applyBuskArrival(launchShape)
+  }, [launchShape])
+
+  // The shape's mirror has the same gate, on its own rendered tri-state: not until its arrival
+  // decision has been rendered, or the mirror writes the shape the window is arriving *from*.
+  const windowDecided = useBuskWindowDecided()
+  const urlFocus = searchParams.get('focus')
+  const urlSheet = searchParams.get('sheet')
+
+  // **One mirror for all three keys.** `setSearchParams`' functional updater does not build on a
+  // prior call in the same tick — react-router copies the *current render's* search into `prev` —
+  // so two mirrors firing in one commit would each drop the other's key for a frame and navigate
+  // twice. Each key is written only where its own decision has been rendered and it has moved.
+  const mirrorPage = pageDecided && activePage != null && activePage.id !== requestedPageId ? activePage.id : null
+  const mirrorShape = windowDecided && (urlFocus !== focus || urlSheet !== sheet)
+  useEffect(() => {
+    if (mirrorPage == null && !mirrorShape) return
+    // `replace`, never `push`: flipping between pages or shapes is not a history entry.
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        next.set('page', String(activePage.id))
+        if (mirrorPage != null) next.set('page', String(mirrorPage))
+        if (mirrorShape) {
+          next.set('focus', focus)
+          next.set('sheet', sheet)
+        }
         return next
       },
       { replace: true },
     )
-  }, [pageDecided, activePage, requestedPageId, setSearchParams])
+  }, [mirrorPage, mirrorShape, focus, sheet, setSearchParams])
 
   // Leaving the view leaves edit mode. Without this the FX cue-slot overlay, which reads the mode
   // from the store, would keep drawing its crosses on whatever page the operator went to.
@@ -348,6 +408,67 @@ export function BuskingView({ projectId }: { projectId: number }) {
     if (written != null) cachePage(written)
   }, [createPage, saveLayout, cachePage, projectId, templates, looks])
 
+  // Edit mode forces Split (D4): the fact is untouched, so Done restores it by simply reading it.
+  // So does a project with no pages, once the list has answered: `BuskFirstOpen` owns that moment
+  // and lives in the page column, and Rig focus would fold the column to a strip with nothing on
+  // it to create a page from (`+ Page` is edit mode's, and *Edit layout* is disabled with none).
+  const noPages = pages != null && pages.length === 0
+  const shape = editing || noPages ? 'split' : focus
+  // Below `md` the overlay sheet's tabs, none of which has landed yet; the button says so.
+  const overlayTabs = sideSheetTabs(sheetForm)
+
+  const pageStrip = (folded: boolean) => (
+    <BuskPageStrip
+      pages={pages ?? []}
+      activePageId={activePage?.id ?? null}
+      editing={editing}
+      folded={folded}
+      // The desk while this window follows it, this window's own copy once unlinked — and
+      // the effect above mirrors whichever won into `?page=`. A click that never reached the
+      // desk unlinks the window rather than overriding it silently; see `onPageSelect`.
+      onSelect={onPageSelect}
+      onCreate={(name) => createPage({ projectId, name }).unwrap()}
+      onRename={(name) =>
+        activePage == null
+          ? Promise.resolve()
+          : renamePage({ projectId, pageId: activePage.id, name }).unwrap()
+      }
+      onReorder={(pageIds) => void reorderPages({ projectId, pageIds })}
+      onDelete={() => {
+        if (activePage == null) return
+        void deletePage({ projectId, pageId: activePage.id })
+      }}
+      onToggleEditing={() => {
+        if (editing) dispatch(exitBuskEdit())
+        else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
+      }}
+      controls={
+        <>
+          {!isDesktop && !editing && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              disabled={overlayTabs.length === 0}
+              title={
+                overlayTabs.length === 0
+                  ? 'The Colour and Spread tabs arrive with sessions 5 and 6; Speed is the ShowBar’s chip here'
+                  : 'Open the side sheet'
+              }
+              onClick={() => {
+                const first = overlayTabs[0]
+                if (first != null) setBuskSheet(first.id)
+              }}
+            >
+              <PanelBottomOpen className="size-3.5" /> Sheet
+            </Button>
+          )}
+          <BuskFocusControl disabled={editing} />
+        </>
+      }
+    />
+  )
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
@@ -355,62 +476,54 @@ export function BuskingView({ projectId }: { projectId: number }) {
           {/* Not dimmed while editing any more: the band is being *edited* then — its tiles are
               drag handles and take drops — and a dim over a drop target reads as "not here". Pads
               do not press in edit mode and tiles do not select; both say so by their cursors. */}
-          <RigBand
-            projectId={projectId}
-            selectedTargets={selectedTargets}
-            families={families}
-            onToggle={toggleTarget}
-            onClear={clearSelection}
-            editing={editing}
-            compact={!isDesktop}
-          />
+          {shape === 'pads' ? (
+            <RigStrip
+              selectedTargets={selectedTargets}
+              families={families}
+              onUnfold={() => setBuskFocus('split')}
+            />
+          ) : (
+            <RigBand
+              projectId={projectId}
+              selectedTargets={selectedTargets}
+              families={families}
+              onToggle={toggleTarget}
+              onClear={clearSelection}
+              editing={editing}
+              compact={!isDesktop}
+              focus={shape}
+            />
+          )}
 
-          <BuskPageStrip
-            pages={pages ?? []}
-            activePageId={activePage?.id ?? null}
-            editing={editing}
-            // The desk while this window follows it, this window's own copy once unlinked — and
-            // the effect above mirrors whichever won into `?page=`. A click that never reached the
-            // desk unlinks the window rather than overriding it silently; see `onPageSelect`.
-            onSelect={onPageSelect}
-            onCreate={(name) => createPage({ projectId, name }).unwrap()}
-            onRename={(name) =>
-              activePage == null
-                ? Promise.resolve()
-                : renamePage({ projectId, pageId: activePage.id, name }).unwrap()
-            }
-            onReorder={(pageIds) => void reorderPages({ projectId, pageIds })}
-            onDelete={() => {
-              if (activePage == null) return
-              void deletePage({ projectId, pageId: activePage.id })
-            }}
-            onToggleEditing={() => {
-              if (editing) dispatch(exitBuskEdit())
-              else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
-            }}
-          />
+          {shape !== 'rig' && pageStrip(false)}
 
-          <BuskEditProvider editing={editing} projectId={projectId} page={activePage}>
-            {pages != null && pages.length === 0 && !isLoading ? (
-              <BuskFirstOpen
-                busy={creating || generating}
-                onStartFromLibrary={() => void startFromLibrary()}
-                onStartEmpty={() => void createPage({ projectId, name: 'Page 1' })}
-              />
-            ) : activePage != null ? (
-              <BuskPageBody page={activePage} behaviour={behaviour} />
-            ) : (
-              <div className="min-h-0 flex-1" />
-            )}
-          </BuskEditProvider>
+          {shape !== 'rig' && (
+            <BuskEditProvider editing={editing} projectId={projectId} page={activePage}>
+              {pages != null && pages.length === 0 && !isLoading ? (
+                <BuskFirstOpen
+                  busy={creating || generating}
+                  onStartFromLibrary={() => void startFromLibrary()}
+                  onStartEmpty={() => void createPage({ projectId, name: 'Page 1' })}
+                />
+              ) : activePage != null ? (
+                <BuskPageBody page={activePage} behaviour={behaviour} />
+              ) : (
+                <div className="min-h-0 flex-1" />
+              )}
+            </BuskEditProvider>
+          )}
+
+          {/* Rig focus: the page folded to its strip at the bottom, the Focus control on it. */}
+          {shape === 'rig' && pageStrip(true)}
         </div>
 
         {editing ? (
           <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} onRigKeys={onRigKeys} />
         ) : (
-          <BuskSpeedRail />
+          <SideSheet projectId={projectId} selectedTargets={selectedTargets} />
         )}
       </div>
+      {!isDesktop && !editing && <SideSheetOverlay />}
     </div>
   )
 }

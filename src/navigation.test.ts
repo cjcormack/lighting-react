@@ -229,6 +229,8 @@ describe("window commands", () => {
     openOnDisplay: vi.fn(),
     follow: vi.fn(),
     unlink: vi.fn(),
+    setFocus: vi.fn(),
+    setViewOptions: vi.fn(),
   })
   const row = (id: string, name: string, view = "/projects/1/programmer") => ({
     id,
@@ -238,6 +240,7 @@ describe("window commands", () => {
     fullscreen: false,
     follows: true,
     user: null,
+    viewOptions: null,
   })
   const base = (over: Partial<WindowCommandInputs> = {}): WindowCommandInputs => ({
     windows: [row("s-1", "Screen 1"), row("s-2", "Screen 2", "/projects/1/busk"), row("s-3", "iPad", "/install")],
@@ -247,6 +250,7 @@ describe("window commands", () => {
     canFullscreen: true,
     canOpenOnDisplay: false,
     following: true,
+    buskFocus: null,
     actions: actions(),
     ...over,
   })
@@ -256,8 +260,9 @@ describe("window commands", () => {
     const labels = commands.map((c) => c.label)
     expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
     expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
-    // Six views × two other windows (the iPad on an install route takes the viewed project).
-    const shows = commands.filter((c) => c.id.startsWith("window-show-"))
+    // Six views × two other windows (the iPad on an install route takes the viewed project),
+    // plus the focus arm on each Busk show.
+    const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id))
     expect(shows).toHaveLength(12)
     expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
     expect(shows.map((c) => c.label)).toContain("Show Prompt Book on iPad")
@@ -319,6 +324,36 @@ describe("window commands", () => {
     expect(off.actions.follow).toHaveBeenCalledTimes(1)
     // Reachable from the same search as every sibling in the Screens group.
     expect(follow.keywords).toEqual(expect.arrayContaining(["screen", "window"]))
+  })
+
+  it("offers Split · Focus pads · Focus rig for this window only while it is on the busk view", () => {
+    expect(buildWindowCommands(base()).some((c) => c.id.startsWith("window-focus-"))).toBe(false)
+    const inputs = base({ buskFocus: "pads" })
+    const commands = buildWindowCommands(inputs)
+    const focus = commands.filter((c) => c.id.startsWith("window-focus-"))
+    expect(focus.map((c) => c.label)).toEqual(["Split", "Focus pads", "Focus rig"])
+    // Right after Screens…, before the shows for other windows.
+    expect(commands.findIndex((c) => c.id === "window-focus-split")).toBe(commands.findIndex((c) => c.id === "window-screens") + 1)
+    expect(focus.map((c) => c.detail)).toEqual(["this window", "current", "this window"])
+    focus[2]!.run()
+    expect(inputs.actions.setFocus).toHaveBeenCalledWith("rig")
+  })
+
+  it("gives Show Busk on <window> a focus arm: the show, then that window's focus on the view it lands on", () => {
+    const inputs = base()
+    const commands = buildWindowCommands(inputs)
+    const arms = commands.filter((c) => /^window-show-s-2-busk-/.test(c.id))
+    expect(arms.map((c) => c.label)).toEqual([
+      "Show Busk on Screen 2 · Split",
+      "Show Busk on Screen 2 · Focus pads",
+      "Show Busk on Screen 2 · Focus rig",
+    ])
+    // No arm on a view that contributes no focus.
+    expect(commands.some((c) => /^window-show-s-2-show-/.test(c.id))).toBe(false)
+    arms[1]!.run()
+    expect(inputs.actions.show).toHaveBeenCalledWith("s-2", "/projects/1/busk")
+    expect(inputs.actions.setViewOptions).toHaveBeenCalledWith("s-2", "/projects/1/busk", { focus: "pads" })
+    expect(new Set(commands.map((c) => c.id)).size).toBe(commands.length)
   })
 
   it("keeps the Screens… count in step with the registry", () => {

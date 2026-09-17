@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import type { WindowCommand } from '@/api/windowsApi'
@@ -11,22 +11,28 @@ import {
 } from '@/lib/fullscreen'
 import { hasUnsavedSheets } from '@/lib/unsavedSheets'
 import { renameWindow, useWindowName } from '@/lib/windowIdentity'
-import { windowViewLabel } from '@/lib/windowViews'
+import { windowViewLabel, windowViewOf } from '@/lib/windowViews'
+import { applyBuskViewOptions, useBuskViewOptions } from '@/lib/buskWindow'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
 import { isEditableTarget } from '@/lib/domUtils'
 
 /**
  * The half of the `windows.*` family that needs the router (multi-screen plan §3.4): the announce
- * of what this window is showing, and the handler for the three commands another window sends it.
+ * of what this window is showing, and the handler for the four commands another window sends it.
  * Mounted once, in `Layout`, inside `RouterProvider` — a store-level bridge could do neither,
  * because `navigate` and the location exist only there.
  *
- * **The announce is one effect keyed on the four things it carries** — the route, the name,
- * full screen and follow — so every change re-announces and nothing else does. The `open` re-send
- * is `api/windowsApi.ts`'s, from the payload this effect last handed it. The `view` is the
- * pathname alone: the search is a window's private business (`?cue=`, `?select=`), and the one
- * search that mirrors a desk fact (`?page=`) is the desk's already.
+ * **The announce is one effect keyed on the five things it carries** — the route, the name,
+ * full screen, follow, and the view's options — so every change re-announces and nothing else
+ * does. The `open` re-send is `api/windowsApi.ts`'s, from the payload this effect last handed it.
+ * The `view` is the pathname alone: the search is a window's private business (`?cue=`,
+ * `?select=`), and the facts the busk view mirrors into its search (`?page=`, `?focus=`, `?sheet=`)
+ * ride the announce as `viewOptions` instead — **only while this window is on a view that
+ * contributes any** (`lib/windowViews.ts`), so a window on the Prompt Book sends the five-key
+ * frame it always did. The busk facts are subscribed on every route, because the hooks that read
+ * them are the only way to re-announce when they move; they are three `sessionStorage` stores and
+ * cost nothing while the view is elsewhere.
  *
  * **Every socket receives every command, the sender included** (D11), so each handler's first
  * act is comparing `targetId` to this window's row id — read at command time from the last
@@ -42,6 +48,13 @@ import { isEditableTarget } from '@/lib/domUtils'
  * with the page. The wire carries no sender, so the toast says *another window* rather than
  * naming it.
  *
+ * A `windows.viewOptions` is applied **for that view only** (busk-further plan §3.5): the frame
+ * names the view the sender believed the target was on, and a window that has moved since — a
+ * busk frame arriving on the Prompt Book — ignores it rather than storing a fact for a view it is
+ * not showing. The view is read at command time through a ref, because a *Show Busk on X · Pads*
+ * from ⌘K is two frames in a row and the second must see the route the first moved this window
+ * to. Applying is `lib/buskWindow.ts`'s, and the announce effect re-announces whatever moved.
+ *
  * A `windows.rename` is **not applied server-side**: the target renames itself here and the
  * effect above re-announces, which is what makes the new name survive that tab's reload.
  * `windows.fullscreen {on:false}` exits at once (no gesture needed); `{on:true}` cannot call
@@ -54,15 +67,35 @@ export function useWindowsBridge(): void {
   const follows = useDeskFollow()
   const { active: fullscreen } = useFullscreenState()
   const view = location.pathname
+  const buskOptions = useBuskViewOptions()
+  const contributes = windowViewOf(view)?.options != null
+  // A string key rather than the object: the hook mints a fresh map per render, and the effect
+  // must re-run only when a value moves.
+  const optionsKey = contributes ? JSON.stringify(buskOptions) : null
 
   useEffect(() => {
-    announceThisWindow({ name, view, fullscreen, follows })
-  }, [name, view, fullscreen, follows])
+    announceThisWindow({
+      name,
+      view,
+      fullscreen,
+      follows,
+      ...(optionsKey == null ? {} : { viewOptions: JSON.parse(optionsKey) as Record<string, string> }),
+    })
+  }, [name, view, fullscreen, follows, optionsKey])
+
+  // Written on commit, never during render: the router's navigations are transitions, and a
+  // render React abandons must not leave the ref naming a route this window never showed. The
+  // frames it serves arrive as separate socket messages in separate tasks, long after the commit.
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
 
   useEffect(() => {
     const subscription = lightingApi.windows.subscribeCommands((command) => {
       handleWindowCommand(command, {
         myRowId: thisWindowRowId(),
+        currentView: viewRef.current,
         navigate: (to) => void navigate(to),
       })
     })
@@ -75,12 +108,23 @@ export function useWindowsBridge(): void {
 export interface WindowCommandContext {
   /** This tab's row id from the last `windows.state`, or null before it has one. */
   myRowId: string | null
+  /** The route this window is showing *now* — what a `viewOptions` frame's `view` is held to. */
+  currentView: string
   navigate: (to: string) => void
   /** Test seams; production reads the real modules. */
   unsaved?: () => boolean
   rename?: (name: string) => boolean
   exit?: () => void
   askToReturn?: () => void
+  /** Apply a view's options; answers false for a view that contributes none. */
+  applyViewOptions?: (viewId: string, options: Readonly<Record<string, string>>) => boolean
+}
+
+/** The one view that contributes options today; a second entry here is a second applier. */
+function applyViewOptionsFor(viewId: string, options: Readonly<Record<string, string>>): boolean {
+  if (viewId !== 'busk') return false
+  applyBuskViewOptions(options)
+  return true
 }
 
 /** Sonner id for the decline, so a second `show` replaces the toast rather than stacking one. */
@@ -93,7 +137,7 @@ export const WINDOW_SHOW_DECLINED_TOAST_ID = 'window-show-declined'
 export function handleWindowCommand(
   command: WindowCommand,
   context: WindowCommandContext,
-): 'ignored' | 'navigated' | 'declined' | 'renamed' | 'exited' | 'asked' {
+): 'ignored' | 'navigated' | 'declined' | 'renamed' | 'exited' | 'asked' | 'applied' {
   if (context.myRowId == null || command.targetId !== context.myRowId) return 'ignored'
   switch (command.type) {
     case 'show': {
@@ -124,6 +168,12 @@ export function handleWindowCommand(
       }
       ;(context.exit ?? (() => void exitFullscreen()))()
       return 'exited'
+    case 'viewOptions': {
+      const named = windowViewOf(command.view)
+      const showing = windowViewOf(context.currentView)
+      if (named == null || showing == null || named.id !== showing.id) return 'ignored'
+      return (context.applyViewOptions ?? applyViewOptionsFor)(named.id, command.options) ? 'applied' : 'ignored'
+    }
   }
 }
 

@@ -46,6 +46,8 @@ vi.mock('sonner', () => ({
 import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 import { getFullscreenState, resetFullscreenState } from '@/lib/fullscreen'
 import { resetUnsavedSheets, setSheetUnsaved } from '@/lib/unsavedSheets'
+import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
+import { resetBuskPageFollowStores } from '@/lib/buskPageFollow'
 import { store } from './index'
 import { restApi } from './restApi'
 import { thisWindowRow, useDeskWindows, useThisWindow } from './windows'
@@ -65,6 +67,7 @@ const row = (id: string, windowId: string, name: string, view = '/projects/1/pro
   fullscreen: false,
   follows: true,
   user: null,
+  viewOptions: null,
 })
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -85,6 +88,8 @@ afterEach(() => {
   resetDeskFollowStores()
   resetFullscreenState()
   resetUnsavedSheets()
+  resetBuskWindowStores()
+  resetBuskPageFollowStores()
 })
 
 describe('the cache entry', () => {
@@ -151,6 +156,32 @@ describe('the announce', () => {
     })
     await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
     expect(windowsWs.announced[1]).toMatchObject({ view: '/projects/1/busk' })
+    // On the busk view the frame gains its one optional key, carrying the busk facts.
+    expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({
+      focus: 'split',
+      rigRows: '2',
+      sheet: 'none',
+      pageFollows: 'true',
+    })
+  })
+
+  it('re-announces when a busk fact moves, and not when one moves on another view', async () => {
+    mountBridge('/projects/1/busk')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    act(() => setBuskFocus('pads'))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ focus: 'pads' })
+  })
+
+  it('keeps the five-key frame on a view that contributes no options', async () => {
+    mountBridge('/projects/1/prompt-book')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    expect(Object.keys(windowsWs.announced[0] as object)).not.toContain('viewOptions')
+    act(() => setBuskFocus('pads'))
+    // A fact the announce does not carry cannot re-announce it.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(windowsWs.announced).toHaveLength(1)
   })
 
   it('re-announces when the tab unlinks from the desk, reporting follows: false', async () => {
@@ -165,7 +196,7 @@ describe('the announce', () => {
 })
 
 describe('handleWindowCommand', () => {
-  const ctx = () => ({ myRowId: 's-1', navigate: vi.fn(), unsaved: () => false, rename: vi.fn(), exit: vi.fn(), askToReturn: vi.fn() })
+  const ctx = (currentView = '/projects/1/programmer') => ({ myRowId: 's-1', currentView, navigate: vi.fn(), unsaved: () => false, rename: vi.fn(), exit: vi.fn(), askToReturn: vi.fn() })
 
   it('ignores a show aimed at another row — including this window’s own rebroadcast', () => {
     const c = ctx()
@@ -200,7 +231,7 @@ describe('handleWindowCommand', () => {
   })
 
   it('reads the real dirty-sheet count when no seam is given', () => {
-    const c = { myRowId: 's-1', navigate: vi.fn() }
+    const c = { myRowId: 's-1', currentView: '/projects/1/programmer', navigate: vi.fn() }
     setSheetUnsaved(Symbol('editor'), true)
     expect(handleWindowCommand({ type: 'show', targetId: 's-1', view: '/projects/1/busk' }, c)).toBe('declined')
     resetUnsavedSheets()
@@ -220,6 +251,20 @@ describe('handleWindowCommand', () => {
     expect(handleWindowCommand({ type: 'fullscreen', targetId: 's-1', on: true }, c)).toBe('asked')
     expect(c.askToReturn).toHaveBeenCalledTimes(1)
     expect(c.exit).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies viewOptions only while showing the view the frame names', () => {
+    const busk = { type: 'viewOptions' as const, targetId: 's-1', view: '/projects/1/busk', options: { focus: 'rig' } }
+    // On the Prompt Book a busk frame is ignored: the window would otherwise store a fact for a
+    // view it is not showing.
+    expect(handleWindowCommand(busk, ctx('/projects/1/prompt-book'))).toBe('ignored')
+    expect(getBuskFocus()).toBe('split')
+    // Another window's busk frame is not this window's.
+    expect(handleWindowCommand({ ...busk, targetId: 's-2' }, ctx('/projects/1/busk'))).toBe('ignored')
+    expect(handleWindowCommand(busk, ctx('/projects/1/busk'))).toBe('applied')
+    expect(getBuskFocus()).toBe('rig')
+    // A view that contributes nothing applies nothing, even addressed correctly.
+    expect(handleWindowCommand({ ...busk, view: '/projects/1/prompt-book' }, ctx('/projects/1/prompt-book'))).toBe('ignored')
   })
 })
 
@@ -275,5 +320,37 @@ describe('the mounted bridge', () => {
     })
     expect(getFullscreenState().wanted).toBe(true)
     expect(exit).toHaveBeenCalledTimes(1)
+  })
+
+  it('flips the sheet on {sheet: toggle} aimed at this row on the busk view, and re-announces', async () => {
+    windowsWs.last = [row('s-1', 'w-1', 'Screen 1', '/projects/1/busk')]
+    setBuskSheet('speed')
+    mountBridge('/projects/1/busk')
+    await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    act(() => {
+      windowsWs.command({ type: 'viewOptions', targetId: 's-1', view: '/projects/1/busk', options: { sheet: 'toggle' } })
+    })
+    expect(getBuskSheet()).toBe('none')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ sheet: 'none' })
+    act(() => {
+      windowsWs.command({ type: 'viewOptions', targetId: 's-1', view: '/projects/1/busk', options: { sheet: 'toggle' } })
+    })
+    expect(getBuskSheet()).toBe('speed')
+  })
+
+  it('applies a focus arm after a show that moved it onto the busk view — two frames in a row', async () => {
+    windowsWs.last = [row('s-1', 'w-1', 'Screen 1')]
+    const view = mountBridge()
+    await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())
+    act(() => {
+      windowsWs.command({ type: 'show', targetId: 's-1', view: '/projects/1/busk' })
+    })
+    await waitFor(() => expect(view.getByTestId('path')).toHaveTextContent('/projects/1/busk'))
+    act(() => {
+      windowsWs.command({ type: 'viewOptions', targetId: 's-1', view: '/projects/1/busk', options: { focus: 'pads' } })
+    })
+    expect(getBuskFocus()).toBe('pads')
   })
 })

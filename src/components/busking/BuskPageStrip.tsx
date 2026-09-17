@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useDndMonitor, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { useSelector } from 'react-redux'
 import { MoreHorizontal, Pencil } from 'lucide-react'
@@ -36,6 +36,11 @@ import { BuskPageChip } from './BuskPageChip'
  * *Saved* is read off the show-wide save counters rather than any state of its own: a layout write
  * is an ordinary save, so it already reports there (see `NON_SAVE_ENDPOINTS`, which the *press*
  * joins and the layout write deliberately does not).
+ *
+ * **`controls` is the Focus control and its neighbours** (busk-further plan session 4), handed in
+ * by `BuskingView` rather than mounted here, because in Rig focus this strip is the *folded* page
+ * at the bottom of the body and the control has to be there too, or Rig focus would have no way
+ * back — one strip component, placed twice, and the control travels with it.
  */
 
 function PageTab({
@@ -94,6 +99,10 @@ export interface BuskPageStripProps {
   /** Every page id, in the order wanted — the reorder route takes nothing less. */
   onReorder: (pageIds: number[]) => void
   onToggleEditing: () => void
+  /** The Focus control (and, below `md`, the sheet button), drawn beside *Edit layout* / *Done*. */
+  controls?: ReactNode
+  /** Rig focus: the strip is the folded page at the bottom of the body, and says so with a top edge. */
+  folded?: boolean
 }
 
 export function BuskPageStrip({
@@ -106,6 +115,8 @@ export function BuskPageStrip({
   onDelete,
   onReorder,
   onToggleEditing,
+  controls,
+  folded = false,
 }: BuskPageStripProps) {
   const { pending, savedTick } = useSelector(selectSaveStatus)
   const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
@@ -162,7 +173,10 @@ export function BuskPageStrip({
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2.5 px-4 pt-2.5">
+    <div
+      data-busk-page-strip={folded ? 'folded' : 'open'}
+      className={cn('flex shrink-0 flex-wrap items-center gap-2.5 px-4 pt-2.5', folded && 'border-t pb-2.5')}
+    >
       <div className="inline-flex items-center gap-0.5 rounded-[10px] border bg-card p-0.5">
         {pages.map((page, index) => (
           <PageTab
@@ -222,6 +236,8 @@ export function BuskPageStrip({
       )}
 
       <div className="flex-1" />
+
+      {controls}
 
       {editing ? (
         <>

@@ -20,6 +20,28 @@ export function newWindowUrl(name: string, view: string = '/', origin: string = 
   return `${origin}${path}?window=${encodeURIComponent(name.trim())}`
 }
 
+/**
+ * A window's **whole setup** as a link (busk-further plan D13, `Screens.dc.html`'s *Copy link for
+ * Screen 2*): [newWindowUrl] for its name and view, then the view's options as the query the busk
+ * view latches on arrival — `page`, `focus`, `sheet`, in that order, each only when the row has
+ * it. Opened on another device it arrives as drawn: `?window=` names it (fresh id, this name),
+ * `?page=` unlinks it onto that page, `?focus=` / `?sheet=` set its shape. A view whose options
+ * carry none of the three copies the plain link.
+ */
+export function windowSetupUrl(
+  name: string,
+  view: string,
+  options: Readonly<Record<string, string>> | null,
+  origin: string = window.location.origin,
+): string {
+  let url = newWindowUrl(name, view, origin)
+  for (const key of ['page', 'focus', 'sheet']) {
+    const value = options?.[key]
+    if (value != null && value !== '') url += `&${key}=${encodeURIComponent(value)}`
+  }
+  return url
+}
+
 /** The smallest free *Screen N* over the names in use, so a second window is *Screen 2*. */
 export function nextScreenName(taken: readonly string[]): string {
   const used = new Set(taken.map((n) => n.trim().toLowerCase()))

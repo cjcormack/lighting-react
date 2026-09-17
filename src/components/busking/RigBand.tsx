@@ -39,10 +39,9 @@ import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from 
 import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
+import { setBuskFocus, setBuskRigRows, useBuskRigRows } from '@/lib/buskWindow'
 import {
   applyDrop,
-  clampRigRows,
-  DEFAULT_RIG_ROWS,
   effectiveRig,
   expandTile,
   removeRow,
@@ -79,9 +78,16 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * **A press is a plain toggle**, as it was. The label row is the design's (`Main.dc.html`): the
  * selection summary, the family pill, the desk chip, then the verbs — *Cells* and *Spread…* drawn
  * **inert** until sessions 7 and 6 land them, Locate, Highlight, Clear — and the `n of N rows`
- * handle under the rows, which draws and clamps here and writes the window's `busk.rigRows` in
- * session 4. Below `md` the band is one row with a row chip and the verbs in a menu (the phone
- * board), and there is no editing: the palette is not drawn there either.
+ * handle under the rows. Below `md` the band is one row with a row chip and the verbs in a menu
+ * (the phone board), and there is no editing: the palette is not drawn there either.
+ *
+ * **The handle reads and writes the window's `busk.rigRows`** (`lib/buskWindow.ts`), clamped to
+ * the rig on read, and **snaps at both ends** (busk-further plan D6): one more than the last row
+ * is Rig focus, one fewer than the first is Pads focus, so the segmented control on the page strip
+ * and this handle are one setting. In **Rig focus** the band takes `focus="rig"`: every row, the
+ * band filling the body and scrolling, no handle — below `md` too, where it is the whole rig
+ * stacked and replaces the narrow-width target sheet (D15). Edit mode shows every row regardless,
+ * since a hidden row cannot take a drop.
  *
  * In *Edit layout* the band joins the app's one `DndContext` through `RigEditProvider`: rows
  * reorder by their grip onto the gaps between rows, a tile or a Rig-tab palette row lands on a tile,
@@ -100,6 +106,8 @@ export interface RigBandProps {
   editing: boolean
   /** Below `md`: one row with a row chip, 48px tiles, the verbs in a menu. */
   compact: boolean
+  /** Split shows `busk.rigRows` rows under the handle; Rig fills the body with every row. */
+  focus: 'split' | 'rig'
 }
 
 export function RigBand(props: RigBandProps) {
@@ -123,6 +131,7 @@ function RigBandBody({
   onClear,
   editing,
   compact,
+  focus,
   rigLoaded,
 }: RigBandProps & { rigLoaded: boolean }) {
   const { rig, source, foreign, commit } = useRigEdit()
@@ -141,18 +150,22 @@ function RigBandBody({
     [rigLoaded, rig, groups, fixtures],
   )
 
-  // The handle: 1…N whole rows (D6), clamped to the rig. Local until session 4 gives it a
-  // per-window home; edit mode shows every row, since a hidden row cannot take a drop.
-  const [wanted, setWanted] = useState(DEFAULT_RIG_ROWS)
-  const shown = clampRigRows(wanted, effective.rows.length)
+  // The handle: 1…N whole rows (D6), the window's fact clamped to the rig. Edit mode and Rig focus
+  // show every row — a hidden row cannot take a drop, and Rig focus *is* the whole rig.
+  const shown = useBuskRigRows(effective.rows.length)
+  const everyRow = editing || focus === 'rig'
   const [compactRow, setCompactRow] = useState(0)
   const compactIndex = Math.min(compactRow, Math.max(0, effective.rows.length - 1))
-  const visibleRows = editing
+  const visibleRows = everyRow
     ? effective.rows
     : compact
       ? effective.rows.slice(compactIndex, compactIndex + 1)
       : effective.rows.slice(0, shown)
-  const rowOffset = editing ? 0 : compact ? compactIndex : 0
+  const rowOffset = !everyRow && compact ? compactIndex : 0
+  // One fewer than the first row is Pads, one more than the last is Rig: the control and the
+  // handle are one setting.
+  const fewerRows = () => (shown <= 1 ? setBuskFocus('pads') : setBuskRigRows(shown - 1))
+  const moreRows = () => (shown >= effective.rows.length ? setBuskFocus('rig') : setBuskRigRows(shown + 1))
 
   const selectedCells = useMemo(() => {
     const cells = new Set<string>()
@@ -262,14 +275,21 @@ function RigBandBody({
   const nothingToShow = rigLoaded && effective.rows.length === 0
 
   return (
-    <div className={cn('shrink-0 border-b px-4 pt-2.5 pb-2', editing && 'bg-muted/20')}>
+    <div
+      data-rig-band={focus}
+      className={cn(
+        'shrink-0 border-b px-4 pt-2.5 pb-2',
+        editing && 'bg-muted/20',
+        focus === 'rig' && !editing && 'min-h-0 flex-1 overflow-y-auto',
+      )}
+    >
       {/* ── Label row ── */}
       {/* `flex-wrap`: the verbs are a fixed ~330px and the summary gives, so at a tablet width the
           row overflowed into the speed rail with the summary squeezed to nothing (seen on the desk
           at 800px). Wrapped, the verbs take a second line and the summary keeps a readable floor. */}
       <div data-rig-label-row className="mb-2 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1">
         <BuskLabel>Rig</BuskLabel>
-        {compact && !editing && effective.rows.length > 1 && (
+        {compact && !everyRow && effective.rows.length > 1 && (
           <RowChip rows={effective.rows} index={compactIndex} onSelect={setCompactRow} />
         )}
         {editing ? (
@@ -421,15 +441,15 @@ function RigBandBody({
       )}
 
       {/* ── The rows handle ── */}
-      {!editing && !compact && effective.rows.length > 1 && (
+      {!everyRow && !compact && effective.rows.length > 1 && (
         <div className="mt-1.5 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
           <Button
             variant="ghost"
             size="sm"
             className="h-5 w-5 p-0"
             aria-label="Show one row fewer"
-            disabled={shown <= 1}
-            onClick={() => setWanted(clampRigRows(shown - 1, effective.rows.length))}
+            title={shown <= 1 ? 'Fold the rig: Pads focus' : 'Show one row fewer'}
+            onClick={fewerRows}
           >
             <Minus className="size-3" />
           </Button>
@@ -441,8 +461,8 @@ function RigBandBody({
             size="sm"
             className="h-5 w-5 p-0"
             aria-label="Show one row more"
-            disabled={shown >= effective.rows.length}
-            onClick={() => setWanted(clampRigRows(shown + 1, effective.rows.length))}
+            title={shown >= effective.rows.length ? 'Every row, full size: Rig focus' : 'Show one row more'}
+            onClick={moreRows}
           >
             <Plus className="size-3" />
           </Button>

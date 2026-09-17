@@ -34,6 +34,7 @@ const row = (id: string, windowId: string, name: string): DeskWindow => ({
   fullscreen: false,
   follows: true,
   user: null,
+  viewOptions: null,
 })
 
 afterEach(() => {

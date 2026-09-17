@@ -59,8 +59,13 @@ export function summariseSelection(selected: readonly BuskingTarget[]): string {
         ? `${target.fixture.name} · ${target.element.displayName}`
         : target.fixture.name,
   )
-  const heads = selected.reduce((sum, target) => sum + (target.type === 'group' ? target.group.memberCount : 1), 0)
+  const heads = selectedHeadCount(selected)
   return `${names.join(', ')} · ${heads} ${heads === 1 ? 'head' : 'heads'}`
+}
+
+/** How many heads a selection names: a group counts its members, a fixture or a cell one. */
+export function selectedHeadCount(selected: readonly BuskingTarget[]): number {
+  return selected.reduce((sum, target) => sum + (target.type === 'group' ? target.group.memberCount : 1), 0)
 }
 
 export type EffectPresence = 'all' | 'some' | 'none'

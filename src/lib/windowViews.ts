@@ -1,4 +1,5 @@
 import { pathHasSegment } from './navMatch'
+import { BUSK_FOCUSES, LIVE_SHEET_TABS } from './buskWindow'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
@@ -18,13 +19,43 @@ export interface WindowView {
   label: string
   /** The trailing route segment, `/busk`. */
   segment: string
+  /**
+   * The per-view options a window on this view announces and the Screens sheet can set
+   * (busk-further plan D13). Absent for a view that contributes none — which is every view but
+   * Busk today — so the sheet renders whatever a row's *current* view contributes and never learns
+   * the word busk. The write is one generic command, `windows.viewOptions {targetId, view,
+   * options}`, and the values ride the announce as a free string map.
+   */
+  options?: readonly WindowViewOption[]
 }
+
+/**
+ * One row control. An `enum` draws a segmented control over `values`; a `page` draws a picker over
+ * the target project's busk pages, resolved against the fetched list. Both are things a remote set
+ * cannot lose anything by (D13's test): what the operator at that window *built* is never on the
+ * row, only how the window shows it.
+ */
+export type WindowViewOption =
+  | { key: string; label: string; kind: 'enum'; values: readonly string[] }
+  | { key: string; label: string; kind: 'page' }
+
+/** Sheet as one enum with `none` (D7), offering only the tabs that have landed. */
+const BUSK_SHEET_VALUES: readonly string[] = ['none', ...LIVE_SHEET_TABS]
 
 export const WINDOW_VIEWS: readonly WindowView[] = [
   { id: 'programmer', label: 'Programmer', segment: '/programmer' },
   { id: 'show', label: 'Show', segment: '/show' },
   { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book' },
-  { id: 'busk', label: 'Busk', segment: '/busk' },
+  {
+    id: 'busk',
+    label: 'Busk',
+    segment: '/busk',
+    options: [
+      { key: 'focus', label: 'Focus', kind: 'enum', values: BUSK_FOCUSES },
+      { key: 'sheet', label: 'Sheet', kind: 'enum', values: BUSK_SHEET_VALUES },
+      { key: 'page', label: 'Page', kind: 'page' },
+    ],
+  },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'templates', label: 'Templates', segment: '/templates' },
 ]

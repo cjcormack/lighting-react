@@ -92,3 +92,14 @@ export function renameWindowRow(targetId: string, name: string): void {
 export function setWindowFullscreen(targetId: string, on: boolean): void {
   lightingApi.windows.fullscreen(targetId, on)
 }
+
+/**
+ * Set a window's per-view options — its busk focus, sheet or page (busk-further plan D13). [view]
+ * is the route the row announced, and the target applies the options only while it is still
+ * showing that view. Like a rename, nothing is applied here even for this tab: the command comes
+ * back rebroadcast and the target — this tab included — applies it in its handler, so the sheet
+ * cannot set a fact the desk never heard of.
+ */
+export function setWindowViewOptions(targetId: string, view: string, options: Readonly<Record<string, string>>): void {
+  lightingApi.windows.viewOptions(targetId, view, options)
+}

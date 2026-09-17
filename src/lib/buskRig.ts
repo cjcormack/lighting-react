@@ -730,6 +730,3 @@ export function clampRigRows(wanted: number, total: number): number {
   if (total <= 0) return 0
   return Math.max(1, Math.min(Math.round(wanted), total))
 }
-
-/** The default number of rows the band shows before the operator moves the handle. */
-export const DEFAULT_RIG_ROWS = 3

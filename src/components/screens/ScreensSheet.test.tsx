@@ -14,8 +14,16 @@ vi.mock('@/store/windows', async () => {
     showOnWindow: (targetId: string, view: string) => sent.push({ type: 'show', targetId, view }),
     renameWindowRow: (targetId: string, name: string) => sent.push({ type: 'rename', targetId, name }),
     setWindowFullscreen: (targetId: string, on: boolean) => sent.push({ type: 'fullscreen', targetId, on }),
+    setWindowViewOptions: (targetId: string, view: string, options: Record<string, string>) =>
+      sent.push({ type: 'viewOptions', targetId, view, options }),
   }
 })
+// The busk pages a Page picker resolves against, and the desk's showing page.
+const busk = { pages: [{ id: 1, name: 'Colour' }, { id: 3, name: 'Position' }], deskPageId: 1 as number | null }
+vi.mock('@/store/busk', () => ({
+  useBuskPagesQuery: (_id: number, opts?: { skip?: boolean }) => ({ data: opts?.skip ? undefined : busk.pages }),
+  useBuskShowingPageQuery: () => ({ data: busk.deskPageId }),
+}))
 vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1' }))
 vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => ({ id: 1, name: 'Show', isCurrent: true }) }))
 
@@ -27,17 +35,37 @@ vi.mock('@/lib/fullscreen', () => ({
   exitFullscreen: () => fullscreen.exit(),
 }))
 
-// Radix's Select needs pointer-capture polyfills jsdom lacks; a native select over the same six
-// views carries the same contract (a value, a change) and is what the view picker is tested
-// through. Built inside the factory: `vi.mock` is hoisted above every import, so nothing declared
-// in this file is in scope when it runs.
+// Radix's Select needs pointer-capture polyfills jsdom lacks; a native select over the same
+// items carries the same contract (a value, a change) and is what both pickers are tested
+// through. The items are read off the `SelectContent`'s `SelectItem` children at render, so the
+// view picker and the page picker share one mock. Built inside the factory: `vi.mock` is hoisted
+// above every import, so nothing declared in this file is in scope when it runs.
 vi.mock('@/components/ui/select', async () => {
   const React = await import('react')
-  const { WINDOW_VIEWS } = await import('@/lib/windowViews')
-  type Ctx = { value: string; onValueChange: (v: string) => void; disabled: boolean }
-  const Context = React.createContext<Ctx>({ value: '', onValueChange: () => {}, disabled: false })
-  const Select = ({ value, onValueChange, disabled, children }: Ctx & { children: ReactNode }) =>
-    React.createElement(Context.Provider, { value: { value, onValueChange, disabled: disabled ?? false } }, children)
+  type Item = { value: string; label: ReactNode }
+  type Ctx = { value: string; onValueChange: (v: string) => void; disabled: boolean; items: Item[] }
+  const Context = React.createContext<Ctx>({ value: '', onValueChange: () => {}, disabled: false, items: [] })
+  const SelectContent = ({ children }: { children?: ReactNode }) => {
+    void children
+    return null
+  }
+  const SelectItem = ({ children }: { value: string; children?: ReactNode }) => {
+    void children
+    return null
+  }
+  const Select = ({ value, onValueChange, disabled, children }: Omit<Ctx, 'items'> & { children: ReactNode }) => {
+    const items: Item[] = []
+    React.Children.forEach(children, (child) => {
+      if (!React.isValidElement(child) || child.type !== SelectContent) return
+      React.Children.forEach((child.props as { children?: ReactNode }).children, (item) => {
+        if (React.isValidElement(item) && item.type === SelectItem) {
+          const props = item.props as { value: string; children?: ReactNode }
+          items.push({ value: props.value, label: props.children })
+        }
+      })
+    })
+    return React.createElement(Context.Provider, { value: { value, onValueChange, disabled: disabled ?? false, items } }, children)
+  }
   const SelectTrigger = (props: { 'aria-label'?: string; title?: string }) => {
     const ctx = React.useContext(Context)
     return React.createElement(
@@ -50,15 +78,15 @@ vi.mock('@/components/ui/select', async () => {
         onChange: (e: { target: { value: string } }) => ctx.onValueChange(e.target.value),
       },
       React.createElement('option', { value: '' }, ''),
-      ...WINDOW_VIEWS.map((v) => React.createElement('option', { key: v.id, value: v.id }, v.label)),
+      ...ctx.items.map((item) => React.createElement('option', { key: item.value, value: item.value }, item.label)),
     )
   }
   return {
     Select,
     SelectTrigger,
     SelectValue: () => null,
-    SelectContent: () => null,
-    SelectItem: () => null,
+    SelectContent,
+    SelectItem,
   }
 })
 
@@ -78,13 +106,18 @@ const row = (id: string, windowId: string, name: string, extra: Partial<DeskWind
   fullscreen: false,
   follows: true,
   user: null,
+  viewOptions: null,
   ...extra,
 })
 
 beforeEach(() => {
   registry.windows = [
     row('s-1', 'w-1', 'Screen 1'),
-    row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', fullscreen: true }),
+    row('s-2', 'w-2', 'Screen 2', {
+      view: '/projects/1/busk',
+      fullscreen: true,
+      viewOptions: { focus: 'pads', rigRows: '2', sheet: 'none', pageFollows: 'false', page: '3' },
+    }),
     row('s-3', 'w-3', 'Chris’s iPad', { follows: false, user: 'Chris' }),
   ]
   act(() => setScreensSheetOpen(true))
@@ -227,6 +260,58 @@ describe('ScreensSheet', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Name for a new window' }), { target: { value: 'Front of house' } })
     fireEvent.click(screen.getByRole('button', { name: 'Copy link for another device' }))
     expect(writeText).toHaveBeenLastCalledWith(`${window.location.origin}/?window=Front%20of%20house`)
+  })
+
+  describe('a row’s view options (busk-further plan D13)', () => {
+    it('draws Focus, Sheet and Page on a busk row from what it announced, and nothing on a Prompt Book row', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/prompt-book' })
+      render(<ScreensSheet />)
+      const busk2 = rowFor('Screen 2')
+      expect(within(busk2).getByRole('radiogroup', { name: 'Focus on Screen 2' })).toBeInTheDocument()
+      expect(within(busk2).getByRole('radio', { name: 'pads' })).toHaveAttribute('aria-checked', 'true')
+      // Sheet is one enum with `none`, offering only the tabs that have landed.
+      const sheet = within(busk2).getByRole('radiogroup', { name: 'Sheet on Screen 2' })
+      expect(within(sheet).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['none', 'speed'])
+      expect(within(sheet).getByRole('radio', { name: 'none' })).toHaveAttribute('aria-checked', 'true')
+      // The page it holds, named through the project's page list, and whose it is.
+      expect(within(busk2).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('3')
+      expect(busk2).toHaveTextContent('own page')
+
+      expect(within(rowFor('Chris’s iPad')).queryByRole('radiogroup')).toBeNull()
+      expect(within(rowFor('Chris’s iPad')).queryByRole('combobox', { name: /Page on/ })).toBeNull()
+      expect(within(rowFor('Screen 1')).queryByRole('radiogroup')).toBeNull()
+    })
+
+    it('shows a following row on the desk’s page, and says it follows', () => {
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'true' } })
+      render(<ScreensSheet />)
+      expect(within(rowFor('Screen 2')).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('1')
+      expect(rowFor('Screen 2')).toHaveTextContent('follows the desk')
+    })
+
+    it('sets focus, sheet and page by one keyed command carrying the row’s view — a page set unlinks the target', () => {
+      render(<ScreensSheet />)
+      const busk2 = rowFor('Screen 2')
+      fireEvent.click(within(busk2).getByRole('radio', { name: 'rig' }))
+      fireEvent.click(within(busk2).getByRole('radio', { name: 'speed' }))
+      fireEvent.change(within(busk2).getByRole('combobox', { name: 'Page on Screen 2' }), { target: { value: '1' } })
+      expect(sent).toEqual([
+        { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 'rig' } },
+        { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { sheet: 'speed' } },
+        { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { page: '1' } },
+      ])
+    })
+
+    it('copies a link for the row that carries its whole setup', async () => {
+      const writeText = vi.fn(async () => {})
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+      render(<ScreensSheet />)
+      fireEvent.click(within(rowFor('Screen 2')).getByRole('button', { name: 'Copy link for Screen 2' }))
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/projects/1/busk?window=Screen%202&page=3&focus=pads&sheet=none`,
+      )
+      expect(await within(rowFor('Screen 2')).findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    })
   })
 
   it('says under the button that a localhost link names the desk to itself', () => {

@@ -19,11 +19,27 @@ configure({ asyncUtilTimeout: 5000 })
 // presses has to wait for the *render*, not merely for the cache write — `findByTestId` on this
 // content is that wait, and without it the press sends the pair from the frame before last.
 vi.mock('./RigBand', () => ({
-  RigBand: ({ selectedTargets }: { selectedTargets: Map<string, unknown> }) => (
-    <div data-testid="target-band">{[...selectedTargets.keys()].join(' ') || 'none'}</div>
+  RigBand: ({ selectedTargets, focus }: { selectedTargets: Map<string, unknown>; focus: string }) => (
+    <div data-testid="target-band" data-focus={focus}>
+      {[...selectedTargets.keys()].join(' ') || 'none'}
+    </div>
   ),
 }))
-vi.mock('./BuskSpeedRail', () => ({ BuskSpeedRail: () => <div data-testid="speed-rail" /> }))
+vi.mock('./RigStrip', () => ({
+  RigStrip: ({ onUnfold }: { onUnfold: () => void }) => (
+    <button data-testid="rig-strip" onClick={onUnfold}>
+      unfold
+    </button>
+  ),
+}))
+vi.mock('./SideSheet', async () => {
+  const real = await import('./SideSheet')
+  return {
+    sideSheetTabs: real.sideSheetTabs,
+    SideSheet: () => <div data-testid="side-sheet" />,
+    SideSheetOverlay: () => null,
+  }
+})
 vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="palette" /> }))
 
 import { store } from '@/store'
@@ -41,6 +57,7 @@ import {
   unlinkBuskPage,
 } from '@/lib/buskPageFollow'
 import { toast } from 'sonner'
+import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
 
 const emptyPage: BuskPage = { id: 4, uuid: 'p4', name: 'Ballads', sortOrder: 0, rows: [] }
 const second: BuskPage = { id: 5, uuid: 'p5', name: 'Dance', sortOrder: 1, rows: [] }
@@ -126,10 +143,14 @@ let pressAnswer: BuskPressResponse = {
  * to read `useSearchParams` from inside the router.
  */
 const urlSeen: (string | null)[] = []
+/** Every `focus=`/`sheet=` pair the URL takes, for the mirror's own transient. */
+const shapeSeen: string[] = []
 function PageProbe() {
   const [params] = useSearchParams()
   const page = params.get('page')
   if (urlSeen[urlSeen.length - 1] !== page) urlSeen.push(page)
+  const shape = `${params.get('focus')}/${params.get('sheet')}`
+  if (shapeSeen[shapeSeen.length - 1] !== shape) shapeSeen.push(shape)
   return null
 }
 
@@ -175,11 +196,12 @@ function draw(pages: BuskPage[], path = '/projects/1/busk') {
 describe('the busk view', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
-    // jsdom has no matchMedia; the view asks it whether the narrow-width target sheet is needed.
+    // jsdom has no matchMedia; the view asks it which board this is. A desk screen: every
+    // `min-width` matches, neither height fold does, so the defaults are Split and Speed.
     vi.stubGlobal(
       'matchMedia',
       (query: string) => ({
-        matches: true,
+        matches: query.startsWith('(min-width'),
         media: query,
         addEventListener: () => {},
         removeEventListener: () => {},
@@ -201,6 +223,8 @@ describe('the busk view', () => {
     window.sessionStorage.clear()
     resetDeskFollowStores()
     resetBuskPageFollowStores()
+    resetBuskWindowStores()
+    shapeSeen.length = 0
     pressAnswer = { kind: 'TEMPLATE', action: 'applied', effectCount: 0, released: 0, skippedFamilies: [] }
     buskPageWs.reset()
     urlSeen.length = 0
@@ -402,17 +426,115 @@ describe('the busk view', () => {
     expect(isFollowingBuskPage()).toBe(false)
   })
 
-  it('swaps the speed rail for the library while editing, and puts it back', async () => {
+  it('swaps the side sheet for the library while editing, and puts it back', async () => {
     draw([emptyPage])
     // Wait for the page list, or the Edit layout button is still disabled on an empty project.
     await screen.findByRole('button', { name: 'Ballads' })
     fireEvent.click(screen.getByRole('button', { name: 'Edit layout' }))
     expect(await screen.findByTestId('palette')).toBeTruthy()
-    expect(screen.queryByTestId('speed-rail')).toBeNull()
+    expect(screen.queryByTestId('side-sheet')).toBeNull()
 
     fireEvent.click(screen.getByText('Done'))
-    expect(await screen.findByTestId('speed-rail')).toBeTruthy()
+    expect(await screen.findByTestId('side-sheet')).toBeTruthy()
     expect(screen.queryByTestId('palette')).toBeNull()
+  })
+
+  describe('focus — the three shapes', () => {
+    it('is Split by default: the band over the page strip, with the Focus control on the strip', async () => {
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+      expect(screen.queryByTestId('rig-strip')).toBeNull()
+      expect(screen.getByRole('radiogroup', { name: 'Focus' })).toBeTruthy()
+      expect(document.querySelector('[data-busk-page-strip="open"]')).not.toBeNull()
+    })
+
+    it('folds the rig to the strip in Pads focus, and the strip’s chevron unfolds Split', async () => {
+      setBuskFocus('pads')
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('rig-strip')).toBeTruthy()
+      expect(screen.queryByTestId('target-band')).toBeNull()
+      fireEvent.click(screen.getByTestId('rig-strip'))
+      expect(getBuskFocus()).toBe('split')
+      expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+    })
+
+    it('fills the body with the band in Rig focus and folds the page to its strip at the bottom', async () => {
+      setBuskFocus('rig')
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'rig')
+      const strip = document.querySelector('[data-busk-page-strip="folded"]')!
+      expect(strip).not.toBeNull()
+      // The Focus control travels with the folded strip, and the band precedes it in the column.
+      expect(strip.querySelector('[aria-label="Focus"]')).not.toBeNull()
+      expect(screen.getByTestId('target-band').compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('moves the fact from the segmented control', async () => {
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      fireEvent.click(screen.getByRole('radio', { name: 'Rig' }))
+      expect(getBuskFocus()).toBe('rig')
+      expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'rig')
+    })
+
+    it('forces Split while editing and restores the window’s focus on Done', async () => {
+      setBuskFocus('pads')
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('rig-strip')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Edit layout' }))
+      expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+      expect(screen.getByRole('radio', { name: 'Split' })).toBeDisabled()
+      // The fact itself is untouched: Done reads it back.
+      expect(getBuskFocus()).toBe('pads')
+      fireEvent.click(screen.getByText('Done'))
+      expect(await screen.findByTestId('rig-strip')).toBeTruthy()
+    })
+
+    it('forces Split on a project with no pages, so the first-open screen is never folded away', async () => {
+      setBuskFocus('rig')
+      draw([])
+      await screen.findByText('Start from your library')
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+      expect(document.querySelector('[data-busk-page-strip="open"]')).not.toBeNull()
+      // The fact is untouched: the first page created, the window is back in Rig focus.
+      expect(getBuskFocus()).toBe('rig')
+    })
+
+    it('takes ?focus= and ?sheet= as this window’s on arrival, once, and mirrors them back', async () => {
+      draw([emptyPage], '/projects/1/busk?focus=pads&sheet=none')
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(getBuskFocus()).toBe('pads')
+      expect(getBuskSheet()).toBe('none')
+      expect(screen.getByTestId('rig-strip')).toBeTruthy()
+      // No transient: the mirror waited for the decision to render, so the URL never held the
+      // defaults the window was arriving from.
+      expect(shapeSeen).toEqual(['pads/none'])
+      act(() => setBuskFocus('rig'))
+      await waitFor(() => expect(shapeSeen.at(-1)).toBe('rig/none'))
+    })
+
+    it('mirrors the defaults into the URL on a plain arrival, so a copied link reproduces the shape', async () => {
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      await waitFor(() => expect(shapeSeen.at(-1)).toBe('split/speed'))
+      expect(window.sessionStorage.getItem('busk.windowDecided')).toBe('true')
+    })
+
+    it('does not read its own mirror as an arrival on reload', async () => {
+      // A tab that had decided, chose Rig, and reloads at the URL the mirror wrote for it earlier
+      // — while the URL, edited by hand since, says pads.
+      window.sessionStorage.setItem('busk.windowDecided', 'true')
+      setBuskFocus('rig')
+      setBuskSheet('none')
+      draw([emptyPage], '/projects/1/busk?focus=pads&sheet=speed')
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(getBuskFocus()).toBe('rig')
+      await waitFor(() => expect(shapeSeen.at(-1)).toBe('rig/none'))
+    })
   })
 
   it('asks before deleting a page, and sends nothing until it is confirmed', async () => {

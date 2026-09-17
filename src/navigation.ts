@@ -29,16 +29,20 @@ import {
   MonitorUp,
   Link2,
   Unlink2,
+  Rows2,
+  Lightbulb,
 } from "lucide-react"
+import { useLocation } from "react-router"
 import type { LucideIcon } from "lucide-react"
 import { useAuthStatusQuery } from "./store/auth"
 import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import type { DeskWindow } from "./api/windowsApi"
-import { WINDOW_VIEWS, projectIdOfPath, windowViewPath } from "./lib/windowViews"
+import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from "./lib/windowViews"
+import { BUSK_FOCUSES, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
 import { relinkToDesk, unlinkFromDesk, useDeskFollow } from "./lib/deskFollow"
-import { showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
+import { setWindowViewOptions, showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
 import { lightingApi } from "./api/lightingApi"
 import { openScreensSheet } from "./components/screens/screensSheetState"
 import { canChooseDisplay, listDisplays, newWindowUrl, nextScreenName, openWindowOn } from "./lib/screens"
@@ -472,6 +476,8 @@ export interface WindowCommandInputs {
   /** Chrome's Window Management API is present (secure context, `getScreenDetails`). */
   canOpenOnDisplay: boolean
   following: boolean
+  /** This window's busk focus while it is on the busk view; null elsewhere, and no focus items. */
+  buskFocus: BuskFocus | null
   actions: {
     enterFullscreen: () => void
     exitFullscreen: () => void
@@ -480,8 +486,14 @@ export interface WindowCommandInputs {
     openOnDisplay: (view: string) => void
     follow: () => void
     unlink: () => void
+    /** This window's busk focus (busk-further plan D5). */
+    setFocus: (focus: BuskFocus) => void
+    /** Another window's view options, by row id and the view it will be showing. */
+    setViewOptions: (targetId: string, view: string, options: Record<string, string>) => void
   }
 }
+
+const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus pads", rig: "Focus rig" }
 
 /**
  * The window commands, built the way [templateFamilyNavItems] is built — from a vocabulary, in a
@@ -516,19 +528,52 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
     run: actions.openScreens,
   })
 
+  // This window's busk focus — Split · Focus pads · Focus rig — only while it is on the busk view:
+  // setting a fact for a view the window is not showing would be a silent write for a later visit.
+  if (inputs.buskFocus != null) {
+    for (const focus of BUSK_FOCUSES) {
+      commands.push({
+        id: `window-focus-${focus}`,
+        label: FOCUS_LABELS[focus],
+        icon: focus === "split" ? Rows2 : focus === "pads" ? LayoutGrid : Lightbulb,
+        keywords: ["focus", "busk", "rig", "pads", "split", "window", "screen"],
+        detail: focus === inputs.buskFocus ? "current" : "this window",
+        run: () => actions.setFocus(focus),
+      })
+    }
+  }
+
   for (const row of inputs.windows) {
     if (row.id === inputs.thisRowId) continue
     const projectId = projectIdOfPath(row.view) ?? inputs.projectId
     if (projectId == null) continue
     for (const view of WINDOW_VIEWS) {
+      const path = windowViewPath(view, projectId)
       commands.push({
         id: `window-show-${row.id}-${view.id}`,
         label: `Show ${view.label} on ${row.name}`,
         icon: MonitorSmartphone,
         keywords: ["show", "window", "screen", view.label, row.name],
         detail: "switches that window",
-        run: () => actions.show(row.id, windowViewPath(view, projectId)),
+        run: () => actions.show(row.id, path),
       })
+      // The focus arm: a show followed by that window's focus, two frames the target takes in
+      // order (the second is applied only once it is on the view the first moved it to).
+      if (view.options?.some((option) => option.key === "focus")) {
+        for (const focus of BUSK_FOCUSES) {
+          commands.push({
+            id: `window-show-${row.id}-${view.id}-${focus}`,
+            label: `Show ${view.label} on ${row.name} · ${FOCUS_LABELS[focus]}`,
+            icon: MonitorSmartphone,
+            keywords: ["show", "window", "screen", "focus", focus, view.label, row.name],
+            detail: "switches that window and its focus",
+            run: () => {
+              actions.show(row.id, path)
+              actions.setViewOptions(row.id, path, { focus })
+            },
+          })
+        }
+      }
     }
   }
 
@@ -570,6 +615,9 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
   const { active: fullscreen } = useFullscreenState()
   const following = useDeskFollow()
   const thisRowId = thisWindowRow(windows)?.id ?? null
+  const focus = useBuskFocus()
+  const onBusk = windowViewOf(useLocation().pathname)?.id === "busk"
+  const buskFocus = onBusk ? focus : null
 
   return useMemo(
     () =>
@@ -581,6 +629,7 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
         canFullscreen: canFullscreen(),
         canOpenOnDisplay: canChooseDisplay(),
         following,
+        buskFocus,
         actions: {
           enterFullscreen: () => void enterFullscreen(),
           exitFullscreen: () => void exitFullscreen(),
@@ -588,6 +637,8 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
           show: showOnWindow,
           openOnDisplay: (view) => void openOnAnotherDisplay(view, windows.map((w) => w.name)),
           follow: relinkToDesk,
+          setFocus: setBuskFocus,
+          setViewOptions: setWindowViewOptions,
           // The desk's fact is read at press time rather than subscribed: the palette is mounted
           // on every route and closed almost always, and a `selection.state` subscription here
           // would re-render it on every marquee frame for a value only this one press reads.
@@ -597,7 +648,7 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
           },
         },
       }),
-    [windows, thisRowId, projectId, fullscreen, following],
+    [windows, thisRowId, projectId, fullscreen, following, buskFocus],
   )
 }
 

@@ -5,9 +5,10 @@ import { sendGesture } from './wsGesture'
 import { Status } from './statusApi'
 
 /**
- * The `windows.*` family — the desk's registry of signed-in browser windows, and the three
- * commands one window sends another (multi-screen plan §3.4; lighting7 `plugins/WindowsSocket.kt`,
- * which is the wire contract wherever this comment and the plan's sketch differ).
+ * The `windows.*` family — the desk's registry of signed-in browser windows, and the four
+ * commands one window sends another (multi-screen plan §3.4, busk-further plan §3.5; lighting7
+ * `plugins/WindowsSocket.kt`, which is the wire contract wherever this comment and the plan's
+ * sketch differ).
  *
  * **A row per socket, keyed by the socket.** The desk mints each row's `id` from the connection and
  * that is what every command addresses and what a `selection.state` `source` carries; the
@@ -15,12 +16,21 @@ import { Status } from './statusApi'
  * and is how a client recognises its own row across a reload and a reconnect. A duplicated tab
  * copies its storage, so two rows can share a `windowId`; they never share an `id`.
  *
- * **The announce carries exactly `windowId`, `name`, `view`, `fullscreen`, `follows`.** The desk's
- * `Json` is bare — no `ignoreUnknownKeys` — so one extra key makes the whole frame undeserializable
- * and it is dropped with a server-side log line only. The symptom is a window that never appears in
+ * **The announce carries exactly `windowId`, `name`, `view`, `fullscreen`, `follows` — and
+ * `viewOptions` only when the view contributes any.** The desk's `Json` is bare — no
+ * `ignoreUnknownKeys` — so one extra key makes the whole frame undeserializable and it is dropped
+ * with a server-side log line only. The symptom is a window that never appears in
  * `windows.state`, which is why [WindowAnnounce] is spelled out field by field below and
- * `windowsApi.test.ts` pins the key set. `id` and `user` are the server's to say (D7's rule applied
- * again): a window that could send either could claim to be another window or another operator.
+ * `windowsApi.test.ts` pins the key set: five keys plus `type`, or six with `viewOptions`. `id`
+ * and `user` are the server's to say (D7's rule applied again): a window that could send either
+ * could claim to be another window or another operator.
+ *
+ * **`viewOptions` is a free `string → string` map** (busk-further plan D13): the busk view's
+ * `focus`, `rigRows`, `sheet` and page facts, announced so a Screens sheet on another window can
+ * draw them, and carried back verbatim on `windows.state`. The registry never learns a view's
+ * vocabulary — `lib/windowViews.ts` describes it and `lib/buskWindow.ts` owns it. The fourth
+ * command, `windows.viewOptions {targetId, view, options}`, is rebroadcast like the other three;
+ * the named window applies `options` to its own tab facts **for that view only** and re-announces.
  *
  * **The announce is re-sent on every `open`.** It is the second legitimate `open` branch in this
  * tree (`speedMastersWsApi`'s beat re-requests are the first), and for the same reason: it re-sends
@@ -51,28 +61,35 @@ export interface DeskWindow {
   follows: boolean
   /** The authenticated display name behind that socket; null on a bootstrap-open desk. */
   user: string | null
+  /** That window's per-view options as it last announced them; null where it announced none. */
+  viewOptions: Readonly<Record<string, string>> | null
 }
 
-/** Exactly the five keys the desk's `WindowsAnnounceInMessage` declares, and no more. */
+/**
+ * Exactly the keys the desk's `WindowsAnnounceInMessage` declares, and no more. `viewOptions` is
+ * the one optional: absent, the frame carries five keys, exactly as before it existed.
+ */
 export interface WindowAnnounce {
   windowId: string
   name: string
   view: string
   fullscreen: boolean
   follows: boolean
+  viewOptions?: Readonly<Record<string, string>>
 }
 
 export type WindowCommand =
   | { type: 'show'; targetId: string; view: string }
   | { type: 'rename'; targetId: string; name: string }
   | { type: 'fullscreen'; targetId: string; on: boolean }
+  | { type: 'viewOptions'; targetId: string; view: string; options: Readonly<Record<string, string>> }
 
 export interface WindowsWsApi {
   /** Every signed-in window, on connect and on every change. */
   subscribe(fn: (windows: DeskWindow[]) => void): Subscription
   /** The last state frame, or null before the first — for an RTK Query `queryFn` seeding its entry. */
   getState(): DeskWindow[] | null
-  /** The three commands, as rebroadcast — this window's own included. */
+  /** The four commands, as rebroadcast — this window's own included. */
   subscribeCommands(fn: (command: WindowCommand) => void): Subscription
   /**
    * Say what this window is. Remembered and re-sent on every `open`; sent now if the socket is up,
@@ -85,6 +102,8 @@ export interface WindowsWsApi {
   show(targetId: string, view: string): void
   rename(targetId: string, name: string): void
   fullscreen(targetId: string, on: boolean): void
+  /** Set a window's per-view options, for the view it is showing. */
+  viewOptions(targetId: string, view: string, options: Readonly<Record<string, string>>): void
 }
 
 type WindowsInMessage =
@@ -92,6 +111,18 @@ type WindowsInMessage =
   | { type: 'windows.show'; targetId: unknown; view: unknown }
   | { type: 'windows.rename'; targetId: unknown; name: unknown }
   | { type: 'windows.fullscreen'; targetId: unknown; on: unknown }
+  | { type: 'windows.viewOptions'; targetId: unknown; view: unknown; options: unknown }
+
+/** A `Map<String, String>` as the desk serialises it, or null for anything else. */
+function parseStringMap(raw: unknown): Readonly<Record<string, string>> | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== 'string') return null
+    out[key] = value
+  }
+  return out
+}
 
 /** Read one registry row, or null for anything that is not one. */
 export function parseDeskWindow(raw: unknown): DeskWindow | null {
@@ -114,6 +145,7 @@ export function parseDeskWindow(raw: unknown): DeskWindow | null {
     fullscreen: r.fullscreen === true,
     follows: r.follows !== false,
     user: typeof r.user === 'string' ? r.user : null,
+    viewOptions: parseStringMap(r.viewOptions),
   }
 }
 
@@ -127,12 +159,21 @@ function parseCommand(message: Exclude<WindowsInMessage, { type: 'windows.state'
       return typeof message.name === 'string' ? { type: 'rename', targetId, name: message.name } : null
     case 'windows.fullscreen':
       return typeof message.on === 'boolean' ? { type: 'fullscreen', targetId, on: message.on } : null
+    case 'windows.viewOptions': {
+      const options = parseStringMap(message.options)
+      return typeof message.view === 'string' && options != null
+        ? { type: 'viewOptions', targetId, view: message.view, options }
+        : null
+    }
   }
 }
 
-/** The frame, with the five keys and nothing else — see the module comment for why that matters. */
+/**
+ * The frame, with the five keys and nothing else — plus `viewOptions` only when the payload
+ * carries one. See the module comment for why the key set matters.
+ */
 export function announceFrame(payload: WindowAnnounce): Record<string, unknown> {
-  return {
+  const frame: Record<string, unknown> = {
     type: 'windows.announce',
     windowId: payload.windowId,
     name: payload.name,
@@ -140,6 +181,8 @@ export function announceFrame(payload: WindowAnnounce): Record<string, unknown> 
     fullscreen: payload.fullscreen,
     follows: payload.follows,
   }
+  if (payload.viewOptions != null) frame.viewOptions = { ...payload.viewOptions }
+  return frame
 }
 
 export function createWindowsWsApi(conn: InternalApiConnection): WindowsWsApi {
@@ -173,7 +216,8 @@ export function createWindowsWsApi(conn: InternalApiConnection): WindowsWsApi {
     if (
       message.type === 'windows.show' ||
       message.type === 'windows.rename' ||
-      message.type === 'windows.fullscreen'
+      message.type === 'windows.fullscreen' ||
+      message.type === 'windows.viewOptions'
     ) {
       const command = parseCommand(message)
       if (command != null) commands.notify(command)
@@ -196,5 +240,7 @@ export function createWindowsWsApi(conn: InternalApiConnection): WindowsWsApi {
     show: (targetId, view) => sendGesture(conn, { type: 'windows.show', targetId, view }),
     rename: (targetId, name) => sendGesture(conn, { type: 'windows.rename', targetId, name }),
     fullscreen: (targetId, on) => sendGesture(conn, { type: 'windows.fullscreen', targetId, on }),
+    viewOptions: (targetId, view, options) =>
+      sendGesture(conn, { type: 'windows.viewOptions', targetId, view, options: { ...options } }),
   }
 }

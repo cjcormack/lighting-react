@@ -70,6 +70,7 @@ const row = (id: string, name: string): DeskWindow => ({
   fullscreen: false,
   follows: true,
   user: null,
+  viewOptions: null,
 })
 
 /** Open the menu the keyboard way: Radix opens on Enter at the trigger with no pointer needed. */

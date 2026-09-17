@@ -611,6 +611,9 @@ export function lightingApiMock() {
         fullscreen: (targetId: string, on: boolean) => {
           windowsWs.sent.push({ type: 'windows.fullscreen', targetId, on })
         },
+        viewOptions: (targetId: string, view: string, options: Record<string, string>) => {
+          windowsWs.sent.push({ type: 'windows.viewOptions', targetId, view, options })
+        },
       },
       cueStacks: {
         subscribe: noopSub,
