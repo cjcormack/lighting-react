@@ -82,8 +82,16 @@ export interface HandWsApi {
    * ever asks *what is held*.
    */
   getState(): HeldRecord | null
-  /** Take `{kind, id}` into the hand. A second pick-up replaces; there is no "put it back". */
-  pickUp(kind: BuskPadKind, id: number): void
+  /**
+   * Take `{kind, id}` into the hand. A second pick-up replaces; there is no "put it back".
+   *
+   * **Answers whether the frame left the browser** — `sendGesture`'s own return. Every door but one
+   * ignores it, because a pick-up that went nowhere has already toasted and the operator's next
+   * gesture is simply to press again. The edge drag reads it: it cancels a live drag in exchange
+   * for the pick-up, and cancelling for a frame that never arrived would take the gesture away and
+   * give nothing back.
+   */
+  pickUp(kind: BuskPadKind, id: number): boolean
   /**
    * Let go.
    *

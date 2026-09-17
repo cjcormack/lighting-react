@@ -948,9 +948,111 @@ the panel. Its three siblings already answered properly. The library offers `han
 chip per **bank** and `handDrop` on the Desk row; `pickUpPad` is in the picker only, because a
 `Pick up` chip would sit beside the `pressPad` chip for the same pad under the same name.
 
-**What is still out: session 4's same-machine edge drag** — the `BroadcastChannel('desk-drag')`,
-`onDragMove`'s screen-bounds test, the synthetic Escape that cancels dnd-kit, `elementsFromPoint`
-against registered targets. The hand is the route for now.
+**A record can also be *dragged* between two screens of one browser, and that gesture ends in the
+hand rather than going around it.** Drag a library palette row off the right (or left) edge of one
+window and it arrives on the window beyond that edge, under the pointer. The difficulty is the one
+the hand exists for: the OS delivers a held button's moves to the window that saw the press, so the
+neighbour never receives a pointer event of its own. So the drag is cut in two at the boundary —
+`DeskDndProvider` hands the record into the hand (`hand.pickUp`), cancels its own drag, and posts
+only the **release point** on a `BroadcastChannel('desk-drag')`; whichever window is under that
+point claims it by hit-testing itself. `components/dnd/edgeDrag.ts` is the rule (bounds test,
+screen→client, `data-hand-target` hit test, the message) and `useEdgeDrag.ts` the wiring. Seven
+things about it:
+
+- **A release no window claims is not an error.** The record is simply still in the hand, every lit
+  band is still lit, and nothing is toasted. That is the whole reason the hand-off is a pick-up and
+  not a transfer — and it is why the receiving half may never drop the hand on a miss.
+- **It is gated on `BroadcastChannel` and on nothing else.** The plan asked for
+  `'getScreenDetails' in window` plus a granted `window-management` permission; that is stricter
+  than the APIs the gesture uses, so the gate is not built. The bounds test reads
+  `screenX / screenY / outerWidth / outerHeight` and the pointer's own `screenX / screenY`, all six
+  of which have always reported virtual-desktop coordinates and none of which is permissioned;
+  `getScreenDetails` only *enumerates* the other screens, which nothing here needs because the
+  channel is a broadcast and the neighbour claims by hit-testing rather than by being addressed.
+  Where `BroadcastChannel` is missing the gesture is quiet (D13) and the hand is the route — as it
+  is to the iPad, which this channel deliberately never reaches.
+- **A presence handshake arms it, and without that it is a regression rather than a feature.** The
+  bounds test alone cannot tell *the pointer crossed onto the next screen* from *the pointer
+  overshot the edge of a windowed browser with nothing beside it* — and the horizontal chrome offset
+  is 0 on every current desktop browser, so a window's outer edge **is** its visible content edge and
+  an ordinary drag toward a cue slot overshoots it easily. So windows say `hello` / `here` over the
+  same channel and the hand-off arms **only while another window is actually listening**. The probe
+  is made **at the boundary, not at drag start**, so a drag that never leaves this window puts
+  nothing on the channel at all and is exactly what it was before this session; a first crossing
+  that finds presence stale probes and waits one frame for the answer. The same gate is what
+  makes the channel's real reach safe: it is one browser instance and profile, so a Chrome window
+  beside a Safari one, two profiles, or `localhost` beside the LAN name never hear each other — and
+  each of those now gives an ordinary in-window drag rather than one that silently vanishes.
+- **One `BroadcastChannel` object per page**, which is why both halves hang off `DeskDndProvider`.
+  A channel delivers to every other object of its name *including ones in the same page*, and never
+  to the object that posted — so a second object here would make the sending window hit-test its own
+  release, place the record on itself, and the gesture would never leave the screen.
+- **A posted release becomes a place by synthesising a click** on the hit element.
+  `HandPlaceStrip` is already a `<button>` whose `onClick` runs the right mutation with the right
+  *where* string and the right Undo, and `useHandOffer` has already refused anything ineligible; the
+  empty cue-slot tile is the same shape. A click reuses all of it and states no rule twice, where an
+  element→callback registry would be a second copy of what the button already is. Two properties
+  come free: a `disabled` tile dispatches no click at all, and a target scrolled out of view is at
+  no point. `dispatchSyntheticContextMenu` is the codebase's precedent for the move.
+- **The cancel is a synthetic `pointercancel`, never a synthetic Escape.** dnd-kit has no
+  programmatic cancel, but its `PointerSensor` binds `pointercancel` on the owner document to the
+  very same `handleCancel` as its Escape handler — so this cancels as surely and leaves the keyboard
+  alone. An Escape would sit in front of `HandChip`'s Escape ladder and every other document-level
+  Escape listener on the page, and keeping it harmless rested on marking it `defaultPrevented`
+  before anything else read it: true of the window *node*, but not guaranteed of listener *order* at
+  that node. Saying "the pointer was cancelled" is also simply true, where "the operator pressed
+  Escape" was a pretence. It runs through the provider's existing `onDragCancel` — the one that
+  clears `isDragging` and so keeps the cue-slot panel body mounted — and `handleDragEnd` returns
+  early for a handed-off gesture besides, so the cancel is not load-bearing: a dnd-kit that ever
+  declined it could not also resolve the drop.
+- **The pointer's screen position is read off a window `pointermove`, never reconstructed** from
+  dnd-kit's `delta` and activator event, which goes wrong under browser zoom and a non-1
+  `devicePixelRatio` — the desk's likely setup. The listeners are attached **imperatively at arm
+  time** rather than by an effect, because an effect attaches a commit later and a fast flick can
+  cross the boundary inside it; and they **outlive the drag**, because the hand-off *is* a cancel and
+  the release they exist for has not happened yet, so the teardown is the pointer's. They refuse
+  three things, each a real way to get this wrong: an event from a **different `pointerId`** (a
+  second finger must not move or end the first one's drag), **our own cancel** (a flag held across
+  the synchronous dispatch, since it would otherwise read as the release and post from the boundary),
+  and a **second pick-up after a refused one** (a pick-up that never left the browser leaves the drag
+  alone, and without this every later move would try again at up to 120Hz — one attempt per
+  crossing, come back inside to retry).
+- **A release names its record, and the receiver waits for the hand to hold it.** The channel is
+  local and instant while the hand arrives over the WebSocket, so a release can outrun its own
+  `hand.state` frame — the receiver would find no band rendered yet, or, if something else was
+  already in the hand, find *that* record's band and place the wrong record. `whenHandHolds` is the
+  wait — **and the question is asked once more in the instant before the click**, because the hand is
+  shared and can move again while this window polls and settles, and the band is the same DOM node
+  across renders, so React swaps its `onClick` closure in place: clicking the element found a moment
+  ago would place whatever is held *now*, under a band that still looks eligible because it is. A
+  release places the record it names or nothing at all. A target that never appears is a release
+  nobody claims.
+- **There is no arbitration between two claimants, and overlapping windows place twice.** A claim
+  message with a lowest-id tie-break was built for that and removed again, which is worth recording
+  because the reasoning is the general one. It **cannot happen on this desk**: the release is one
+  point in virtual-desktop space, so both windows would have to contain it, and two windows tiled on
+  two monitors never overlap — it needs windows stacked on one screen. It was a **mitigation, not a
+  guarantee**: a claimant can only wait so long before clicking, so two windows whose target
+  discovery differed by more than that settle window both placed anyway — exactly the timing skew
+  (differing render latency, differing `hand.state` arrival) the case is about. And it was the
+  source of a real double-place bug of its own. Both places are ordinary mutations the operator sees
+  toasts for, and the bank place carries Undo. If it ever matters, the fix is arbitration that
+  **waits for an acknowledgement** rather than for a timeout — not the tie-break that was here.
+- **A palette row, and only a palette row.** A `busk-pad` drag carries a `PadFace` and a position
+  and a `slot-item` drag a slot address; neither names a record id, so neither can be handed off
+  without widening the busk page's own drag contract. `screenToClient` is an honest heuristic
+  (`outerHeight - innerHeight` of chrome, all at the top; half of any side border), exact on
+  Chrome and Edge on Windows and affordable against 28px bands, and **unmeasured on Safari**, where
+  it fails safe — a point a few pixels out misses the band and the record stays in the hand. If it
+  ever reads wrong the fix is to cache `event.screenX - event.clientX` from a real pointer event,
+  not to reach for `getScreenDetails`. `handTargetAt` takes the **topmost** hit and walks up from
+  it, never down the stack: a band behind an open dialog is still mounted, and burrowing past the
+  overlay would place a record on a target the operator cannot see.
+
+There is **no ghost following the posted point**, by decision: the receiving window's `HandChip` and
+every eligible band already draw the moment the hand fills, so a following ghost is new UI over an
+affordance that is already there. If it is wanted, it is a `move` message plus a **frozen, hookless**
+snapshot, for `dragOverlayRegistry`'s stated reason.
 
 ### The MIDI surface view
 

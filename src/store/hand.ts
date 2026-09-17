@@ -56,9 +56,67 @@ export function useHand(): HeldRecord | null {
   return data ?? null
 }
 
-/** Take a record into the hand. A second pick-up replaces; there is no "put it back". */
-export function handPickUp(kind: BuskPadKind, id: number): void {
-  lightingApi.hand.pickUp(kind, id)
+/**
+ * Take a record into the hand. A second pick-up replaces; there is no "put it back".
+ *
+ * Returns whether the frame reached the rig, which only the edge drag reads — see
+ * {@link import('@/api/handApi').HandWsApi.pickUp}.
+ */
+export function handPickUp(kind: BuskPadKind, id: number): boolean {
+  return lightingApi.hand.pickUp(kind, id)
+}
+
+/**
+ * Is the desk holding this exact record **right now**?
+ *
+ * The synchronous half of {@link whenHandHolds}, and the edge drag's receiving window needs both:
+ * one to wait for the hand to arrive, and this one to re-ask in the instant before it acts. The
+ * hand is shared, so anything can move it in between — another window, a control surface, the
+ * operator's own second pick-up.
+ */
+export function handHolds(record: { kind: BuskPadKind; id: number }): boolean {
+  const held = lightingApi.hand.getState()
+  return held != null && held.kind === record.kind && held.id === record.id
+}
+
+/**
+ * Resolve once the desk is holding this exact record, or with null when the wait runs out.
+ *
+ * The edge drag's receiving window needs this because its two inputs race: the release arrives over
+ * a **local** `BroadcastChannel` while the hand arrives over the **WebSocket**, so a release can
+ * beat the `hand.state` frame for its own pick-up. Acting immediately would either find no place
+ * band rendered yet, or — if something else was already in the hand — find that record's band and
+ * place the wrong record.
+ *
+ * Matching is on `kind` + `id`, which is what `hand.pickUp` itself takes and what identifies a
+ * record within the current project; the uuid is not available to the window that picked up until
+ * the frame it is waiting for arrives.
+ *
+ * It resolves **immediately** when the hand already matches, so the ordinary case pays nothing. The
+ * subscription is torn down on every exit, including the timeout.
+ */
+export function whenHandHolds(
+  record: { kind: BuskPadKind; id: number },
+  timeoutMs: number,
+): Promise<HeldRecord | null> {
+  const matches = (held: HeldRecord | null) =>
+    held != null && held.kind === record.kind && held.id === record.id
+  const now = lightingApi.hand.getState()
+  if (matches(now)) return Promise.resolve(now)
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (held: HeldRecord | null) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      subscription.unsubscribe()
+      resolve(held)
+    }
+    const timer = setTimeout(() => finish(null), timeoutMs)
+    const subscription = lightingApi.hand.subscribe((held) => {
+      if (matches(held)) finish(held)
+    })
+  })
 }
 
 /**

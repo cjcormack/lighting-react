@@ -318,6 +318,8 @@ export const handWs: {
   last: unknown
   pickedUp: unknown[]
   dropped: (string | undefined)[]
+  /** What `pickUp` answers — `sendGesture`'s "did this leave the browser". Set false for a dead socket. */
+  pickUpReaches: boolean
   fire: (held: unknown) => void
   reset: () => void
 } = {
@@ -325,6 +327,7 @@ export const handWs: {
   last: null,
   pickedUp: [],
   dropped: [],
+  pickUpReaches: true,
   fire: (held) => {
     handWs.last = held
     handWs.callback?.(held)
@@ -334,6 +337,7 @@ export const handWs: {
     handWs.last = null
     handWs.pickedUp = []
     handWs.dropped = []
+    handWs.pickUpReaches = true
   },
 }
 
@@ -556,6 +560,7 @@ export function lightingApiMock() {
         },
         pickUp: (kind: string, id: number) => {
           handWs.pickedUp.push({ kind, id })
+          return handWs.pickUpReaches
         },
         drop: (uuid?: string) => {
           handWs.dropped.push(uuid)

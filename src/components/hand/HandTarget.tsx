@@ -19,10 +19,15 @@ import { cn } from '@/lib/utils'
  * exactly the "highlight in one place, slot in another" failure §"The busk layout" was written
  * about. Adding one would buy nothing and risk that.
  *
- * Session 4's edge drag does need these targets to be findable from a point, and a droppable would
- * not have helped there either: `document.elementsFromPoint` answers with DOM elements, and dnd-kit
- * gives no way back from one to a droppable. That is what `data-hand-target` is for — the
- * registration both this session and the next can read.
+ * The same-machine edge drag needs these targets findable **from a point**, and a droppable does not
+ * help there either: `document.elementsFromPoint` answers with DOM elements, and dnd-kit gives no
+ * way back from one to a droppable. `data-hand-target` is that registration, and
+ * `dnd/edgeDrag.ts`'s `handTargetAt` is what reads it — a posted release is hit-tested against the
+ * DOM and then **clicked**, which is the second thing being a `<button>` buys: this component's own
+ * `onClick` already holds the surface's mutation, its *where* string and its Undo, and
+ * `useHandOffer` above has already refused anything that cannot land, so the edge drag reuses all
+ * of it rather than restating any of it. The cue-slot tile carries the attribute on the same terms,
+ * and only while it can take what is held.
  *
  * ### The affordance is explicit, never a hijacked press
  *

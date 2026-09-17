@@ -18,6 +18,7 @@ import { useAssignCueSlotMutation, useSwapCueSlotsMutation } from '../../store/c
 import type { CueSlotSwapDragData } from '../cueSlotShared'
 import { isSlotTarget, slotAssignmentFor } from './slotDrop'
 import { renderDragOverlay } from './dragOverlayRegistry'
+import { useEdgeDragReceiver, useEdgeDragSource } from './useEdgeDrag'
 
 /**
  * The app's **one** drag context.
@@ -103,27 +104,52 @@ export function DeskDndProvider({ children }: DeskDndProviderProps) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setIsDragging(true)
-    setActive(event.active)
-    const data = event.active.data.current
-    // A palette row brings its own overlay through `dragOverlayRegistry`; only a slot-to-slot drag
-    // needs the plain label below.
-    if (data?.type === 'slot-item') {
-      setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
-    }
-  }, [])
+  /**
+   * The same-machine edge drag (`useEdgeDrag.ts`, rule in `edgeDrag.ts`).
+   *
+   * Both halves hang here because this is the app's one drag context and it is mounted once, which
+   * is what gives the page exactly one `BroadcastChannel` object — the invariant that stops the
+   * sending window claiming its own release. The receiver is live on every route and whether or not
+   * anything is being dragged: it is the *other* window's gesture that it answers.
+   */
+  const { armEdgeDrag, disarmEdgeDrag, edgeDragHandedOff } = useEdgeDragSource()
+  useEdgeDragReceiver()
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setIsDragging(true)
+      setActive(event.active)
+      const data = event.active.data.current
+      // A palette row brings its own overlay through `dragOverlayRegistry`; only a slot-to-slot drag
+      // needs the plain label below.
+      if (data?.type === 'slot-item') {
+        setDraggedLabel((data as CueSlotSwapDragData).slot.itemName)
+      }
+      armEdgeDrag(event.active)
+    },
+    [armEdgeDrag],
+  )
 
   const clearDrag = useCallback(() => {
     setIsDragging(false)
     setDraggedLabel(null)
     setActive(null)
-  }, [])
+    // Stands down unless this drag has already handed off — the hand-off *is* a cancel, and the
+    // release it still owes has not happened yet. See `useEdgeDragSource`.
+    disarmEdgeDrag()
+  }, [disarmEdgeDrag])
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearDrag()
       if (!projectId) return
+
+      // A drag that has been handed to the hand is over as far as this window is concerned, even
+      // though the operator is still holding the button. Cancelling it is what normally stops this
+      // handler running at all — but that cancel goes through dnd-kit's own sensor, so if a future
+      // version ever declined it the drop would *also* resolve here and the record would be both in
+      // the hand and assigned to a slot. One line, and the cancel stops being load-bearing.
+      if (edgeDragHandedOff()) return
 
       const { active: dragged, over } = event
       if (!over) return
@@ -160,7 +186,7 @@ export function DeskDndProvider({ children }: DeskDndProviderProps) {
         })
       }
     },
-    [projectId, assignSlot, swapSlots, clearDrag],
+    [projectId, assignSlot, swapSlots, clearDrag, edgeDragHandedOff],
   )
 
   return (

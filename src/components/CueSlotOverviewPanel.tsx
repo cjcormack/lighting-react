@@ -203,7 +203,12 @@ function CueSlotOverviewPanelBody() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [setPagePersist])
 
-  // Edge-drag page navigation: change page when dragging near left/right edges
+  // Edge-drag page navigation: change page when dragging near left/right edges.
+  //
+  // This is the *panel's* own edge, and predates the same-machine edge drag in `dnd/edgeDrag.ts`,
+  // which watches the **window's** edge to hand a record to the screen beside it. Same words, two
+  // edges, no shared state — and the two cannot compound into a half-gesture, because the hand-off
+  // cancels the drag and `onDragCancel` already clears this timer.
   const [isDraggingAny, setIsDraggingAny] = useState(false)
   const edgeScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const edgeScrollDirection = useRef<'left' | 'right' | null>(null)
