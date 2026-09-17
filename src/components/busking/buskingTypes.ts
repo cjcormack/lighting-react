@@ -5,13 +5,19 @@ import type {
   GroupSummary,
   GroupActiveEffect,
 } from '@/api/groupsApi'
-import type { Fixture } from '@/store/fixtures'
+import type { ElementDescriptor, Fixture } from '@/store/fixtures'
 import type { ActiveEffect, FixtureDirectEffect } from '@/store/fixtureFx'
 import { targetKey } from '@/lib/targetKey'
 
+/**
+ * A group, a fixture, or — since the rig band — **one cell** of a multi-head fixture: the fixture
+ * arm with `key` the element's own key (opaque, never parsed) and `element` set, `fixture` still
+ * the parent so a summary can name both. `lookLayerTarget` reads only `type` and `key`, so a cell
+ * reaches the desk as `{type: 'fixture', key: element.key}`, exactly as `rowModel.ts` publishes one.
+ */
 export type BuskingTarget =
   | { type: 'group'; name: string; group: GroupSummary }
-  | { type: 'fixture'; key: string; fixture: Fixture }
+  | { type: 'fixture'; key: string; fixture: Fixture; element?: ElementDescriptor }
 
 /**
  * A busking target as the programmer's **layer stack** addresses it.
@@ -38,6 +44,23 @@ export function buskingTargetKey(target: BuskingTarget): string {
     type: target.type,
     key: target.type === 'group' ? target.name : target.key,
   })
+}
+
+/**
+ * `Front wash, Bar L · 14 heads`, or `nothing selected` — the one summary the rig band and its
+ * folded strip both draw. A cell names its parent and itself; a group counts its members.
+ */
+export function summariseSelection(selected: readonly BuskingTarget[]): string {
+  if (selected.length === 0) return 'nothing selected'
+  const names = selected.map((target) =>
+    target.type === 'group'
+      ? target.name
+      : target.element != null
+        ? `${target.fixture.name} · ${target.element.displayName}`
+        : target.fixture.name,
+  )
+  const heads = selected.reduce((sum, target) => sum + (target.type === 'group' ? target.group.memberCount : 1), 0)
+  return `${names.join(', ')} · ${heads} ${heads === 1 ? 'head' : 'heads'}`
 }
 
 export type EffectPresence = 'all' | 'some' | 'none'

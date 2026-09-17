@@ -1,14 +1,10 @@
 import { useCallback, useMemo } from 'react'
+import type { CueTarget } from '@/api/cuesApi'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
-import {
-  clearDeskSelection,
-  setDeskSelection,
-  toggleDeskSelection,
-  useSelectionPair,
-} from '@/store/selection'
+import { clearDeskSelection, toggleDeskSelection, useSelectionPair } from '@/store/selection'
 import { getLocalSelection, setLocalSelection, useDeskFollow } from '@/lib/deskFollow'
-import { buskingTargetKey, lookLayerTarget, type BuskingTarget } from './buskingTypes'
+import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
 
 /**
  * Which targets the pad is aimed at, and under which attribute mask — **the desk's selection**
@@ -55,20 +51,23 @@ export function useBuskingSelection() {
       } else {
         const fixture = fixtures?.find((f) => f.key === target.key)
         if (fixture) rich = { type: 'fixture', key: fixture.key, fixture }
+        else {
+          // A cell: the key is one of a fixture's own element keys, found by lookup and never by
+          // parsing the key — the rig band presses one, and a marquee on the programmer's element
+          // rows publishes one.
+          for (const parent of fixtures ?? []) {
+            const element = parent.elements?.find((e) => e.key === target.key)
+            if (element) {
+              rich = { type: 'fixture', key: element.key, fixture: parent, element }
+              break
+            }
+          }
+        }
       }
       if (rich) out.set(buskingTargetKey(rich), rich)
     }
     return out
   }, [targets, groups, fixtures])
-
-  /** Replace the selection with exactly this target — and, as a replace, clear the mask (D2). */
-  const selectTarget = useCallback(
-    (target: BuskingTarget) => {
-      if (following) setDeskSelection([lookLayerTarget(target)])
-      else setLocalSelection({ targets: [lookLayerTarget(target)], families: null })
-    },
-    [following],
-  )
 
   const clearSelection = useCallback(() => {
     if (following) clearDeskSelection()
@@ -76,7 +75,9 @@ export function useBuskingSelection() {
   }, [following])
 
   /**
-   * Add or remove one target, keeping the mask.
+   * Add or remove one target, keeping the mask — by its `{type, key}`, which is what a rig tile
+   * has. There is no replace any more: `selectTarget` existed for the narrow-width picker sheet,
+   * which the rig band retired (busk-further plan D15).
    *
    * On the desk's arm the desk decides what "remove" means, and it is not symmetric with "add": a
    * fixture already covered by a selected group is narrowed *out of that group's coverage* rather
@@ -84,8 +85,7 @@ export function useBuskingSelection() {
    * does not carry — which is also why the local arm does not try to.
    */
   const toggleTarget = useCallback(
-    (target: BuskingTarget) => {
-      const layerTarget = lookLayerTarget(target)
+    (layerTarget: CueTarget) => {
       if (following) {
         toggleDeskSelection(layerTarget)
         return
@@ -104,5 +104,5 @@ export function useBuskingSelection() {
     [following],
   )
 
-  return { selectedTargets, families, selectTarget, toggleTarget, clearSelection }
+  return { selectedTargets, families, toggleTarget, clearSelection }
 }

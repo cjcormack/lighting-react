@@ -55,6 +55,12 @@ const TAGS_FORMERLY_UNCOVERED = [
   "DeviceLogin",
 ] as const
 
+/**
+ * Tags whose bridge is a **payload-free** frame that only ever invalidates — so a reconnect, where
+ * that frame may have been missed, has to reach them through the resync and nothing else can.
+ */
+const TAGS_BEHIND_A_PAYLOAD_FREE_BRIDGE = ["BuskRig"] as const
+
 const excluded = () => REST_TAG_TYPES.filter((tag) => !RECONNECT_RESYNC_TAGS.includes(tag))
 
 describe("reconnect resync coverage", () => {
@@ -74,6 +80,13 @@ describe("reconnect resync coverage", () => {
 
   it("covers the tags that had no reconnect path at all", () => {
     for (const tag of TAGS_FORMERLY_UNCOVERED) {
+      expect(RECONNECT_RESYNC_TAGS).toContain(tag)
+    }
+  })
+
+  it("covers the tags behind a payload-free bridge", () => {
+    for (const tag of TAGS_BEHIND_A_PAYLOAD_FREE_BRIDGE) {
+      expect(REST_TAG_TYPES).toContain(tag)
       expect(RECONNECT_RESYNC_TAGS).toContain(tag)
     }
   })

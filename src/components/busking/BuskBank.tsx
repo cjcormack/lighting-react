@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { GripVertical, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +26,7 @@ import {
 } from '@/lib/buskLayout'
 import { useBuskEdit } from './BuskEditProvider'
 import { BuskDropSlot, BuskPadButton } from './BuskPad'
+import { NameField } from './NameField'
 import { DROP_DEPTH, type BuskBankDragData, type BuskDropData } from './buskDnd'
 import type { PadBehaviour } from './padBehaviour'
 
@@ -43,53 +42,6 @@ function soloSwitchClass(on: boolean) {
   return cn(
     'relative h-4 w-7 shrink-0 rounded-full transition-colors',
     on ? 'bg-primary' : 'bg-muted',
-  )
-}
-
-/**
- * The bank name, committed when the operator leaves the field rather than per keystroke.
- *
- * Every gesture saves the **whole page**, so a per-keystroke write would be one full layout PUT and
- * one broadcast per character. A rename is a gesture that ends when you stop typing, so it commits
- * on blur and on Enter; Escape puts the stored name back.
- */
-function BankNameField({ bank, at }: { bank: BuskBankModel; at: BankAddress }) {
-  const { commit } = useBuskEdit()
-  const [draft, setDraft] = useState(bank.name)
-
-  // Another client, or an undone save, can move the stored name under us.
-  useEffect(() => setDraft(bank.name), [bank.name])
-
-  function save() {
-    // The server refuses a blank name (`BUSK_LAYOUT_INVALID`), and the field putting the stored
-    // name back is a better answer than a toast saying so after the optimistic patch rolled back.
-    if (draft.trim() === '') {
-      setDraft(bank.name)
-      return
-    }
-    if (draft === bank.name) return
-    commit((page) => setBank(page, at, { name: draft }))
-  }
-
-  return (
-    <Input
-      value={draft}
-      aria-label="Bank name"
-      placeholder="Bank"
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') {
-          setDraft(bank.name)
-          e.currentTarget.blur()
-        }
-      }}
-      // A real minimum, not `min-w-0`: in a quarter-width column the field would otherwise shrink
-      // to nothing and the controls beside it would carry on past the bank's border. With a floor
-      // the header wraps instead (see `BankHeader`), which is the better failure.
-      className="h-7 min-w-[7rem] flex-1 text-[13px]"
-    />
   )
 }
 
@@ -123,7 +75,16 @@ function BankHeader({
   return (
     <div className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1.5">
       {dragHandle}
-      <BankNameField bank={bank} at={at} />
+      <NameField
+        value={bank.name}
+        label="Bank name"
+        placeholder="Bank"
+        onSave={(name) => commit((page) => setBank(page, at, { name }))}
+        // A real minimum, not `min-w-0`: in a quarter-width column the field would otherwise
+        // shrink to nothing and the controls beside it would carry on past the bank's border. With
+        // a floor the header wraps instead (see above), which is the better failure.
+        className="min-w-[7rem] flex-1"
+      />
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <span className="text-[10px] text-muted-foreground">Solo</span>
         <button
@@ -206,7 +167,7 @@ export function BuskBankCluster({
   at: BankAddress
   behaviour: PadBehaviour
 }) {
-  const { editing, source, target, commit } = useBuskEdit()
+  const { editing, source, target, foreign, commit } = useBuskEdit()
 
   const { attributes, listeners, setNodeRef: setBankRef, isDragging } = useDraggable({
     id: buskBankId(at),
@@ -231,7 +192,7 @@ export function BuskBankCluster({
       target: { kind: 'pad', at: { ...at, pad: bank.pads.length } },
       depth: DROP_DEPTH.bankBody,
     } satisfies BuskDropData,
-    disabled: !editing || draggingBank,
+    disabled: !editing || draggingBank || foreign,
   })
   const { setNodeRef: setUnderRef, isOver: isOverUnder } = useDroppable({
     id: buskBankUnderId(at),
@@ -284,7 +245,7 @@ export function BuskBankCluster({
           // dnd-kit only learns that an effect-cycle after the render that sets it — so `over` can
           // still name this body for a frame at drag start, and the lifted bank would flash the
           // drop ring on itself.
-          isOver && editing && !draggingBank && 'bg-primary/5 ring-1 ring-inset ring-primary/40',
+          isOver && editing && !draggingBank && !foreign && 'bg-primary/5 ring-1 ring-inset ring-primary/40',
         )}
       >
         <BankHeader

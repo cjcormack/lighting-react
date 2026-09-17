@@ -19,8 +19,7 @@ import { useBuskingSelection } from './useBuskingSelection'
  * pad that a tap then failed to clear.
  */
 export function useBuskingState() {
-  const { selectedTargets, families, selectTarget, toggleTarget, clearSelection } =
-    useBuskingSelection()
+  const { selectedTargets, families, toggleTarget, clearSelection } = useBuskingSelection()
   // The **resolved** stack, not the layer list: the pads ask about coverage and the desk has
   // already answered, so this view never subscribes to the layers themselves.
   const { data: programmerApplied } = useProgrammerAppliedQuery()
@@ -39,7 +38,6 @@ export function useBuskingState() {
     selectedLayerTargets,
     /** The selection's attribute mask — the other half of the pair a press sends (D4). */
     families,
-    selectTarget,
     toggleTarget,
     clearSelection,
     programmerApplied,

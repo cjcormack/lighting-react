@@ -344,6 +344,9 @@ export const handWs: {
 /** `busk.layoutChanged` frames, so a test can fire one at `store/busk.ts`'s bridge. */
 export const buskWs: { callback: null | ((pageIds: number[]) => void) } = { callback: null }
 
+/** `busk.rigChanged` frames — payload-free — so a test can fire one at the rig bridge. */
+export const buskRigWs: { callback: null | (() => void) } = { callback: null }
+
 /**
  * The template library's two frames: `templateListChanged` (payload-free, invalidates) and
  * `templatePressed` (keyed, patched in place). Spelled out rather than left to the fallback Proxy
@@ -400,6 +403,14 @@ export function lightingApiMock() {
           return {
             unsubscribe: () => {
               buskWs.callback = null
+            },
+          }
+        },
+        subscribeRigChanged: (fn: () => void) => {
+          buskRigWs.callback = fn
+          return {
+            unsubscribe: () => {
+              buskRigWs.callback = null
             },
           }
         },

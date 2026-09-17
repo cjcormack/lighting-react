@@ -126,3 +126,15 @@ describe('handRefusalReason', () => {
     expect(handRefusalReason({ kind: 'CUE' }, 'layer-stack')).toMatch(/never a cue/)
   })
 })
+
+describe('the rig row', () => {
+  it('is a target kind that takes nothing the hand can hold today', () => {
+    expect(HAND_TARGET_KINDS).toContain('rig-row')
+    for (const kind of KINDS) expect(canHandLand({ kind }, 'rig-row')).toBe(false)
+    expect(canHandLand({ kind: 'LOOK', hasDeferredEffects: true }, 'rig-row')).toBe(false)
+  })
+
+  it('says why', () => {
+    expect(handRefusalReason({ kind: 'CUE' }, 'rig-row')).toMatch(/cannot hold one yet/)
+  })
+})

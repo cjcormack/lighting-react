@@ -18,8 +18,8 @@ configure({ asyncUtilTimeout: 5000 })
 // pad's press handler is built at render time, so a test that fires a `selection.state` frame and
 // presses has to wait for the *render*, not merely for the cache write — `findByTestId` on this
 // content is that wait, and without it the press sends the pair from the frame before last.
-vi.mock('./TargetBand', () => ({
-  TargetBand: ({ selectedTargets }: { selectedTargets: Map<string, unknown> }) => (
+vi.mock('./RigBand', () => ({
+  RigBand: ({ selectedTargets }: { selectedTargets: Map<string, unknown> }) => (
     <div data-testid="target-band">{[...selectedTargets.keys()].join(' ') || 'none'}</div>
   ),
 }))

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
 import { current } from '@reduxjs/toolkit'
@@ -7,6 +7,8 @@ import { store } from './index'
 import { lightingApi } from '../api/lightingApi'
 import { formatError } from '@/lib/formatError'
 import { recordsOnPage, toLayoutRequest } from '@/lib/buskLayout'
+import { rigRows, toRigRequest, type RigIds } from '@/lib/buskRig'
+import type { BuskRig, BuskRigErrorCode, BuskRigRequest } from '@/api/buskRigApi'
 import type {
   AddBuskPadRequest,
   BuskLayoutRequest,
@@ -173,6 +175,31 @@ export const buskApi = restApi.injectEndpoints({
     }),
 
     /**
+     * The busk **rig** (busk-further plan §3.2), one per project. An empty rig arrives as `{}` —
+     * lighting7 omits a defaulted empty list — and is read as `rows: []`; the show-all fallback is
+     * `effectiveRig`'s, never the cache's.
+     */
+    buskRig: build.query<BuskRig, number>({
+      query: (projectId) => `projects/${projectId}/busk/rig`,
+      transformResponse: (response: BuskRig | null | undefined) => ({ rows: rigRows(response ?? {}) }),
+      providesTags: ['BuskRig'],
+    }),
+
+    /**
+     * The whole rig. Neither optimistic nor invalidating on its own — {@link useBuskRigCommit} owns
+     * both, for `saveBuskLayout`'s reason: a gesture's patch has to survive the round trip of the
+     * gesture before it.
+     */
+    saveBuskRig: build.mutation<BuskRig, { projectId: number } & BuskRigRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/busk/rig`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: BuskRig | null | undefined) => ({ rows: rigRows(response ?? {}) }),
+    }),
+
+    /**
      * A press, whatever the pad holds. No invalidation: what the rig did comes back over the
      * programmer's applied state and the cue stack list, which the pad rings already read.
      */
@@ -237,6 +264,8 @@ export const {
   useSaveBuskLayoutMutation,
   useAddBuskPadMutation,
   usePressBuskPadMutation,
+  useBuskRigQuery,
+  useSaveBuskRigMutation,
 } = buskApi
 
 // ─── The echo-suppressing bridge ────────────────────────────────────────
@@ -350,6 +379,48 @@ lightingApi.busk.subscribe((pageIds) => {
   // from a frame that carries only page ids, so the lists are refreshed wholesale — rare, because
   // this is another desk editing, and the alternative is a count that is simply wrong.
   store.dispatch(restApi.util.invalidateTags(BUSK_COUNT_TAGS))
+})
+
+// ─── The rig bridge ─────────────────────────────────────────────────────
+
+/** Rig writes in flight, and when the last one settled — the page bridge's bookkeeping, for one rig. */
+let rigWritesInFlight = 0
+let rigSettledAt: number | null = null
+
+function beginBuskRigWrite() {
+  rigWritesInFlight += 1
+}
+
+function endBuskRigWrite(landed: boolean) {
+  rigWritesInFlight = Math.max(0, rigWritesInFlight - 1)
+  if (landed) rigSettledAt = Date.now()
+}
+
+function isOwnRigEcho(): boolean {
+  if (rigWritesInFlight > 0) return true
+  return rigSettledAt != null && Date.now() - rigSettledAt < ECHO_GRACE_MS
+}
+
+/**
+ * `busk.rigChanged` → re-read the rig.
+ *
+ * Module scope, like the page bridge above and for the same reason: nothing on the earliest render
+ * path imports this slice. The frame is **payload-free** — there is one rig per project (D1) — so
+ * there is nothing to key on and the whole `BuskRig` tag is invalidated; a tab on another project
+ * holds no `BuskRig` entry for this one, so the refetch is that tab's own rig, which is what it
+ * would want anyway.
+ *
+ * **The echo.** Our own write broadcasts this frame back to us, and a refetch per gesture would land
+ * between an optimistic patch and its own response — the snap-back the commit queue exists to
+ * avoid. So the frame is dropped while a rig write is in flight or inside a short grace after one
+ * settled. The cost is the page bridge's: a *foreign* write inside that window is swallowed, and the
+ * reconnect resync is the backstop. The frame also fires for a **group or patch delete that took
+ * tiles off the rig**, and if that lands inside our window a stale tile's next PUT is a 400
+ * `BUSK_RIG_REF` — covered from the other end, because every rig failure re-reads the rig.
+ */
+lightingApi.busk.subscribeRigChanged(() => {
+  if (isOwnRigEcho()) return
+  store.dispatch(restApi.util.invalidateTags(['BuskRig']))
 })
 
 // ─── The commit queue ───────────────────────────────────────────────────
@@ -490,6 +561,134 @@ export function useBuskLayoutCommit(projectId: number, pageId: number | null) {
   )
 }
 
+// ─── The rig commit queue ───────────────────────────────────────────────
+
+/** One edit to the rig, as a function of the rig — replayable against the last confirmed document. */
+export type BuskRigOp = (rig: BuskRig) => BuskRig
+
+interface RigQueue {
+  ops: BuskRigOp[]
+  confirmed: BuskRig | null
+  running: boolean
+}
+
+/** One rig per project, and the busk view shows one project at a time. */
+const rigQueues = new Map<number, RigQueue>()
+
+function patchRig(dispatch: typeof store.dispatch, projectId: number, op: BuskRigOp) {
+  dispatch(
+    buskApi.util.updateQueryData('buskRig', projectId, (draft) => {
+      // `current()` for `patchPage`'s reason: the op clones what it is handed, and an Immer proxy
+      // inside the object written back throws once the produce call that made it has finished.
+      return op(current(draft) as BuskRig)
+    }),
+  )
+}
+
+/**
+ * What a refused rig write says, **by code**: the three refusals name a row and tile by position,
+ * and the code says which kind of thing was wrong — a malformed document, an id that is not this
+ * rig's, or a record that is gone. A `RigRequestError` thrown before the PUT (a group the desk
+ * cannot name) carries its own sentence and no code.
+ */
+export function rigWriteFailureMessage(err: unknown): string {
+  const code = (err as { data?: { code?: string } } | null)?.data?.code as BuskRigErrorCode | undefined
+  const message = formatError(err)
+  switch (code) {
+    case 'BUSK_RIG_INVALID':
+      return `The rig was refused: ${message}`
+    case 'BUSK_RIG_IDENTITY':
+      return `The rig was refused — it names a row or tile the desk does not have: ${message}`
+    case 'BUSK_RIG_REF':
+      return `The rig was refused — a group, fixture or cell on it is gone: ${message}`
+    default:
+      return message
+  }
+}
+
+/**
+ * Save every rig gesture as a whole document, one at a time, without the band ever going backwards
+ * — {@link useBuskLayoutCommit}'s queue over one rig instead of a page.
+ *
+ * **Operations are queued, not documents**, replayed against the freshest confirmed rig at send
+ * time so gesture 2 carries the ids gesture 1's response minted; only the **last** response is
+ * written into the cache. On a failure the queue is dropped, the last confirmed rig restored, the
+ * rig re-read (a `BUSK_RIG_REF` means a record behind a tile was deleted, and that frame is one the
+ * echo suppression can swallow) and the refusal toasted by code.
+ *
+ * `ids` is read **at send time** through a ref rather than captured per gesture: the patch list can
+ * arrive after the first gesture is enqueued, and a group the desk cannot name is refused by
+ * `toRigRequest` in the loop and reported like any other failure.
+ */
+export function useBuskRigCommit(projectId: number, ids: RigIds) {
+  const dispatch = useDispatch<typeof store.dispatch>()
+  const [saveRig] = useSaveBuskRigMutation()
+  const idsRef = useRef(ids)
+  idsRef.current = ids
+
+  useEffect(
+    () => () => {
+      // Idle queues only, for `useBuskLayoutCommit`'s reason: the drain loop holds its queue by
+      // closure, so deleting a running one would let the next commit mint a second beside it.
+      if (rigQueues.get(projectId)?.running !== true) rigQueues.delete(projectId)
+    },
+    [projectId],
+  )
+
+  return useCallback(
+    (op: BuskRigOp) => {
+      let queue = rigQueues.get(projectId)
+      if (queue == null) {
+        queue = { ops: [], confirmed: null, running: false }
+        rigQueues.set(projectId, queue)
+      }
+      const held = queue
+
+      // Seeded before the optimistic patch, or the gesture would be taken in as confirmed and
+      // applied twice.
+      if (held.ops.length === 0 && !held.running) {
+        held.confirmed = buskApi.endpoints.buskRig.select(projectId)(store.getState()).data ?? null
+      }
+
+      patchRig(dispatch, projectId, op)
+      held.ops.push(op)
+      if (held.running) return
+      held.running = true
+      beginBuskRigWrite()
+
+      void (async () => {
+        let landed = false
+        try {
+          while (held.ops.length > 0) {
+            const next = held.ops.shift()!
+            const base = held.confirmed
+            if (base == null) throw new Error('The rig is no longer loaded')
+            held.confirmed = await saveRig({
+              projectId,
+              ...toRigRequest(next(base), idsRef.current),
+            }).unwrap()
+            landed = true
+            if (held.ops.length === 0) {
+              const settled = held.confirmed
+              patchRig(dispatch, projectId, () => settled)
+            }
+          }
+        } catch (err) {
+          held.ops.length = 0
+          const restore = held.confirmed
+          if (restore != null) patchRig(dispatch, projectId, () => restore)
+          dispatch(restApi.util.invalidateTags(['BuskRig']))
+          toast.error(rigWriteFailureMessage(err))
+        } finally {
+          held.running = false
+          endBuskRigWrite(landed)
+        }
+      })()
+    },
+    [dispatch, projectId, saveRig],
+  )
+}
+
 /**
  * Write a page the server has just answered with into the list cache.
  *
@@ -510,9 +709,12 @@ export function useCacheBuskPage(projectId: number) {
   )
 }
 
-/** Test seam: forget every queued gesture and echo window. */
+/** Test seam: forget every queued gesture and echo window, the rig's included. */
 export function resetBuskCommitState() {
   queues.clear()
   writesInFlight.clear()
   settledAt.clear()
+  rigQueues.clear()
+  rigWritesInFlight = 0
+  rigSettledAt = null
 }

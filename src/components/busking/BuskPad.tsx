@@ -125,7 +125,7 @@ export function BuskPadButton({
   const face = padFaceOf(pad)
   const isCue = face.kind === 'CUE'
   const id = buskPadId(at)
-  const { source } = useBuskEdit()
+  const { source, foreign } = useBuskEdit()
   const draggingBank = source?.type === 'busk-bank'
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
@@ -138,7 +138,7 @@ export function BuskPadButton({
   const { setNodeRef: setDropRef } = useDroppable({
     id,
     data: { type: 'busk-drop', target: { kind: 'pad', at }, depth: DROP_DEPTH.pad } satisfies BuskDropData,
-    disabled: !editing || draggingBank,
+    disabled: !editing || draggingBank || foreign,
   })
   // One node carries the drag ref, the drop ref and the context-menu trigger. Merging them here —
   // rather than wrapping `body` in a `<div ref={triggerRef}>` — is what keeps the pad itself the

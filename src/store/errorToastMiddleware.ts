@@ -26,6 +26,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // BUSK_PAGE_NAME_TAKEN is an ordinary step in naming a page, shown beside the field.
   'createBuskPage', // src/components/busking/BuskPageStrip.tsx
   'renameBuskPage', // src/components/busking/BuskPageStrip.tsx
+  // The rig's commit queue reports its own refusal **by code** (`rigWriteFailureMessage`) after
+  // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
+  'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

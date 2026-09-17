@@ -28,6 +28,12 @@ const clearSelection = vi.fn()
 
 const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] }
 const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par' }
+const bar = {
+  key: 'bar-1',
+  name: 'Bar L',
+  typeKey: 'bar',
+  elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })),
+}
 
 // The store's readers over a real `lib/deskFollow.ts`, so the local arm is the real one.
 vi.mock('@/store/selection', async () => {
@@ -44,7 +50,7 @@ vi.mock('@/store/selection', async () => {
   }
 })
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [movers] }) }))
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [par] }) }))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [par, bar] }) }))
 
 import { useBuskingSelection } from './useBuskingSelection'
 
@@ -92,19 +98,14 @@ describe('useBuskingSelection', () => {
     expect(setSelection).not.toHaveBeenCalled()
   })
 
-  it('replaces with the layer target shape — a group by name — and no mask', () => {
-    // A replace clears the mask (D2): the narrow-width picker has no column axis to speak with.
-    const { result } = renderHook(() => useBuskingSelection())
-    result.current.selectTarget({ type: 'group', name: 'Movers', group: movers })
-    expect(setSelection).toHaveBeenCalledWith([{ type: 'group', key: 'Movers' }], null)
-  })
-
-  it('hands a toggle to the desk rather than deciding it here', () => {
+  it('hands a toggle to the desk rather than deciding it here — by {type, key}, a group by name', () => {
     // The desk narrows a partly covered group head by head (D2). Doing it here would need the
     // group's members, which `GroupSummary` does not carry — and a second answer would drift.
     const { result } = renderHook(() => useBuskingSelection())
-    result.current.toggleTarget({ type: 'fixture', key: 'par-1', fixture: par as never })
+    result.current.toggleTarget({ type: 'fixture', key: 'par-1' })
     expect(toggleSelection).toHaveBeenCalledWith({ type: 'fixture', key: 'par-1' })
+    result.current.toggleTarget({ type: 'group', key: 'Movers' })
+    expect(toggleSelection).toHaveBeenLastCalledWith({ type: 'group', key: 'Movers' })
     expect(setSelection).not.toHaveBeenCalled()
   })
 
@@ -131,20 +132,16 @@ describe('useBuskingSelection', () => {
       expect(result.current.families).toEqual(['COLOUR'])
     })
 
-    it('writes to the tab’s own copy, keeps the mask on a toggle and clears it on a replace, and never touches the desk', () => {
+    it('writes to the tab’s own copy, keeps the mask on a toggle, and never touches the desk', () => {
       const { result } = renderHook(() => useBuskingSelection())
       act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] }))
 
-      act(() => result.current.toggleTarget({ type: 'group', name: 'Movers', group: movers }))
+      act(() => result.current.toggleTarget({ type: 'group', key: 'Movers' }))
       expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:par-1', 'group:Movers'])
       expect(result.current.families).toEqual(['COLOUR'])
 
-      act(() => result.current.toggleTarget({ type: 'fixture', key: 'par-1', fixture: par as never }))
+      act(() => result.current.toggleTarget({ type: 'fixture', key: 'par-1' }))
       expect([...result.current.selectedTargets.keys()]).toEqual(['group:Movers'])
-
-      act(() => result.current.selectTarget({ type: 'fixture', key: 'par-1', fixture: par as never }))
-      expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:par-1'])
-      expect(result.current.families).toBeNull()
 
       act(() => result.current.clearSelection())
       expect(result.current.selectedTargets.size).toBe(0)
@@ -165,5 +162,20 @@ describe('useBuskingSelection', () => {
       // Nothing was published: re-linking adopts, it does not clear what another screen has.
       expect(setSelection).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('a cell in the selection', () => {
+  it('rehydrates against the parent’s own element list, never by parsing the key', () => {
+    deskTargets = [{ type: 'fixture', key: 'bar-1.pixel-1' }]
+    const { result } = renderHook(() => useBuskingSelection())
+    const cell = result.current.selectedTargets.get('fixture:bar-1.pixel-1')
+    expect(cell).toMatchObject({ type: 'fixture', key: 'bar-1.pixel-1', fixture: { key: 'bar-1' }, element: { displayName: 'Cell 2' } })
+  })
+
+  it('toggles a cell by its element key, exactly as a rig tile hands it over', () => {
+    const { result } = renderHook(() => useBuskingSelection())
+    act(() => result.current.toggleTarget({ type: 'fixture', key: 'bar-1.pixel-0' }))
+    expect(toggleSelection).toHaveBeenCalledWith({ type: 'fixture', key: 'bar-1.pixel-0' })
   })
 })

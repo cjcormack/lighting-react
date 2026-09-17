@@ -1,5 +1,6 @@
 import type { Active, ClientRect } from '@dnd-kit/core'
 import type { BuskPage } from '@/api/buskApi'
+import type { BuskRig } from '@/api/buskRigApi'
 import {
   dropTargetFor,
   parseBuskDragId,
@@ -10,6 +11,15 @@ import {
   type PaletteRecord,
   type ParsedBuskId,
 } from '@/lib/buskLayout'
+import {
+  parseRigDragId,
+  rigDropTargetFor,
+  type ParsedRigId,
+  type RigDragSource,
+  type RigDropTarget,
+  type RigPaletteRecord,
+  type RigTileAddress,
+} from '@/lib/buskRig'
 import type { PadFace } from './padFace'
 
 /**
@@ -51,6 +61,56 @@ export interface BuskPaletteDragData {
 }
 
 export type BuskDragData = BuskPadDragData | BuskBankDragData | BuskPaletteDragData
+
+/**
+ * The rig's three sources (busk-further plan session 3). Same contract, other document: the rig
+ * band joins the one `DndContext` with `rig-` prefixed data and `r…` ids, and neither the page's
+ * monitor nor the cue-slot handler recognises either.
+ */
+export interface RigPaletteDragData {
+  type: 'rig-palette'
+  record: RigPaletteRecord
+  name: string
+}
+
+export interface RigTileDragData {
+  type: 'rig-tile'
+  at: RigTileAddress
+  name: string
+}
+
+export interface RigRowDragData {
+  type: 'rig-row'
+  row: number
+  name: string
+  tileCount: number
+}
+
+export type RigDragData = RigPaletteDragData | RigTileDragData | RigRowDragData
+
+export function rigDragData(active: Active | null): RigDragData | null {
+  const data = active?.data.current
+  if (data == null) return null
+  if (data.type === 'rig-palette' || data.type === 'rig-tile' || data.type === 'rig-row') {
+    return data as RigDragData
+  }
+  return null
+}
+
+export function rigDragSourceOf(data: RigDragData): RigDragSource {
+  if (data.type === 'rig-palette') return { kind: 'rig-palette', record: data.record }
+  if (data.type === 'rig-tile') return { kind: 'rig-tile', at: data.at }
+  return { kind: 'rig-row', row: data.row }
+}
+
+/** A drop target on the rig, which the page's droppables never carry. */
+export interface RigDropData {
+  type: 'rig-drop'
+  target: RigDropTarget
+  depth: number
+}
+
+export const RIG_DROP_DEPTH = { tile: 3, rowBody: 2, rowGap: 1, newRow: 0 } as const
 
 export interface BuskDropData {
   type: 'busk-drop'
@@ -123,25 +183,47 @@ export function depthOf(parsed: ParsedBuskId): number {
 }
 
 /** Do two hover targets name the same landing place? A repeat hover must write no state. */
-export function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean {
+export function sameTarget<T extends DropTarget | RigDropTarget>(a: T | null, b: T | null): boolean {
   if (a == null || b == null) return a === b
   return JSON.stringify(a) === JSON.stringify(b)
 }
+
+/** Every source either surface can lift. */
+export type AnyDragSourceKind = DragSource['kind'] | RigDragSource['kind']
+
+/** Every landing place either surface registers. */
+export type AnyDroppableKind = ParsedBuskId['kind'] | ParsedRigId['kind']
 
 /**
  * Which droppable kinds a source can land on.
  *
  * A pad or a palette row lands in a bank — on a pad, or on the body for an append; a bank lands on
- * the three bank zones. The droppables are also `disabled` per source in the components (so
- * dnd-kit's `over` never lights an illegal target), but the rule is stated here as well because this
- * is the half a test can reach: before it was, a bank drag over a pad resolved to a pad target,
- * drew a dashed slot inside the bank, and then went nowhere on drop — `dropBank` refuses a pad
- * target, so the gesture ended with no commit and no request.
+ * the three bank zones. On the rig, a tile or a palette target lands on a tile, a row body or the
+ * new-row zone, and a row lands on a row gap. **A rig source lands nowhere on the page and a page
+ * source nowhere on the rig**: the two documents share one drag context and one pointer, and a
+ * palette row dropped on a rig row is not a gesture. The droppables are also `disabled` per source
+ * in the components (so dnd-kit's `over` never lights an illegal target), but the rule is stated
+ * here as well because this is the half a test can reach: before it was, a bank drag over a pad
+ * resolved to a pad target, drew a dashed slot inside the bank, and then went nowhere on drop —
+ * `dropBank` refuses a pad target, so the gesture ended with no commit and no request.
  */
-function canLand(source: DragSource['kind'], kind: ParsedBuskId['kind']): boolean {
-  if (source === 'bank') return kind === 'bank-under' || kind === 'gutter' || kind === 'new-row'
-  return kind === 'pad' || kind === 'bank-body'
+function canLand(source: AnyDragSourceKind, kind: AnyDroppableKind): boolean {
+  switch (source) {
+    case 'bank':
+      return kind === 'bank-under' || kind === 'gutter' || kind === 'new-row'
+    case 'pad':
+    case 'palette':
+      return kind === 'pad' || kind === 'bank-body'
+    case 'rig-row':
+      return kind === 'rig-row-gap'
+    case 'rig-tile':
+    case 'rig-palette':
+      return kind === 'rig-tile' || kind === 'rig-row-body' || kind === 'rig-new-row'
+  }
 }
+
+/** Exported for `buskDnd.test.ts` alone, which pins the cross-family refusals. */
+export const canLandForTest = canLand
 
 /** The deepest landing place, among everything the pointer is inside, that the source may take. */
 function deepest(source: DragSource['kind'], collisionIds: readonly string[]): ParsedBuskId | null {
@@ -259,4 +341,93 @@ export function resolveDropTarget(args: {
     return target
   }
   return { kind: 'pad', at: { ...target.at, pad: target.at.pad + insertionSide(activeRect, overRect) } }
+}
+
+// ─── The rig's resolver ─────────────────────────────────────────────────
+
+function rigDepthOf(parsed: ParsedRigId): number {
+  switch (parsed.kind) {
+    case 'rig-tile':
+      return RIG_DROP_DEPTH.tile
+    case 'rig-row-body':
+      return RIG_DROP_DEPTH.rowBody
+    case 'rig-row-gap':
+      return RIG_DROP_DEPTH.rowGap
+    case 'rig-new-row':
+      return RIG_DROP_DEPTH.newRow
+    default:
+      return -1
+  }
+}
+
+function deepestRig(source: RigDragSource['kind'], collisionIds: readonly string[]): ParsedRigId | null {
+  let best: ParsedRigId | null = null
+  let bestDepth = -1
+  for (const id of collisionIds) {
+    const parsed = parseRigDragId(id)
+    if (parsed == null || !canLand(source, parsed.kind)) continue
+    const depth = rigDepthOf(parsed)
+    if (depth > bestDepth) {
+      best = parsed
+      bestDepth = depth
+    }
+  }
+  return best
+}
+
+/**
+ * Where a hover over the rig would land, or null — {@link resolveDropTarget} over the rig document.
+ *
+ * The same four rules, because they were each learned on the page and the rig has the same
+ * anatomy: self-hover stays ahead of the hysteresis, the hysteresis stays ahead of the
+ * `overId == null` arm, an open slot is sticky while the pointer is in the same row's body, and the
+ * half-of-the-tile test only runs when the tile that won is the one dnd-kit measured. A row has
+ * one axis — tiles run left to right — but `insertionSide` still reads whichever axis the centres
+ * differ on more, so a tile row that has wrapped is answered the way a wrapping bank is.
+ */
+export function resolveRigDropTarget(args: {
+  rig: BuskRig
+  source: RigDragSource['kind']
+  activeId: string
+  overId: string | null
+  collisionIds: readonly string[]
+  activeRect: ClientRect | null
+  overRect: ClientRect | null
+  current?: RigDropTarget | null
+  movedSinceTarget?: number
+}): RigDropTarget | null {
+  const {
+    rig,
+    source,
+    activeId,
+    overId,
+    collisionIds,
+    activeRect,
+    overRect,
+    current = null,
+    movedSinceTarget = Number.POSITIVE_INFINITY,
+  } = args
+  if (overId === activeId) return null
+  if (current != null && movedSinceTarget < TARGET_HYSTERESIS_PX) return current
+  if (overId == null) return null
+
+  const parsed = deepestRig(source, collisionIds.length > 0 ? collisionIds : [overId])
+  if (parsed == null) return null
+
+  if (parsed.kind === 'rig-row-body' && current?.kind === 'tile' && current.at.row === parsed.row) {
+    return current
+  }
+
+  const target = rigDropTargetFor(parsed, rig)
+  if (target?.kind !== 'tile' || overRect == null) return target
+
+  const overParsed = parseRigDragId(overId)
+  if (
+    overParsed?.kind !== 'rig-tile' ||
+    overParsed.at.row !== target.at.row ||
+    overParsed.at.tile !== target.at.tile
+  ) {
+    return target
+  }
+  return { kind: 'tile', at: { ...target.at, tile: target.at.tile + insertionSide(activeRect, overRect) } }
 }

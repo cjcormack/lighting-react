@@ -16,6 +16,16 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
  */
 export interface BuskWsApi {
   subscribe(fn: (pageIds: number[]) => void): Subscription
+  /**
+   * `busk.rigChanged` — the busk **rig** changed: a whole-document write (this client's own
+   * included), or a group or patch delete that took tiles off it.
+   *
+   * Payload-free, because there is one rig per project (busk-further plan D1) and so nothing to key
+   * on; `store/busk.ts` re-reads `GET /busk/rig` on it, suppressing the echo of its own write the
+   * way the page bridge does. Still hand-written beside `subscribe` rather than through
+   * `createChangeSignalApi`, so the two frames of one family share one connection subscription.
+   */
+  subscribeRigChanged(fn: () => void): Subscription
 }
 
 interface BuskLayoutChangedMessage {
@@ -23,15 +33,20 @@ interface BuskLayoutChangedMessage {
   pageIds: number[]
 }
 
+interface BuskRigChangedMessage {
+  type: 'busk.rigChanged'
+}
+
 export function createBuskWsApi(conn: InternalApiConnection): BuskWsApi {
   const layoutChanged = createWsSubscribable<number[]>()
+  const rigChanged = createWsSubscribable<void>()
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== 'message') return
-    const message = frame as BuskLayoutChangedMessage | null
-    if (message?.type !== 'busk.layoutChanged') return
-    layoutChanged.notify(message.pageIds ?? [])
+    const message = frame as BuskLayoutChangedMessage | BuskRigChangedMessage | null
+    if (message?.type === 'busk.layoutChanged') layoutChanged.notify(message.pageIds ?? [])
+    else if (message?.type === 'busk.rigChanged') rigChanged.notify(undefined)
   })
 
-  return { subscribe: layoutChanged.api.subscribe }
+  return { subscribe: layoutChanged.api.subscribe, subscribeRigChanged: rigChanged.api.subscribe }
 }

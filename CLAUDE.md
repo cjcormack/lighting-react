@@ -795,6 +795,85 @@ hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between
 hidden with it — by decision, narrow widths get play mode only, and an edit mode with nothing to
 drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
+### The rig
+
+**The target band is a document the operator builds, and an empty one is the band as it was.** The
+busk view's top region draws the **rig** (`lighting7/models/buskRig.kt`, busk-further plan D1–D3):
+rows of tiles, each tile a group, a fixture, or one **cell** of a multi-head fixture; one rig per
+project, `GET` / `PUT /busk/rig` whole-document with the page write's three refusals
+(`BUSK_RIG_INVALID` / `_IDENTITY` / `_REF`), tiles renumbered dense and answered with the ids the
+write minted. `api/buskRigApi.ts` is the wire, `lib/buskRig.ts` the document model (addresses
+`rrow:{r}` / `rbody:{r}` / `rgap:{r}` / `rtile:{r}.{t}` / `rpal:{kind}:{key}` / `rnewrow`,
+`applyDrop`, `normaliseRig`, `toRigRequest`, `nextRowName`), `components/busking/RigBand.tsx` the
+band, `RigTile.tsx` the tile, `RigPalette.tsx` the palette's **Rig** tab, `RigEditProvider.tsx` the
+band's half of the one `DndContext`, and `useBuskRigCommit` in `store/busk.ts` the operation queue —
+`useBuskLayoutCommit`'s model over one document, response written when the queue drains, a refusal
+toasted **by code** (`rigWriteFailureMessage`; `saveBuskRig` is in `SILENT_ENDPOINTS` so the
+middleware does not say it a second time, generically). `TargetBand`, `TargetList`,
+`TargetListItem` and the narrow-width *Pick targets…* sheet are deleted (D15).
+
+**The show-all fallback is the client's, and its order is the desk's.** The server stores what the
+operator built and answers an empty rig as empty (`{}` on the wire — lighting7 omits a defaulted
+empty list, so `rows`, `tiles` and a patch's `elements` are all optional on this side, the
+`TemplateSummary.rows` rule); `effectiveRig(rig, groups, fixtures)` then draws a `Groups` row and a
+`Fixtures` row from the two lists the view already holds, **in the order `GET /groups` and
+`GET /fixtures` answer them**. That order is not a choice made here: `state/BuskRigOrder.kt` walks
+the rig for `selection.subselect`'s *Next* / *Prev* and answers every group then every fixture for
+an empty one, and the two must agree. `buskRig.test.ts` pins `effectiveRig` and `rigSteps` against
+the server's own fixture — `src/lib/__fixtures__/rigOrder.fixture.json` is a **copy** of
+`lighting7/src/test/resources/busk/rigOrder.fixture.json` (a cross-repo import would make the suite
+depend on a sibling checkout, and the app's tsconfig has no Node types to read one with), so when
+`BuskRigOrderTest`'s fixture changes, copy it again. The fallback has **one render path** with the
+built rig: its rows are rows like any other, only their tiles carry no address, take no drop and
+are drawn dimmed behind the new-row zone while editing an empty rig.
+
+**A multi-head tile decides how it shows its cells** (D3), on the tile rather than in a mode:
+`cellMode` is `PIPS` (the whole fixture, cells as read-only pips — the default), `WHOLE`, `PER_CELL`
+(one tile per cell) or `HALVES` with `cellSplit` (2 up to the cell count, contiguous runs cut the
+desk's way — twelve cells in five are 3 · 3 · 2 · 2 · 2, `runsOf`); a tile dragged in as one cell
+carries its `elementKey` and is `WHOLE`. `expandTile` is the one place a stored tile becomes what is
+drawn and pressed, and **a cell is `{type: 'fixture', key: element.key}`**, the shape
+`rowLocateTarget` publishes — element keys come from `patch.elements[].key` and are never parsed.
+`useBuskingSelection` rehydrates a cell target by looking the key up in its parent's own
+`elements`, so a fixture tile reads `some` with a `1 of 4` count when a cell is selected elsewhere.
+The pips are **read-only until session 7**: a tap on the tile is the whole fixture, a run tile
+toggles each of its cells, and the *Cells* chip and *Spread…* are drawn **inert** — present so the
+label row has its shape, disabled with the session that lands them on their `title`.
+
+**The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
+leaf per fixture tile — the third reader of `components/fixtures/fixtureAppearance.tsx` beside the
+DOM marker and the 2D plot (the cues' `MiniStage` borrows only its default colour) — and a cell or run tile draws its own cells' colours off
+the parent's per-element `segments` by the element's **position in the patch's cell list**, an
+index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
+
+**Two wire facts the client has to live with, both recorded as session 3 amendments.** The rig GET
+embeds `GroupSummaryDto`, which carries **no id**, while the PUT names every group tile by `groupId`
+— on a kept tile as much as a new one — so `toRigRequest` resolves a group through the **patch
+list** (`FixturePatchDto.groups[].id`, `rigIdsFromPatches`), the one place the desk publishes one,
+and a group with no patched member is refused **here, by name**, before a PUT the server would 400
+(`RigRequestError`). And **the hand cannot hold a group or fixture**: `hand.pickUp {kind, id}`
+takes a `BuskPadKind`, so the `rig-row` target in `lib/handTargets.ts` answers false for every
+kind, the row's `HandPlaceStrip` is mounted and wired (the rig PUT through the queue, then
+`hand.drop`, Undo the rig as it stood) and never lights, and `RigBand`'s `rigRecordOf` is the one
+function to teach the day the desk can hold one. Neither is worked around client-side beyond that.
+
+**The band joins the one `DndContext` with `r…` ids and `rig-` data**, and the two documents are
+mutually foreign: `parseBuskDragId` answers null for every rig id and `parseRigDragId` for every
+page and slot id, `canLand` in `buskDnd.ts` refuses a rig source everywhere but the rig and a page
+source everywhere on it, and each provider carries a **`foreign`** flag — set when something not its
+own is lifted — that its droppables disable on, so a rig tile crossing a bank lights no ring
+`canLand` would refuse. `resolveRigDropTarget` is `resolveDropTarget` over the rig with the same
+four rules (self-hover ahead of the hysteresis, the hysteresis ahead of the null-over arm, a sticky
+slot within one row's body, the half-of-the-tile test only on the tile dnd-kit measured), and
+`buskDnd.test.ts` composes the slot and the landing place for a downward drag within a row. **A row
+is created by the first thing dropped into it** (`rnewrow`): the server refuses an empty row, so
+`+ Row` is the new-row zone rather than a button that mints a placeholder, and `normaliseRig` drops
+an empty row while keeping an empty rig. Rows reorder by their grip onto the gaps drawn while a row
+is lifted; `NameField` (extracted from `BuskBank`'s private `BankNameField`) is the row's name as it
+is the bank's. The `n of N rows` handle (D6) draws and clamps here and is local state until session
+4 gives it `busk.rigRows`; edit mode shows every row, since a hidden one cannot take a drop. Below
+`md` the band is one row with a row chip and the verbs in a menu, and there is no editing there.
+
 ### The hand
 
 **The desk holds one record between two screens.** A template, a Look or a cue is *picked up* on
@@ -2885,23 +2964,27 @@ path may quietly change where it lands.
     work from a busk pad: busking *is* the live use, and the lock is a stray-click guard for
     editing surfaces rather than a transport gate — the same reasoning that keeps `locked`
     away from `canOperate` on `/show`.
-  - **The target band replaced a sidebar, and a pad is a plain toggle.** `TargetBand` is two
-    rows of pads in one `grid-flow-col` container, groups then fixtures, scrolling sideways
-    — so the band's height is fixed at two pads whatever the rig size, and the width a
-    sidebar spent permanently goes to the pads. The list it replaced was
-    left-click-replace / right-click-toggle, which has no touchscreen gesture and no
-    discoverable mouse one; `selectTarget` survives only for the narrow-width sheet, where
-    picking one thing and getting one thing is right. `SelectedTargetSummary` went with the
-    sidebar, and `Breadcrumbs`' `extra` / `onExtraClick` went with *it* — the busk view was
-    their last consumer, so every breadcrumb trail is now `Projects > Project > <View>`.
+  - **The target band replaced a sidebar, and a tile is a plain toggle.** It was `TargetBand` —
+    two rows of pads in one `grid-flow-col` container, groups then fixtures, scrolling sideways —
+    and is the **rig band** now (§The rig), rows of tiles the operator built, with the same
+    press. The list the band replaced was left-click-replace / right-click-toggle, which has no
+    touchscreen gesture and no discoverable mouse one; `selectTarget`, the replace, survived it
+    only for the narrow-width *Pick targets…* sheet, and went with that sheet (D15) — the
+    selection hook has one write beside clear, `toggleTarget`, by `{type, key}`.
+    `SelectedTargetSummary` went with the sidebar, and `Breadcrumbs`' `extra` / `onExtraClick`
+    went with *it* — the busk view was their last consumer, so every breadcrumb trail is now
+    `Projects > Project > <View>`.
   - **There is no empty-selection dim, and re-adding one would be a regression.** The pools used to
     grey themselves out with nothing selected. Three of the things a pad can now hold do not need a
     selection at all — a **per-fixture** template names its own heads, a Look with **no deferred
     effect** names its own fixtures, and a **cue** has no targets — and the two cases that genuinely
     need one are refused *by name* server-side (`TEMPLATE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`),
     which is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim
-    has nothing left to be per. The **target band** still dims, for the other reason: in edit mode
-    pads do not press, so the selection they would press onto is doing nothing.
+    has nothing left to be per. **The band does not dim in edit mode either**, any more — it did,
+    on the reasoning that pads do not press then and the selection they would press onto is doing
+    nothing; but in edit mode the band is being *edited*, its tiles are drag handles and take
+    drops, and a dim over a drop target reads as "not here". Only the show-all fallback is drawn
+    dimmed while editing, because nothing on it can move (§The rig).
 
   **`look-groups-design/` in lighting7 is the layout authority** — `Main.dc.html` for play mode,
   `Edit.dc.html` for edit mode, `Layout.dc.html` for the rows/columns/banks structure and the three

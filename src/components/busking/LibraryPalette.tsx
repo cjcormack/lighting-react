@@ -20,6 +20,7 @@ import {
   type PadFace,
 } from './padFace'
 import type { BuskPaletteDragData } from './buskDnd'
+import { RigPalette } from './RigPalette'
 
 /**
  * The library, as a palette rather than a picker (D9).
@@ -157,12 +158,64 @@ function SegButton({
   )
 }
 
+type PaletteTab = 'library' | 'rig'
+
+/**
+ * The tab strip over the palette: **Library** feeds the page, **Rig** feeds the band (busk-further
+ * plan D4 — one edit mode, two tabs). The strip is the palette's, not either tab's, so the two
+ * bodies share one frame and one width.
+ */
+function PaletteTabs({ tab, onSelect }: { tab: PaletteTab; onSelect: (tab: PaletteTab) => void }) {
+  return (
+    <div role="tablist" className="flex shrink-0 items-center gap-0.5 border-b px-3 pt-2 pb-2">
+      {(['library', 'rig'] as PaletteTab[]).map((value) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={tab === value}
+          onClick={() => onSelect(value)}
+          className={cn(
+            'rounded-lg px-3 py-1 text-xs font-semibold transition-colors',
+            tab === value ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {value === 'library' ? 'Library' : 'Rig'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function LibraryPalette({
+  projectId,
+  onPageKeys,
+  onRigKeys,
+}: {
+  projectId: number
+  /** `template:7` etc. for records with a pad on the page being edited. */
+  onPageKeys: Set<string>
+  /** `group:<name>` / `fixture:<key>` / `cell:<elementKey>` for records with a tile on the rig. */
+  onRigKeys: Set<string>
+}) {
+  const [tab, setTab] = useState<PaletteTab>('library')
+  return (
+    <div className="hidden w-[360px] shrink-0 flex-col overflow-hidden border-l md:flex">
+      <PaletteTabs tab={tab} onSelect={setTab} />
+      {tab === 'library' ? (
+        <LibraryTab projectId={projectId} onPageKeys={onPageKeys} />
+      ) : (
+        <RigPalette projectId={projectId} onRigKeys={onRigKeys} />
+      )}
+    </div>
+  )
+}
+
+function LibraryTab({
   projectId,
   onPageKeys,
 }: {
   projectId: number
-  /** `template:7` etc. for records with a pad on the page being edited. */
   onPageKeys: Set<string>
 }) {
   const { data: templates } = useTemplateListQuery({ projectId })
@@ -271,7 +324,7 @@ export function LibraryPalette({
   }, [rows, kind, family, search])
 
   return (
-    <div className="hidden w-[360px] shrink-0 flex-col overflow-hidden border-l md:flex">
+    <>
       <div className="flex shrink-0 flex-col gap-2 border-b px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <BuskLabel>Library</BuskLabel>
@@ -330,6 +383,6 @@ export function LibraryPalette({
       <div className="shrink-0 border-t px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
         Every row is a pad waiting to be placed. Long-press lifts on touch.
       </div>
-    </div>
+    </>
   )
 }

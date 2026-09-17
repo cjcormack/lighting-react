@@ -180,7 +180,7 @@ describe('the drop slot', () => {
     return render(
       <Provider store={store}>
         <DndContext>
-          <BuskEditContext.Provider value={{ editing: true, source, target, commit: () => {} }}>
+          <BuskEditContext.Provider value={{ editing: true, source, target, foreign: false, commit: () => {} }}>
             <BuskPageBody page={page} behaviour={behaviour} />
           </BuskEditContext.Provider>
         </DndContext>

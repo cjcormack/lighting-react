@@ -51,7 +51,7 @@ function draw(onPage = new Set<string>()) {
   return render(
     <Provider store={store}>
       <DndContext>
-        <LibraryPalette projectId={1} onPageKeys={onPage} />
+        <LibraryPalette projectId={1} onPageKeys={onPage} onRigKeys={new Set()} />
       </DndContext>
     </Provider>,
   )

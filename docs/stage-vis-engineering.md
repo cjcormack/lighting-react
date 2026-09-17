@@ -204,8 +204,10 @@ gel fixture needs neither — so they cannot collapse behind one hook without br
 hands the result to `children`. That constraint is why the 2D plot went without live colour for so
 long, and the render prop is the way around it.
 
-Consumers: `StageMarker` (DOM) and `Stage2DShapes`' `FixtureShape` (SVG). `FixtureModel` keeps its
-own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
+Consumers: `StageMarker` (DOM), `Stage2DShapes`' `FixtureShape` (SVG), and — since the busk view's
+rig band — `RigTile`'s live bar and pips (`components/busking/RigTile.tsx`),
+one leaf per fixture tile, which reads a cell's colour off `segments` by the element's position in
+the patch's cell list. `FixtureModel` keeps its own **imperative** mirror of the same dispatch on purpose — R3F is a separate reconciler root and
 store-driven re-renders drop beat-rate changes, so the 3D path writes straight to the scene from the
 channel callback. Three copies of the shape, two of the code; changing the dispatch means changing
 `fixtureAppearance.tsx` and `FixtureModel`'s `ColourSync` together.

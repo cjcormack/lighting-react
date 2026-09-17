@@ -49,6 +49,14 @@ interface BuskEditContextValue {
   editing: boolean
   source: BuskDragData | null
   target: DropTarget | null
+  /**
+   * Something **not the page's** is lifted — a rig tile, a rig row, a Rig-tab palette row, a cue
+   * slot. The page's droppables disable themselves on it, for the reason a bank's body disables
+   * while a bank is lifted: dnd-kit's `over` would otherwise light a bank ring under a drag that
+   * `canLand` refuses, and a highlight on a place the drop will not go is the failure §"The busk
+   * layout" is written about.
+   */
+  foreign: boolean
   /** Save one gesture as a whole page. See `useBuskLayoutCommit`. */
   commit: (op: BuskLayoutOp) => void
 }
@@ -58,6 +66,7 @@ export const BuskEditContext = createContext<BuskEditContextValue>({
   editing: false,
   source: null,
   target: null,
+  foreign: false,
   commit: () => {},
 })
 
@@ -77,6 +86,7 @@ export function BuskEditProvider({
   children: React.ReactNode
 }) {
   const [source, setSource] = useState<BuskDragData | null>(null)
+  const [foreign, setForeign] = useState(false)
   const [target, setTarget] = useState<DropTarget | null>(null)
   const targetRef = useRef<DropTarget | null>(null)
   /**
@@ -97,6 +107,7 @@ export function BuskEditProvider({
 
   const clear = useCallback(() => {
     setSource(null)
+    setForeign(false)
     setTarget(null)
     targetRef.current = null
     anchorRef.current = null
@@ -136,6 +147,7 @@ export function BuskEditProvider({
     onDragStart(event: DragStartEvent) {
       const data = buskDragData(event.active)
       if (data != null) setSource(data)
+      else setForeign(event.active.data.current != null)
     },
     onDragMove: hover,
     onDragOver: hover,
@@ -195,8 +207,8 @@ export function BuskEditProvider({
   )
 
   const value = useMemo(
-    () => ({ editing, source, target, commit }),
-    [editing, source, target, commit],
+    () => ({ editing, source, target, foreign, commit }),
+    [editing, source, target, foreign, commit],
   )
   return <BuskEditContext.Provider value={value}>{children}</BuskEditContext.Provider>
 }

@@ -11,7 +11,10 @@ import {
   BUSK_NEW_ROW_ID,
 } from '@/lib/buskLayout'
 import type { DragSource, DropTarget } from '@/lib/buskLayout'
-import { insertionSide, resolveDropTarget, sameTarget, TARGET_HYSTERESIS_PX } from './buskDnd'
+import { canLandForTest, insertionSide, resolveDropTarget, resolveRigDropTarget, sameTarget, TARGET_HYSTERESIS_PX } from './buskDnd'
+import { applyDrop as applyRigDrop, parseRigDragId, rigRowBodyId, rigTileId } from '@/lib/buskRig'
+import type { BuskRig } from '@/api/buskRigApi'
+import { slotAssignmentFor } from '@/components/dnd/slotDrop'
 
 /**
  * Where a hover lands.
@@ -403,5 +406,100 @@ describe('the slot and the landing place agree', () => {
 
   it('starts the row it was shown below the page', () => {
     expect(dropBank(BUSK_NEW_ROW_ID)).toEqual([[['Colour']], [['Movement']]])
+  })
+})
+
+// ─── The rig shares the context ─────────────────────────────────────────
+
+const rig: BuskRig = {
+  rows: [
+    {
+      id: 1,
+      uuid: 'r1',
+      name: 'Wash',
+      tiles: [
+        { id: 1, uuid: 'ta', kind: 'GROUP', group: { name: 'A' } as never, cellMode: 'PIPS' },
+        { id: 2, uuid: 'tb', kind: 'FIXTURE', patch: { id: 2, key: 'b', name: 'B' }, cellMode: 'PIPS' },
+        { id: 3, uuid: 'tc', kind: 'FIXTURE', patch: { id: 3, key: 'c', name: 'C' }, cellMode: 'PIPS' },
+      ],
+    },
+  ],
+}
+
+describe('the rig band on the one drag context', () => {
+  it('lets a rig source land only on the rig, and a page source only on the page', () => {
+    expect(canLandForTest('rig-palette', 'rig-tile')).toBe(true)
+    expect(canLandForTest('rig-tile', 'rig-row-body')).toBe(true)
+    expect(canLandForTest('rig-tile', 'rig-new-row')).toBe(true)
+    expect(canLandForTest('rig-row', 'rig-row-gap')).toBe(true)
+    expect(canLandForTest('rig-row', 'rig-tile')).toBe(false)
+    expect(canLandForTest('rig-palette', 'pad')).toBe(false)
+    expect(canLandForTest('rig-tile', 'bank-body')).toBe(false)
+    expect(canLandForTest('palette', 'rig-tile')).toBe(false)
+    expect(canLandForTest('pad', 'rig-row-body')).toBe(false)
+    expect(canLandForTest('bank', 'rig-row-gap')).toBe(false)
+  })
+
+  it('is ignored by the cue-slot handler, which reads only a busk-palette drag', () => {
+    expect(
+      slotAssignmentFor({ type: 'rig-palette', record: { kind: 'group', group: { name: 'A' } }, name: 'A' }),
+    ).toBeNull()
+    expect(parseRigDragId('slot-1-2')).toBeNull()
+  })
+
+  it('draws the slot where the tile will land — a downward drag within a row', () => {
+    // Tile A (index 0) lifted, pointer on the trailing half of tile C (index 2): the slot opens
+    // after C, at index 3, with A still in place and ghosted.
+    const target = resolveRigDropTarget({
+      rig,
+      source: 'rig-tile',
+      activeId: rigTileId({ row: 0, tile: 0 }),
+      overId: rigTileId({ row: 0, tile: 2 }),
+      collisionIds: [rigTileId({ row: 0, tile: 2 }), rigRowBodyId(0)],
+      activeRect: rect(160, 100),
+      overRect: rect(100, 100),
+    })
+    expect(target).toEqual({ kind: 'tile', at: { row: 0, tile: 3 } })
+    // And the drop lands A exactly there — after C, not one past it.
+    const next = applyRigDrop(rig, { kind: 'rig-tile', at: { row: 0, tile: 0 } }, target!)
+    expect(next!.rows![0].tiles!.map((t) => t.group?.name ?? t.patch?.name)).toEqual(['B', 'C', 'A'])
+  })
+
+  it('appends through the row body, and keeps an open slot while the pointer stays in that body', () => {
+    const appended = resolveRigDropTarget({
+      rig,
+      source: 'rig-palette',
+      activeId: 'rpal:group:Z',
+      overId: rigRowBodyId(0),
+      collisionIds: [rigRowBodyId(0)],
+      activeRect: null,
+      overRect: rect(0, 0),
+    })
+    expect(appended).toEqual({ kind: 'tile', at: { row: 0, tile: 3 } })
+    const held = resolveRigDropTarget({
+      rig,
+      source: 'rig-palette',
+      activeId: 'rpal:group:Z',
+      overId: rigRowBodyId(0),
+      collisionIds: [rigRowBodyId(0)],
+      activeRect: null,
+      overRect: rect(0, 0),
+      current: { kind: 'tile', at: { row: 0, tile: 1 } },
+    })
+    expect(held).toEqual({ kind: 'tile', at: { row: 0, tile: 1 } })
+  })
+
+  it('answers nothing for a page droppable under a rig source', () => {
+    expect(
+      resolveRigDropTarget({
+        rig,
+        source: 'rig-tile',
+        activeId: rigTileId({ row: 0, tile: 0 }),
+        overId: PAD_1,
+        collisionIds: [PAD_1, buskBankBodyId(BANK_0)],
+        activeRect: rect(0, 0),
+        overRect: rect(0, 0),
+      }),
+    ).toBeNull()
   })
 })

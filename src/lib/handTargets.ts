@@ -32,8 +32,19 @@ import type { BuskPadKind } from '@/api/buskApi'
  * answer here shows or hides a ring; it cannot put a record somewhere the desk would refuse.
  */
 
-/** The four kinds of place a held record can be dropped on. */
-export type HandTargetKind = 'bank' | 'slot' | 'layer-stack' | 'cue-stack'
+/**
+ * The five kinds of place a held record can be dropped on.
+ *
+ * **`rig-row` takes nothing the hand can hold today.** A rig row is made of groups, fixtures and
+ * cells (busk-further plan session 3), and the hand's wire — `hand.pickUp {kind, id}` with
+ * `HeldRecord.kind` a `BuskPadKind`, `HandState.kt` requiring one of the three summaries — holds
+ * only a template, a Look or a cue. So the row's `HandPlaceStrip` is mounted, wired to the rig PUT
+ * and `hand.drop`, and never lights; the day the desk can hold a group, this table and
+ * `RigBand`'s `rigRecordOf` are the two places to teach, and nothing else moves. Recorded as a
+ * session 3 amendment in the plan rather than worked around here, because a client-side pick-up
+ * of a group would be a second hand.
+ */
+export type HandTargetKind = 'bank' | 'slot' | 'layer-stack' | 'cue-stack' | 'rig-row'
 
 /**
  * What a target needs to know about the held record — deliberately **not** the whole
@@ -61,6 +72,9 @@ export function canHandLand(candidate: HandCandidate, target: HandTargetKind): b
     case 'layer-stack':
     case 'cue-stack':
       return candidate.kind === 'LOOK' || candidate.kind === 'TEMPLATE'
+    case 'rig-row':
+      // No held kind is a rig target; see the type's note.
+      return false
   }
 }
 
@@ -80,6 +94,7 @@ export function handRefusalReason(
     if (candidate.kind === 'TEMPLATE') return 'A slot has no selection, and a template needs one'
     return 'This Look has a deferred effect, so it needs a selection — a slot has none to give'
   }
+  if (target === 'rig-row') return 'A rig row takes a group, a fixture or a cell, and the hand cannot hold one yet'
   return 'A layer applies a Look or a template, never a cue'
 }
 
@@ -97,6 +112,7 @@ const ALL_HAND_TARGETS: Record<HandTargetKind, true> = {
   slot: true,
   'layer-stack': true,
   'cue-stack': true,
+  'rig-row': true,
 }
 
 export const HAND_TARGET_KINDS: readonly HandTargetKind[] = Object.keys(

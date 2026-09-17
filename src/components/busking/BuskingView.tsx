@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useDispatch, useSelector } from 'react-redux'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useActiveCueIds } from '@/store/cues'
@@ -20,6 +19,7 @@ import {
   useBuskShowingPageQuery,
   setShowingBuskPage,
   useAddBuskPadMutation,
+  useBuskRigQuery,
 } from '@/store/busk'
 import { handPickUp, heldName, useHandPlace } from '@/store/hand'
 import {
@@ -33,12 +33,12 @@ import {
 } from '@/lib/buskPageFollow'
 import { toast } from 'sonner'
 import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
+import { recordsOnRig } from '@/lib/buskRig'
 import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
-import { TargetList } from './TargetList'
-import { TargetBand } from './TargetBand'
+import { RigBand } from './RigBand'
 import { BuskSpeedRail } from './BuskSpeedRail'
 import { BuskEditProvider } from './BuskEditProvider'
 import { BuskPageBody } from './BuskPage'
@@ -47,11 +47,16 @@ import { BuskFirstOpen } from './BuskFirstOpen'
 import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
 import type { PadBehaviour } from './padBehaviour'
-import { type BuskingTarget, type EffectPresence } from './buskingTypes'
+import { type EffectPresence } from './buskingTypes'
 
 /**
- * The busk view's body: the target band, the page the operator built, and the speed rail — or, in
- * edit mode, the library palette in the rail's place.
+ * The busk view's body: the rig band, the page the operator built, and the speed rail — or, in
+ * edit mode, the palette in the rail's place, with a Library tab for the page and a Rig tab for
+ * the band.
+ *
+ * **There is no narrow-width target sheet any more** (busk-further plan D15): below `md` the band
+ * itself is one row with a row chip, and Rig focus — the whole rig stacked — arrives in session 4.
+ * `isDesktop` stays, as the one query that says which board this is.
  *
  * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
  * live view.
@@ -75,7 +80,6 @@ import { type BuskingTarget, type EffectPresence } from './buskingTypes'
  */
 export function BuskingView({ projectId }: { projectId: number }) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
-  const [targetSheetOpen, setTargetSheetOpen] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -84,13 +88,13 @@ export function BuskingView({ projectId }: { projectId: number }) {
     selectedTargets,
     selectedLayerTargets,
     families,
-    selectTarget,
     toggleTarget,
     clearSelection,
     programmerApplied,
   } = useBuskingState()
 
   const { data: pages, isLoading } = useBuskPagesQuery(projectId)
+  const { data: rig } = useBuskRigQuery(projectId)
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const activeCueIds = useActiveCueIds(projectId)
@@ -326,6 +330,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
     () => (activePage != null ? recordsOnPage(activePage) : new Set<string>()),
     [activePage],
   )
+  const onRigKeys = useMemo(() => (rig != null ? recordsOnRig(rig) : new Set<string>()), [rig])
 
   const startFromLibrary = useCallback(async () => {
     const page = await createPage({ projectId, name: 'Page 1' }).unwrap().catch(ignoreReportedError)
@@ -347,22 +352,18 @@ export function BuskingView({ projectId }: { projectId: number }) {
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* Dimmed while editing, because pads do not press then and the selection they would
-              press onto is therefore not doing anything. */}
-          <div
-            className={
-              editing ? 'opacity-55 transition-opacity [&_button]:pointer-events-none' : undefined
-            }
-            aria-disabled={editing || undefined}
-          >
-            <TargetBand
-              selectedTargets={selectedTargets}
-              families={families}
-              onToggle={toggleTarget}
-              onClear={clearSelection}
-              onOpenPicker={() => setTargetSheetOpen(true)}
-            />
-          </div>
+          {/* Not dimmed while editing any more: the band is being *edited* then — its tiles are
+              drag handles and take drops — and a dim over a drop target reads as "not here". Pads
+              do not press in edit mode and tiles do not select; both say so by their cursors. */}
+          <RigBand
+            projectId={projectId}
+            selectedTargets={selectedTargets}
+            families={families}
+            onToggle={toggleTarget}
+            onClear={clearSelection}
+            editing={editing}
+            compact={!isDesktop}
+          />
 
           <BuskPageStrip
             pages={pages ?? []}
@@ -405,29 +406,11 @@ export function BuskingView({ projectId }: { projectId: number }) {
         </div>
 
         {editing ? (
-          <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} />
+          <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} onRigKeys={onRigKeys} />
         ) : (
           <BuskSpeedRail />
         )}
       </div>
-
-      {!isDesktop && (
-        <Sheet open={targetSheetOpen} onOpenChange={setTargetSheetOpen}>
-          <SheetContent side="left" className="flex w-full flex-col p-0 sm:max-w-sm">
-            <SheetHeader className="px-4">
-              <SheetTitle>Pick a target</SheetTitle>
-            </SheetHeader>
-            <TargetList
-              selectedTargets={selectedTargets}
-              onSelect={(target: BuskingTarget) => {
-                selectTarget(target)
-                setTargetSheetOpen(false)
-              }}
-              onToggle={toggleTarget}
-            />
-          </SheetContent>
-        </Sheet>
-      )}
     </div>
   )
 }
