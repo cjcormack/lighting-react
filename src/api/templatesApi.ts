@@ -162,7 +162,15 @@ export interface TemplateSummary {
    * column actually is.
    */
   lastPressedAt?: string | null
-  rows: TemplateRow[]
+  /**
+   * **Optional, and that is the wire's doing too.** `encodeDefaults = false` drops a defaulted empty
+   * collection from the frame entirely rather than sending `[]` — an *effect* template holds no rows
+   * by construction, so it arrives with no `rows` field at all. Declaring this required hid two real
+   * crashes from `strict` (`LayerPicker`'s unguarded `.length`, `TemplateEditor`'s unguarded `for…of`)
+   * behind the same lie `lastPressedAt`'s doc comment above already warns against; `rows == null` is
+   * "no rows", the same answer `templateRowsSwatch` gives it.
+   */
+  rows?: TemplateRow[]
   effect: TemplateEffect | null
   /**
    * How many **stored cue layers** apply this template. Gates delete.

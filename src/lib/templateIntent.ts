@@ -228,11 +228,15 @@ export function templateIntentSwatch(raw: string): string | null {
  * The tooltip and title text beside [templateRowsSwatch]'s dot. Naming only the first row was
  * accurate while a colour template held exactly one; it now hides the very rows an operator added a
  * template for.
+ *
+ * `rows` is optional for the same reason [templateRowsSwatch]'s is: an effect template's rows are
+ * empty by construction, and `encodeDefaults = false` drops that empty collection off the wire
+ * instead of sending `[]`. Absent reads as empty, same as there.
  */
 export function describeTemplateRows(
-  rows: readonly { propertyName: string; value: string }[],
+  rows: readonly { propertyName: string; value: string }[] | undefined,
 ): string {
-  return rows
+  return (rows ?? [])
     .map((row) => {
       const property = templatePropertyFor(row.propertyName)
       const described = describeTemplateIntent(row.value)
@@ -270,8 +274,19 @@ export const EMITTER_TINTS: Record<string, string> = {
  * first emitter it names — which is the whole of what it asserts, not a stand-in for it.
  */
 export function templateRowsSwatch(
-  rows: readonly { propertyName: string; value: string }[],
+  rows: readonly { propertyName: string; value: string }[] | undefined,
 ): string | null {
+  // **Absent is empty, and absent is a real wire shape.** `TemplateSummary.rows` is declared
+  // required, but the desk's WebSocket `Json` sets `encodeDefaults = false`, so an **effect**
+  // template — whose rows are empty by construction — arrives over a WS frame with no `rows` field
+  // at all. `hand.state` is the frame that embeds one, and `HandChip` draws it through
+  // `padFaceOf` on every route, so reading `rows.find` off `undefined` took the whole app down
+  // behind the router's error boundary for as long as the desk held an effect template.
+  // The honest end of that fix is `@EncodeDefault(ALWAYS)` on the backend field, the way
+  // `ProgrammerLayerStateOutMessage.applied` already does it; this guard is what makes the client
+  // degrade instead of crash, and it is right on its own terms — no rows and no colour row are the
+  // same question to a swatch.
+  if (rows == null) return null
   const colourRow = rows.find((row) => templatePropertyFor(row.propertyName)?.intent === 'colour')
   if (colourRow != null) return templateIntentSwatch(colourRow.value)
   // Compared against the row's own spelling rather than through `templatePropertyFor`: an emitter

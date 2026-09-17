@@ -150,13 +150,14 @@ function TemplateValuePreview({ template }: { template: TemplateSummary }) {
     )
   }
 
-  const first = template.rows[0]
+  const rows = template.rows ?? []
+  const first = rows[0]
   if (first == null) return null
   // The template's swatch and the template's description — not the first row's. A colour template
   // holding a hex and an explicit amber shows the hex whichever of the two was authored first, and
   // says both in its title rather than hiding the row it was made for.
-  const swatch = templateRowsSwatch(template.rows)
-  const described = describeTemplateRows(template.rows)
+  const swatch = templateRowsSwatch(rows)
+  const described = describeTemplateRows(rows)
 
   return (
     <div className="flex items-center gap-1.5 shrink-0">
@@ -171,9 +172,9 @@ function TemplateValuePreview({ template }: { template: TemplateSummary }) {
           {describeTemplateIntent(first.value)}
         </span>
       )}
-      {template.rows.length > 1 && (
+      {rows.length > 1 && (
         <span className="text-[10px] text-muted-foreground" title={described}>
-          +{template.rows.length - 1}
+          +{rows.length - 1}
         </span>
       )}
     </div>
@@ -263,6 +264,6 @@ export function describeShape(
         return 'Generic · any fixture'
     }
   }
-  const heads = new Set(template.rows.map((r) => r.targetKey)).size
+  const heads = new Set((template.rows ?? []).map((r) => r.targetKey)).size
   return `Per fixture · ${heads} head${heads === 1 ? '' : 's'}`
 }

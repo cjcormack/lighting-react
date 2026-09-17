@@ -487,9 +487,9 @@ function TemplateGroup({
                   ? (template.effect?.effectType ?? 'Effect')
                   : template.isGeneric
                     ? 'Generic'
-                    : `Per fixture · ${template.rows.length}`}
+                    : `Per fixture · ${template.rows?.length ?? 0}`}
               </span>
-              {template.rows.length > 0 && (
+              {(template.rows?.length ?? 0) > 0 && (
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                   {/* The whole row set, not `rows[0]`: a colour template may hold a hex plus
                       explicit white / amber / uv rows, and row order is authoring order — so

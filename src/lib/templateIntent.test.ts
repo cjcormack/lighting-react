@@ -197,6 +197,16 @@ describe('templateIntent', () => {
   })
 
   describe('templateRowsSwatch', () => {
+    it('reads an absent rows field as no rows, because the wire really sends one', () => {
+      // `TemplateSummary.rows` is declared required, but the desk's WebSocket `Json` has
+      // `encodeDefaults = false`, so an **effect** template — rows empty by construction — arrives
+      // over `hand.state` with no `rows` field at all. `HandChip` draws the held record through
+      // `padFaceOf` on every route, so this threw and took the whole app down behind the router's
+      // error boundary for as long as the desk held one.
+      expect(templateRowsSwatch(undefined)).toBeNull()
+      expect(templateRowsSwatch([])).toBeNull()
+    })
+
     it('reads the colour row, not the first row', () => {
       // Row order is authoring order. Reading `rows[0]` drew a template holding a hex and a UV row
       // as purple whenever the UV row happened to sort first.

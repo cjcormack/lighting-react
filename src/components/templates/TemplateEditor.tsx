@@ -1060,7 +1060,7 @@ function PerFixtureValues({ template }: { template: TemplateSummary | null }) {
 function seedValues(template: TemplateSummary | null): Record<string, TemplateIntent> {
   if (template == null || !template.isGeneric) return {}
   const out: Record<string, TemplateIntent> = {}
-  for (const row of template.rows) {
+  for (const row of template.rows ?? []) {
     const intent = parseTemplateIntent(row.value)
     if (intent != null) out[row.propertyName] = intent
   }

@@ -65,7 +65,8 @@ export function describeTemplate(template: TemplateSummary): string {
     return [template.effect.effectType, speed].filter(Boolean).join(' · ')
   }
   if (!template.isGeneric) {
-    return `${template.rows.length} ${template.rows.length === 1 ? 'head' : 'heads'}`
+    const count = template.rows?.length ?? 0
+    return `${count} ${count === 1 ? 'head' : 'heads'}`
   }
   return template.family != null ? FAMILY_LABELS[template.family].singular : 'value'
 }

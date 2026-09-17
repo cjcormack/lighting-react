@@ -408,7 +408,7 @@ function TemplateChip({
         <span className="size-3 rounded-sm border border-border/60" style={{ background: swatch }} />
       ) : (
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-          {template.rows[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}
+          {template.rows?.[0] != null ? describeTemplateIntent(template.rows[0].value) : ''}
         </span>
       )}
       <span className="truncate max-w-32">{template.name}</span>

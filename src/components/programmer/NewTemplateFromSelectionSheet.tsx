@@ -95,7 +95,7 @@ export function NewTemplateFromSelectionSheet({
       // than when they apply it somewhere else.
       const shape = result.isGeneric
         ? 'one value for any head'
-        : `per fixture, ${result.template.rows.length} heads`
+        : `per fixture, ${result.template.rows?.length ?? 0} heads`
       await placeAfterCreate(
         buskTarget,
         { kind: 'TEMPLATE', id: result.template.id, name: result.template.name },
