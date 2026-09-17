@@ -660,6 +660,30 @@ assumed:
 - **The drop reads a ref.** `targetRef` is written in the same handler as the state, so a drop that
   lands before the re-render following the last hover cannot read the target before that one.
 
+**A seventh, found on the desk later and from the other direction: the operator's pointer moves the
+slot, and the slot does not move the slot.** Opening a slot physically displaces the pads after it,
+so with a *stationary* pointer the pad underneath it changes — which re-answers "what are you over",
+which moves the slot, which displaces the pads back. Dragging a pad near the boundary between two
+banks in one column, the slot flipped between them every two or three frames while the pointer moved
+**one pixel**; and because the re-measure below runs on every target change, React counted the
+nested updates and threw *Maximum update depth exceeded* rather than merely flickering.
+
+`TARGET_HYSTERESIS_PX` (6px, against the pointer sensor's own 8px activation) is the fix:
+`resolveDropTarget` returns `current` unchanged until the pointer has travelled that far from
+wherever it was when the slot was placed. It is checked **before** the `overId == null` arm, because
+the displacement can just as easily carry the pointer off every droppable and close the slot — the
+same loop with an extra frame in it. The distance comes from dnd-kit's own `delta`, never
+reconstructed from `activatorEvent` plus coordinates, which is the reconstruction `edgeDrag.ts`
+refuses for going wrong under browser zoom.
+
+**The `sameBank` stickiness could not catch it, and widening it would be the wrong fix.** That rule
+holds `current` only while the pointer is in the body of the *same* bank, and this oscillation is
+precisely *between* banks — which is the case it is written to allow ("entering another bank's body
+still appends"). Bank scope is the wrong axis; pointer movement is the right one, because it is the
+one input the slot cannot change. `BuskEditProvider`'s `measureDroppableContainers([])` now also
+runs on an **animation frame** rather than inline, so anything that ever oscillates again is a
+flicker and not an error boundary — one measure per frame is all a 60Hz drag can use.
+
 **`newBank` requires a name.** The server refuses a blank one (`BUSK_LAYOUT_INVALID`), and a
 default of `''` was how `+ Bank` and `+ Row` shipped never having succeeded once — the optimistic
 patch drew the bank, the PUT 400'd, the queue rolled back and toasted "A bank at row 1, column 5 has
@@ -825,6 +849,31 @@ across every route must not mount one per hold. The cost is `FU-DTO-RECORD-SUMMA
 the embedded `usage` and `buskPageCount` were computed at pick-up, so a long hold can read "on 3
 pages" after a fourth was added. Intended — a pad's face is frozen between reads too — but **do not
 build anything that presents those two fields as live**.
+
+**Drawing the held record from its own DTO makes `HandChip` the widest blast radius on the desk, and
+an empty list is what found it.** Both of lighting7's converters set `encodeDefaults = false`, so a
+defaulted **empty** collection is not serialised as `[]` — it vanishes from the frame, and a client
+that declares the field required reads `undefined`. An *effect* template holds no rows, so
+`TemplateDto.rows` did exactly that, and `templateRowsSwatch` threw on `rows.find`. Because this
+chip is mounted in `Layout.tsx` and draws through `padFaceOf`, **every route** sat behind the error
+boundary for as long as the desk held one.
+
+The fix is in three layers, and the middle one is what stops it recurring. `@EncodeDefault(ALWAYS)`
+on the backend field — `rows` and `requiredEmitters` both carry it now, as
+`ProgrammerLayerStateOutMessage.applied` already did — is the durable half. But **`TemplateSummary.rows`
+is declared `rows?:` on this side**, and that is not belt-and-braces about the annotation: a desk
+mid-upgrade serves handler bodies without new response fields, which `lastPressedAt`'s own comment
+already records, so the client must not crash on a server that predates the fix. Declaring it
+required was what hid the other unguarded reads from `strict` — `LayerPicker`'s `.length`,
+`TemplateEditor`'s `for…of` in `seedValues` (whose `isGeneric` guard lets an effect template through,
+since every effect template is generic), and four more. Making the type honest is what found them;
+each now reads `?? []`, and `templateRowsSwatch` takes an absent list as an empty one.
+
+The rule to carry forward: **a defaulted list or zero on a DTO needs `@EncodeDefault(ALWAYS)` on the
+server *and* an optional type on the client**, because those answer different questions — what this
+desk sends, and what any desk might. A lone `?? []` at one call site (which `TemplateStrip` had
+grown for `requiredEmitters`) is the same bug caught one layer later, at one of the places it
+reaches.
 
 **Escape is the last rung, and the question is asked in the capture phase.** `HandChip` drops only
 when nothing else claims the key: a cell editor open anywhere (`cellEditorIsOpen()`), any
