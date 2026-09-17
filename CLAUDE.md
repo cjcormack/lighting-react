@@ -778,7 +778,8 @@ any window and *placed* on any other — the cross-window move, deliberately ins
 drag, because the window that saw the press keeps the pointer for the whole gesture and the
 neighbour never receives a pointer event of its own. Backend contract in `lighting7`'s
 `state/HandState.kt` and `plugins/HandSocket.kt` (17140b3), the wire in
-`docs/websocket-engineering.md` §Hand; the plan is `multi-screen-plan.md` §3.5 and D12, and where
+`docs/websocket-engineering.md` §Hand; the plan is
+`lighting7/docs/plans/completed/multi-screen-plan.md` §3.5 and D12, and where
 that plan's sketch and the shipped commit differ, **the commit wins**.
 
 **Three frames, and none of them places.** `hand.state {item?}` is the connect snapshot and the
