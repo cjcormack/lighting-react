@@ -164,6 +164,27 @@ function sameBank(a: BankAddress, b: BankAddress): boolean {
 }
 
 /**
+ * How far the pointer must travel before an open slot may relocate.
+ *
+ * **The operator's pointer moves the slot; the slot does not move the slot.** Opening a slot
+ * physically displaces the pads after it, so with a stationary pointer the pad *underneath* it
+ * changes — and the answer to "what are you over" changes with it, which moves the slot, which
+ * displaces the pads back. Observed on the desk between two banks in one column: the slot flipped
+ * between them every two or three frames while the pointer moved **one pixel**, and because
+ * `BuskEditProvider` forces a re-measure on every target change, React counted the nested updates
+ * and threw *Maximum update depth exceeded* rather than merely flickering.
+ *
+ * The stickiness above this could not catch it: it holds `current` only while the pointer is in the
+ * body of the **same** bank, and this oscillation is precisely *between* banks — "entering another
+ * bank's body still appends" is the rule it is written to allow. Bank scope is the wrong axis;
+ * pointer movement is the right one, because it is the one thing the slot cannot change.
+ *
+ * Six pixels, against the pointer sensor's own 8px activation: large enough to swallow the
+ * displacement (which is zero real movement) and small enough that a deliberate drag never notices.
+ */
+export const TARGET_HYSTERESIS_PX = 6
+
+/**
  * Where a hover would land, or null for no landing place.
  *
  * Pure, and separated from the monitor that calls it for the reason every reducer in this feature
@@ -186,10 +207,35 @@ export function resolveDropTarget(args: {
   activeRect: ClientRect | null
   overRect: ClientRect | null
   current?: DropTarget | null
+  /**
+   * How far the pointer has travelled since [current] was chosen, in client pixels. Omitted (or
+   * `Infinity`) means "no anchor yet", which is the first resolve of a drag.
+   */
+  movedSinceTarget?: number
 }): DropTarget | null {
-  const { page, source, activeId, overId, collisionIds, activeRect, overRect, current = null } = args
-  // A pad is its own droppable as well as a draggable, and hovering yourself is not a gesture.
-  if (overId == null || overId === activeId) return null
+  const {
+    page,
+    source,
+    activeId,
+    overId,
+    collisionIds,
+    activeRect,
+    overRect,
+    current = null,
+    movedSinceTarget = Number.POSITIVE_INFINITY,
+  } = args
+  // **Self-hover stays ahead of the hysteresis.** A pad is its own droppable as well as a draggable,
+  // and hovering yourself is not a gesture — that rule predates the hysteresis and must outrank it,
+  // or easing back over the dragged pad within the threshold would hold the neighbouring gap and
+  // *commit* it on release. A stale commit is worse than a flicker, and this ordering is simply the
+  // behaviour that was here before.
+  if (overId === activeId) return null
+  // The hysteresis, though, sits **ahead of the `overId == null` arm**: that one is displacement, not
+  // the operator. The dashed slot is no droppable, so opening it can leave the pointer over nothing
+  // at all — and closing the slot on that is the same feedback loop with an extra frame in it.
+  // See TARGET_HYSTERESIS_PX.
+  if (current != null && movedSinceTarget < TARGET_HYSTERESIS_PX) return current
+  if (overId == null) return null
 
   const parsed = deepest(source, collisionIds.length > 0 ? collisionIds : [overId])
   if (parsed == null) return null

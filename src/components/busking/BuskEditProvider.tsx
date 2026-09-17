@@ -79,6 +79,19 @@ export function BuskEditProvider({
   const [source, setSource] = useState<BuskDragData | null>(null)
   const [target, setTarget] = useState<DropTarget | null>(null)
   const targetRef = useRef<DropTarget | null>(null)
+  /**
+   * The drag's `delta` at the moment [targetRef] was last written — the anchor the slot's
+   * hysteresis measures from (`TARGET_HYSTERESIS_PX`).
+   *
+   * dnd-kit's `delta` is the pointer's travel since the press, in client pixels, so the distance
+   * between two of them is exactly "how far has the operator moved since the slot was placed".
+   * Read off the event rather than reconstructed from `activatorEvent` + coordinates: that
+   * reconstruction is the one `edgeDrag.ts` refuses for going wrong under browser zoom, and here
+   * there is a first-class value to hand.
+   */
+  const anchorRef = useRef<{ x: number; y: number } | null>(null)
+  /** The one pending re-measure frame, or null. See the effect at the foot of this component. */
+  const measureFrameRef = useRef<number | null>(null)
   const commit = useBuskLayoutCommit(projectId, page?.id ?? null)
   const { measureDroppableContainers } = useDndContext()
 
@@ -86,6 +99,7 @@ export function BuskEditProvider({
     setSource(null)
     setTarget(null)
     targetRef.current = null
+    anchorRef.current = null
   }, [])
 
   const hover = useCallback(
@@ -101,10 +115,18 @@ export function BuskEditProvider({
         activeRect: event.active.rect.current.translated,
         overRect: event.over?.rect ?? null,
         current: targetRef.current,
+        movedSinceTarget:
+          anchorRef.current == null
+            ? Number.POSITIVE_INFINITY
+            : Math.hypot(event.delta.x - anchorRef.current.x, event.delta.y - anchorRef.current.y),
       })
       // A repeat hover must write no state, or the placeholder would re-render at pointer rate.
       if (sameTarget(targetRef.current, next)) return
       targetRef.current = next
+      // The anchor moves only when the slot does, so the threshold is measured from where the
+      // operator was when they last placed it — not from the previous pointer event, which a slow
+      // drag would never exceed.
+      anchorRef.current = { x: event.delta.x, y: event.delta.y }
       setTarget(next)
     },
     [page],
@@ -140,9 +162,37 @@ export function BuskEditProvider({
 
   // After the slot has moved (or the strips have appeared), every rect below it is wrong until
   // measured again. Only while something is lifted: outside a drag there is nothing to measure for.
+  //
+  // **On an animation frame, not inline.** This re-measure re-renders, which can resolve a new
+  // target, which schedules another — and done synchronously from an effect that is itself keyed on
+  // `target`, React counts those as nested updates and throws *Maximum update depth exceeded* at
+  // fifty. `TARGET_HYSTERESIS_PX` is what stops the cycle at its source; deferring to a frame is the
+  // backstop, so that anything which ever oscillates again is a flicker rather than a crash. One
+  // measure per frame is also all a 60Hz drag can use.
   useEffect(() => {
-    if (source != null) measureDroppableContainers([])
+    if (source == null) return
+    // **Coalesce, never cancel-and-reschedule.** Cancelling the pending frame on each `target`
+    // change starves it outright: a fast sweep changes the target on consecutive commits, which a
+    // 120Hz pointer produces faster than one animation frame, so the measure would be cancelled
+    // every time and never run — leaving exactly the stale rects this effect exists to refresh, in
+    // exactly the case (a quick flick across a column) that needs it most. Letting the first frame
+    // stand measures the *latest* target anyway, since the callback reads nothing captured.
+    if (measureFrameRef.current != null) return
+    measureFrameRef.current = requestAnimationFrame(() => {
+      measureFrameRef.current = null
+      measureDroppableContainers([])
+    })
   }, [source, target, measureDroppableContainers])
+
+  // Teardown only — a pending frame that outlives the tree would measure against unmounted nodes.
+  useEffect(
+    () => () => {
+      if (measureFrameRef.current == null) return
+      cancelAnimationFrame(measureFrameRef.current)
+      measureFrameRef.current = null
+    },
+    [],
+  )
 
   const value = useMemo(
     () => ({ editing, source, target, commit }),

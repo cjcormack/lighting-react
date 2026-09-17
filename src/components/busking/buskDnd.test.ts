@@ -11,7 +11,7 @@ import {
   BUSK_NEW_ROW_ID,
 } from '@/lib/buskLayout'
 import type { DragSource, DropTarget } from '@/lib/buskLayout'
-import { insertionSide, resolveDropTarget, sameTarget } from './buskDnd'
+import { insertionSide, resolveDropTarget, sameTarget, TARGET_HYSTERESIS_PX } from './buskDnd'
 
 /**
  * Where a hover lands.
@@ -79,6 +79,92 @@ function hover(
     current: opts.current ?? null,
   })
 }
+
+describe('a stationary pointer cannot move the slot', () => {
+  /**
+   * The desk crash this exists for, reproduced from its own trace.
+   *
+   * Dragging a pad near the boundary between two banks in one column, the dashed slot flipped
+   * between them every two or three frames while the pointer moved **one pixel** — because opening
+   * the slot displaces the pads after it, so the pad *under* a stationary pointer changes, which
+   * re-answers "what are you over", which moves the slot back. `BuskEditProvider` forces a
+   * re-measure on every target change, so React counted the nested updates and threw *Maximum
+   * update depth exceeded* rather than flickering.
+   *
+   * The `sameBank` stickiness below could not catch it: this oscillation is precisely *between*
+   * banks, which that rule is written to allow. The axis that works is pointer movement, because it
+   * is the one input the slot cannot change.
+   */
+  const OTHER_BANK_PAD = buskPadId({ row: 0, column: 0, bank: 0, pad: 0 })
+  const showing: DropTarget = { kind: 'pad', at: { row: 0, column: 0, bank: 0, pad: 1 } }
+
+  it('keeps the slot where it is while the pointer has barely moved', () => {
+    // The geometry has shifted a different pad under the pointer — dnd-kit now reports a different
+    // `over` — but the operator has not moved, so the answer must not change.
+    expect(
+      resolveDropTarget({
+        page,
+        source: 'pad',
+        activeId: 'busk-pad-x',
+        overId: OTHER_BANK_PAD,
+        collisionIds: [OTHER_BANK_PAD],
+        activeRect: rect(60, 100),
+        overRect: rect(100, 100),
+        current: showing,
+        movedSinceTarget: 1,
+      }),
+    ).toEqual(showing)
+  })
+
+  it('holds even when the displacement carries the pointer off every droppable', () => {
+    // The slot is not a droppable, so the shift can leave `over` null outright. Closing the slot
+    // there would be the same loop with an extra frame in it.
+    expect(
+      resolveDropTarget({
+        page,
+        source: 'pad',
+        activeId: 'busk-pad-x',
+        overId: null,
+        collisionIds: [],
+        activeRect: rect(60, 100),
+        overRect: null,
+        current: showing,
+        movedSinceTarget: 0,
+      }),
+    ).toEqual(showing)
+  })
+
+  it('lets go once the operator has genuinely moved', () => {
+    const moved = resolveDropTarget({
+      page,
+      source: 'pad',
+      activeId: 'busk-pad-x',
+      overId: OTHER_BANK_PAD,
+      collisionIds: [OTHER_BANK_PAD],
+      activeRect: rect(60, 100),
+      overRect: rect(100, 100),
+      current: showing,
+      movedSinceTarget: TARGET_HYSTERESIS_PX,
+    })
+    expect(moved).not.toEqual(showing)
+  })
+
+  it('never holds on the first resolve of a drag, which has no anchor', () => {
+    expect(
+      resolveDropTarget({
+        page,
+        source: 'pad',
+        activeId: 'busk-pad-x',
+        overId: OTHER_BANK_PAD,
+        collisionIds: [OTHER_BANK_PAD],
+        activeRect: rect(60, 100),
+        overRect: rect(100, 100),
+        current: null,
+        movedSinceTarget: 0,
+      }),
+    ).not.toBeNull()
+  })
+})
 
 describe('resolving a hover', () => {
   it('lands before the pad when the pointer is on its leading half', () => {
