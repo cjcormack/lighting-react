@@ -1,4 +1,6 @@
 import { InternalApiConnection } from "./internalApi"
+import type { SubselectMode } from "./selectionApi"
+import type { BuskFocus } from "../lib/buskWindow"
 import { Subscription } from "./subscription"
 import { createWsSubscribable } from "./wsSubscriptionFactory"
 import { sendGesture } from "./wsGesture"
@@ -275,6 +277,48 @@ export interface BuskPageSetTarget {
 }
 
 /**
+ * Set a desk window's busk **focus** — `split`, `pads` or `rig` — on press (busk-further plan D14).
+ *
+ * The window is named by its **registry name** (`windows.state`), since a binding cannot hold a
+ * socket-minted row id: the desk sends one `windows.viewOptions {focus}` to **every** connected row
+ * of that name (duplicate names are allowed, multi-screen plan D9), carrying the view that row
+ * announced, so a window not on the busk view ignores it. A name matching no connected window is a
+ * logged no-op with health `missingWindow`, re-evaluated as windows come and go. No LED: focus is
+ * that window's own tab fact, not a desk state.
+ */
+export interface BuskFocusSetTarget {
+  type: "buskFocusSet"
+  windowName: string
+  focus: BuskFocus
+}
+
+/** Fold or unfold a named desk window's busk side sheet on press — `{sheet: toggle}`, addressed and judged as [BuskFocusSetTarget]. */
+export interface BuskSheetToggleTarget {
+  type: "buskSheetToggle"
+  windowName: string
+}
+
+/** Step the whole desk selection one place along rig order, wrapping — `SubselectMode.NEXT`. */
+export interface SelectionNextTarget {
+  type: "selectionNext"
+}
+
+/** Step the whole desk selection one place back along rig order, wrapping — `SubselectMode.PREV`. */
+export interface SelectionPrevTarget {
+  type: "selectionPrev"
+}
+
+/**
+ * Rewrite the desk selection's targets by [mode] on press — the Cells chip on a button, through the
+ * same `DeskSelection.subselect` the chip's frame reaches. A sub-selection is not a state the desk
+ * keeps, so there is no LED (`FU-SURFACE-SUBSELECT-LED`).
+ */
+export interface SelectionCellsTarget {
+  type: "selectionCells"
+  mode: SubselectMode
+}
+
+/**
  * A persisted payload whose `type` this build does not know — produced only by the backend's
  * tolerant per-row decode and re-encoded verbatim, so an older desk reading a newer project keeps
  * the row instead of failing the load. It reads as health `unknownTarget`, draws dead, and is
@@ -314,6 +358,11 @@ export type BindingTarget =
   | BuskPageNextTarget
   | BuskPagePrevTarget
   | BuskPageSetTarget
+  | BuskFocusSetTarget
+  | BuskSheetToggleTarget
+  | SelectionNextTarget
+  | SelectionPrevTarget
+  | SelectionCellsTarget
   | UnknownTarget
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
@@ -352,6 +401,11 @@ export type BindingHealth =
   // control surface, and they share only the word.
   | { type: "missingBank"; bankUuid: string }
   | { type: "missingPage"; pageUuid: string }
+  // A `buskFocusSet` / `buskSheetToggle` binding names a desk window by its registry name and no
+  // connected window has it. Unlike every other arm it is **transient**: it clears the moment a
+  // window of that name announces, which is why the desk re-evaluates health on every registry
+  // change (busk-further plan D14).
+  | { type: "missingWindow"; windowName: string }
   // Not "missing": the Look is still there, but it has gained a deferred effect, so it has no own
   // targets and a button has no selection to give it. A different state because it has a different
   // fix — bind the effect's targets, rather than rebind the button.

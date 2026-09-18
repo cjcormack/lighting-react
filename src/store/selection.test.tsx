@@ -19,6 +19,7 @@ import { restApi } from './restApi'
 import {
   clearDeskSelection,
   setDeskSelection,
+  subselectDeskSelection,
   toggleDeskSelection,
   useDeskSelection,
   useDeskSelectionSnapshot,
@@ -205,5 +206,11 @@ describe('the writes', () => {
     expect(toggle).toHaveBeenCalledWith({ type: 'fixture', key: 'par-1' })
     clearDeskSelection()
     expect(clear).toHaveBeenCalledWith()
+  })
+
+  it('sends a subselect as the bare mode — the desk keeps the mask and answers with the state frame', () => {
+    const subselect = vi.spyOn(lightingApi.selection, 'subselect')
+    subselectDeskSelection('NEXT')
+    expect(subselect).toHaveBeenCalledWith('NEXT')
   })
 })

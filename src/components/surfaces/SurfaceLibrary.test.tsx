@@ -86,6 +86,14 @@ vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
 vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))
 vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: pages }) }))
+// The registry: two rows share a name — the duplicated-tab case D9 accepts — and get one row here.
+vi.mock('@/store/windows', () => ({
+  useDeskWindows: () => [
+    { id: 'w1', windowId: 'a', name: 'Screen 1', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
+    { id: 'w2', windowId: 'b', name: 'Screen 2', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
+    { id: 'w3', windowId: 'b', name: 'Screen 2', view: '/show', fullscreen: false, follows: true, user: null, viewOptions: null },
+  ],
+}))
 vi.mock('@/hooks/useTargetProperties', () => ({
   useTargetProperties: () => ({ properties: targetProperties, isLoading: false }),
   useRigProperties: () => rigProperties,
@@ -155,6 +163,21 @@ describe('SurfaceLibrary', () => {
     expect(chips).toContain('Amber')
     // An unsaved pad has no uuid to bind to, so it is not offered rather than offered with `""`.
     expect(chips).not.toContain('Unsaved')
+  })
+
+  it('gives each window one row under Desk — a duplicated name once — with its focus and sheet chips (D14)', () => {
+    draw()
+    expect(chipsOf('window:Screen 1')).toEqual(['Focus · Split', 'Focus · Pads', 'Focus · Rig', 'Sheet'])
+    expect(chipsOf('window:Screen 2')).toEqual(['Focus · Split', 'Focus · Pads', 'Focus · Rig', 'Sheet'])
+    expect(screen.getAllByTestId(/^library-row:window:/)).toHaveLength(2)
+    // A window row files under Desk, so the kind row stays at six.
+    expect(screen.getAllByRole('button', { name: /^(All|Desk|Groups|Fixtures|Looks|Cues)$/ })).toHaveLength(6)
+  })
+
+  it('puts the sub-selection’s five on the Desk row once — they rewrite the one desk selection', () => {
+    draw()
+    expect(chipsOf('desk')).toEqual(expect.arrayContaining(['Next', 'Prev', 'Odd', 'Even', 'Masters']))
+    expect(chipsOf('window:Screen 1')).not.toContain('Next')
   })
 
   it('puts the page-step chips on the Desk row, not on each page', () => {

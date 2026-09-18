@@ -127,9 +127,10 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'selectionProperty':
     case 'speedMasterBpm':
       return 'continuous'
-    // Every button target, records and busk pages included: each of those is a press, and a fader
-    // has no press. (One run of labels with no comment inside it — `no-fallthrough` reads a comment
-    // between two `case`s as the end of the run.)
+    // Every button target, records and busk pages included, and the busk-further plan's five (D14:
+    // two window commands and three sub-selection rewrites, BUTTON in `midi/BindingControlKind.kt`):
+    // each of those is a press, and a fader has no press. (One run of labels with no comment inside
+    // it — `no-fallthrough` reads a comment between two `case`s as the end of the run.)
     case 'flash':
     case 'cueStackGo':
     case 'cueStackBack':
@@ -152,6 +153,11 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'buskPageNext':
     case 'buskPagePrev':
     case 'buskPageSet':
+    case 'buskFocusSet':
+    case 'buskSheetToggle':
+    case 'selectionNext':
+    case 'selectionPrev':
+    case 'selectionCells':
       return 'button'
     case 'strip':
     case 'unknown':

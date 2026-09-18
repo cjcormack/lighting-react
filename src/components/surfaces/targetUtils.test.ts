@@ -46,6 +46,17 @@ describe('describeTarget', () => {
   })
 })
 
+describe('describeTarget — the busk-further plan’s five (D14)', () => {
+  it('names the window by its registry name and the focus, and the sub-selection in the chip’s words', () => {
+    expect(describeTarget({ type: 'buskFocusSet', windowName: 'Screen 2', focus: 'pads' })).toBe('Busk focus · Pads · Screen 2')
+    expect(describeTarget({ type: 'buskSheetToggle', windowName: 'Screen 2' })).toBe('Busk sheet · Screen 2')
+    expect(describeTarget({ type: 'selectionNext' })).toBe('Selection · next')
+    expect(describeTarget({ type: 'selectionPrev' })).toBe('Selection · prev')
+    expect(describeTarget({ type: 'selectionCells', mode: 'MASTERS' })).toBe('Cells · Masters only')
+    expect(describeTarget({ type: 'selectionCells', mode: 'FIRST_HALF' })).toBe('Cells · 1st half')
+  })
+})
+
 describe('describeTarget — the selection-relative arms', () => {
   it('names the selection rather than a target', () => {
     expect(describeTarget({ type: 'selectionProperty', propertyName: 'pan' })).toBe('Sel · pan')

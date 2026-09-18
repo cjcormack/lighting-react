@@ -923,7 +923,8 @@ disabled item in the row wrapped at 288px and read as a control that was merely 
 spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
 convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
 hard stop. *Over: Cells* is enabled only where a
-selected fixture has elements, with the cell count (`selectedCellCount`). **Live** sends every
+selected fixture has elements, with the cell count (`selectedCells` in `lib/cellsSubSelection.ts`, the
+Cells chip's own expansion). **Live** sends every
 adjustment through `useLivePush` with an equality over the whole request, the release read from the
 window as the Colour tab's is; off, only *Apply* writes, and an explicit Apply always sends. The
 window release flushes only while Live is on, since the switch can be toggled from the keyboard
@@ -1017,11 +1018,50 @@ carries its `elementKey` and is `WHOLE`. `expandTile` is the one place a stored 
 drawn and pressed, and **a cell is `{type: 'fixture', key: element.key}`**, the shape
 `rowLocateTarget` publishes — element keys come from `patch.elements[].key` and are never parsed.
 `useBuskingSelection` rehydrates a cell target by looking the key up in its parent's own
-`elements`, so a fixture tile reads `some` with a `1 of 4` count when a cell is selected elsewhere.
-The pips are **read-only until session 7**: a tap on the tile is the whole fixture, a run tile
-toggles each of its cells, and the *Cells* chip is drawn **inert** — present so the label row has
-its shape, disabled with the session that lands it on its `title`. *Spread…* beside it is live: it
-opens the side sheet's Spread tab (§Focus and the side sheet).
+`elements`, so a fixture tile reads `some` with a `1 of 4` count when a cell is selected anywhere,
+and `all` when every cell is — with the badge still `4 of 4`, because a cells-all tile and a
+parent-selected tile are two different selections (the desk's `TargetCoverage` covers a cell by its
+parent and never a parent by its cells) and the press differs: **from `all` a tile goes dark** — the
+parent toggled off, or every cell toggled off when only the cells were selected — and from anything
+else it is the whole fixture, the run tile's rule. A run tile toggles each of its cells, and
+*Spread…* opens the side sheet's Spread tab (§Focus and the side sheet).
+
+**A pip is a press of its own, and a cell is not a new target kind** (busk-further plan D11,
+session 7). A `PIPS` tile's cells are checkbox-role buttons in a row **beside** the tile's button —
+a button cannot hold buttons — and a tap toggles `{type: 'fixture', key: element.key}` through the
+one `toggleTarget`, the shape `rowLocateTarget` publishes; a drag across them is a **run**, each pip
+crossed toggled once, with the marquee's arm rule: a mouse runs from `pointerdown` under pointer
+capture, a `touch` or `pen` runs only after a 500ms hold (a finger pans; a held one runs, and a
+non-passive `touchmove` guard stops the pan for as long as the run lasts), the pip under a held
+finger grows to 44px, and the click a run's release generates is swallowed so it is not a second
+toggle. **A pip reads checked while its parent is selected**, and the band folds the parent's cells
+into `selectedCells` for exactly that: the desk narrows the parent on such a press, and a dark pip
+whose press deselects is the reading `presenceOf`'s comment already refuses for a cell tile.
+**The desk owns the parent↔cell coverage rule** (`fx/TargetCoverage.kt`): a layer on the
+whole bar covers a press on its cells, a layer on four cells does not cover the bar, and
+`lookPresence.ts` keeps reading the desk's resolved `applied` extents with no browser copy of that
+rule — `lookPresence.test.ts`'s cells block pins that a cell selection lights from what `applied`
+names and from nothing here.
+
+**The Cells chip is one desk op, and an unlinked window mirrors it** (D12). Five modes on its face
+— All · Odd · Even · Next · Prev — and four in its menu — 1st half · 2nd half · Invert · Masters only
+— each a press of `selection.subselect {mode}` (`api/selectionApi.ts`'s `subselect`,
+`store/selection.ts`'s `subselectDeskSelection`; `SubselectMode` is the backend's nine names, pinned
+against the server's fixture) while the window follows the desk, which rewrites the selection's
+**targets** over rig order, keeps the mask, and answers with the ordinary `selection.state` frame.
+The desk keeps **no** sub-selection state, so nothing on the chip's face is derived from the
+selection: *Cells: Odd* is only the mode last pressed here. Unlinked, `useBuskingSelection`'s
+`subselect` runs `lib/cellsSubSelection.ts` over the tab's copy — and **only once the rig has
+answered** (`RigBand`'s own `rigLoaded` guard), because `effectiveRig(undefined, …)` is the show-all
+fallback and a press before the query lands would walk the wrong order with no frame to correct it — the nine modes over
+`effectiveRig`'s rows, the fixtures' `elements` and the groups' members derived from each fixture's
+`groups` in fixture-list order (`GroupSummary` carries no member list; a session 7 amendment to
+D12's "member lists it already fetches") — pure, no React, and **pinned against the server's own
+fixture**: `src/lib/__fixtures__/subselect.fixture.json` is a copy of lighting7's
+`src/test/resources/busk/subselect.fixture.json`, `rigOrder.fixture.json`'s arrangement, and
+`cellsSubSelection.test.ts` runs every case. The Spread tab's *Over: Cells* counts through the same
+module (`selectedCells`), so the chip and the tab cannot count cells two ways. Below `md` the nine
+modes sit under a *Cells* heading in the band's verbs menu.
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
 leaf per fixture tile — the third reader of `components/fixtures/fixtureAppearance.tsx` beside the
@@ -1398,6 +1438,11 @@ amber, UV) are offered as faders of their own, expanded off the colour descripto
 null-is-hue rule; nothing on this side resolves an axis. The library is sectioned by kind with
 **Desk first**, and a row's chips are grouped by family with a hairline — see the two sections at
 the end of `docs/midi-surface-engineering.md`.
+
+**Five more since session 7 of the busk-further plan (D14)**: `buskFocusSet` and `buskSheetToggle`
+address a desk window by its **registry name**, `selectionNext` / `selectionPrev` / `selectionCells`
+reach `DeskSelection.subselect` — see `docs/midi-surface-engineering.md` §"Windows and the
+sub-selection".
 
 A button can also press a **record**: `applyLook` onto the Look's *own* fixtures, `pressTemplate`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page

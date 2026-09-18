@@ -165,6 +165,34 @@ All are buttons. Five things about them on this side:
   record field **unset**, not on the first row: an empty uuid is refused by name, where a silent
   first-row default would save and bind the button to something nobody picked.
 
+## Windows and the sub-selection
+
+Session 7 of the busk-further plan mirrored the five BUTTON targets its session 2 added to
+`BindingTarget` (D14): `buskFocusSet {windowName, focus}`, `buskSheetToggle {windowName}`,
+`selectionNext`, `selectionPrev`, `selectionCells {mode}`. `lib/surfaceDrop.ts` answers `button` for
+all five, `describeTarget` names them (*Busk focus · Pads · Screen 2*, *Cells · Odd*),
+`BindingHealth` gains `missingWindow` and `describeHealth` its line, and the picker offers them. Four
+things about them on this side:
+
+- **A window is addressed by its registry name, never a row id.** `windows.state`'s `id` is
+  socket-minted and changes on every reconnect; a binding has to survive one, so it carries the
+  `name` the window announced. The desk sends the command to **every** connected row of that name
+  (a duplicated name is D9's accepted case), carrying the view each row announced, so a window off
+  the busk view ignores it. The picker's *Window* field lists the names signed in now, plus the
+  binding's own name when no such window is connected, so a screen that is off tonight still reads
+  as what it is rather than as a blank.
+- **`missingWindow` is transient**, unlike every other health arm: it clears the moment a window of
+  that name announces, and the desk re-evaluates on every registry change rather than only on the
+  fixture hooks. Nothing here polls for it.
+- **The library splits them as it split the page targets.** *Focus · Split / Pads / Rig* and
+  *Sheet* are a row **per window** under *Desk* (`window:<name>`, from `useDeskWindows`, one per
+  name), because a chip per window reads as window-specific, which it is; *Next · Prev · Odd · Even ·
+  Masters* sit on the Desk row **once**, because they rewrite the one desk selection. The kind row
+  stays at six.
+- **`selectionCells` has no LED** (`FU-SURFACE-SUBSELECT-LED`): a sub-selection is not a state the
+  desk keeps. The mode's label is `SUBSELECT_MODE_LABELS` in `lib/cellsSubSelection.ts`, shared with
+  the busk band's Cells chip, so a button and the chip name one rule the same way.
+
 ## The showing busk page
 
 `busk.pageState` / `busk.setPage` (`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry)

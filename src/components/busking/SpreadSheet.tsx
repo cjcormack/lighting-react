@@ -18,6 +18,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
+import { selectedCells } from '@/lib/cellsSubSelection'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import {
   SPREAD_CURVES,
@@ -193,30 +194,6 @@ export function spreadRequestOf(
   }
 }
 
-/**
- * How many cells the selection reaches: every element of every selected or member fixture, plus
- * each cell selected on its own whose parent is not — a cell is one head already, and Over: Cells
- * has nothing further to split it into. Whole fixtures first, so the order of the selection
- * cannot count a cell twice.
- */
-export function selectedCellCount(selected: readonly BuskingTarget[], fixtures: readonly Fixture[] | undefined): number {
-  const whole = new Map<string, Fixture>()
-  for (const target of selected) {
-    if (target.type === 'group') {
-      for (const fixture of fixtures ?? []) if (fixture.groups.includes(target.name)) whole.set(fixture.key, fixture)
-    } else if (target.element == null) {
-      whole.set(target.fixture.key, target.fixture)
-    }
-  }
-  let cells = 0
-  for (const fixture of whole.values()) cells += fixture.elements?.length ?? 0
-  const loose = new Set<string>()
-  for (const target of selected) {
-    if (target.type === 'fixture' && target.element != null && !whole.has(target.fixture.key)) loose.add(target.element.key)
-  }
-  return cells + loose.size
-}
-
 /** One bar of the preview strip: a head, its cells folded in. */
 export interface PreviewBar {
   key: string
@@ -291,8 +268,15 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   )
   const writeTargets = useMemo(() => writeTargetsOf(selected, fixtures), [selected, fixtures])
   const available = useMemo(() => targetFamilies(writeTargets), [writeTargets])
-  const cellCount = useMemo(() => selectedCellCount(selected, fixtures), [selected, fixtures])
   const layerTargets = useMemo(() => selected.map(lookLayerTarget), [selected])
+  // *Over: Cells* counts what the Cells chip counts — one expansion, `lib/cellsSubSelection.ts`,
+  // pinned against the desk's own fixture — so the two cannot answer "how many cells" differently.
+  // No rows and no group list: the count needs the parent↔cell lookup and a group's members, both
+  // of which the fixture list carries.
+  const cellCount = useMemo(
+    () => selectedCells(layerTargets, { rows: [], groups: [], fixtures: fixtures ?? [] }).length,
+    [layerTargets, fixtures],
+  )
   const colourTemplates = useMemo(() => (templates ?? []).filter(isSpreadColourTemplate), [templates])
 
   const [form, setForm] = useState<SpreadForm>(() => initialForm(initialFamily(available, families)))

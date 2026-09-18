@@ -27,6 +27,11 @@ import {
 } from "./recordOptions"
 import type { BindingTarget, TakeoverPolicy } from "@/store/surfaces"
 import type { CueTarget } from "@/api/cuesApi"
+import { SUBSELECT_MODES, type SubselectMode } from "@/api/selectionApi"
+import { useDeskWindows } from "@/store/windows"
+import { BUSK_FOCUSES, type BuskFocus } from "@/lib/buskWindow"
+import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
+import { FOCUS_LABELS } from "./targetUtils"
 
 /**
  * The form behind *Change target* and MIDI Learn's commit.
@@ -100,6 +105,11 @@ const BUTTON_KINDS: TargetKind[] = [
   "buskPageSet",
   "buskPageNext",
   "buskPagePrev",
+  "buskFocusSet",
+  "buskSheetToggle",
+  "selectionNext",
+  "selectionPrev",
+  "selectionCells",
 ]
 
 const KIND_LABELS: Record<TargetKind, string> = {
@@ -129,6 +139,11 @@ const KIND_LABELS: Record<TargetKind, string> = {
   buskPageSet: "Busk page — show",
   buskPageNext: "Busk page — next",
   buskPagePrev: "Busk page — previous",
+  buskFocusSet: "Busk window — focus",
+  buskSheetToggle: "Busk window — sheet",
+  selectionNext: "Selection — next",
+  selectionPrev: "Selection — previous",
+  selectionCells: "Selection — cells",
 }
 
 export function BindingTargetPicker({
@@ -756,6 +771,69 @@ function TargetBody({
       </p>
     )
   }
+  if (kind === "buskFocusSet" && value.type === "buskFocusSet") {
+    return (
+      <div className="space-y-2">
+        <WindowField value={value.windowName} onChange={(windowName) => onChange({ ...value, windowName })} />
+        <div className="space-y-1.5">
+          <Label className="text-xs">Focus</Label>
+          <Select value={value.focus} onValueChange={(v) => onChange({ ...value, focus: v as BuskFocus })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {BUSK_FOCUSES.map((focus) => (
+                <SelectItem key={focus} value={focus}>{FOCUS_LABELS[focus]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Sets that window&rsquo;s busk focus — every window of the name, and only while it is on
+          the busk view. A name no signed-in window has reads as <em>missing window</em> until one
+          announces.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "buskSheetToggle" && value.type === "buskSheetToggle") {
+    return (
+      <div className="space-y-2">
+        <WindowField value={value.windowName} onChange={(windowName) => onChange({ ...value, windowName })} />
+        <p className="text-xs text-muted-foreground">
+          Folds or unfolds that window&rsquo;s busk side sheet, onto the tab it had open. Addressed
+          and judged exactly as a focus button.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "selectionNext" || kind === "selectionPrev") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Steps the whole desk selection one place along rig order, wrapping — one cell when only cells
+        are selected. The Cells chip&rsquo;s {kind === "selectionNext" ? "Next" : "Prev"} on a button.
+      </p>
+    )
+  }
+  if (kind === "selectionCells" && value.type === "selectionCells") {
+    return (
+      <div className="space-y-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Mode</Label>
+          <Select value={value.mode} onValueChange={(v) => onChange({ ...value, mode: v as SubselectMode })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {SUBSELECT_MODES.map((mode) => (
+                <SelectItem key={mode} value={mode}>{SUBSELECT_MODE_LABELS[mode]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Rewrites the desk selection&rsquo;s targets over rig order — the Cells chip on a button.
+          Not a state the desk keeps, so there is no LED.
+        </p>
+      </div>
+    )
+  }
 
   if (kind === "speedMasterTap" && value.type === "speedMasterTap") {
     return (
@@ -895,5 +973,42 @@ function defaultForKind(
       return { type: "buskPageNext" }
     case "buskPagePrev":
       return { type: "buskPagePrev" }
+    // The window-addressed pair start with **no** window, the record variants' rule: an empty name
+    // would save as a binding to nothing, where the first connected window would bind the button to
+    // whichever screen happened to be signed in.
+    case "buskFocusSet":
+      return { type: "buskFocusSet", windowName: "", focus: "split" }
+    case "buskSheetToggle":
+      return { type: "buskSheetToggle", windowName: "" }
+    case "selectionNext":
+      return { type: "selectionNext" }
+    case "selectionPrev":
+      return { type: "selectionPrev" }
+    case "selectionCells":
+      return { type: "selectionCells", mode: "ALL" }
   }
+}
+
+/**
+ * A desk window by its registry **name** — the names signed in now, plus the binding's own if no
+ * window of that name is connected, so a binding to a screen that is off tonight still shows what
+ * it names rather than a blank.
+ */
+function WindowField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+  const windows = useDeskWindows()
+  const names = [...new Set(windows.map((w) => w.name))]
+  if (value !== "" && !names.includes(value)) names.push(value)
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Window</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent>
+          {names.map((name) => (
+            <SelectItem key={name} value={name}>{name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
 }

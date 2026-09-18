@@ -41,6 +41,12 @@ describe('createSelectionWsApi', () => {
     ])
   })
 
+  it('sends a subselect as the mode name and nothing else — the desk keeps the mask and stamps the mover', () => {
+    const { conn, sent } = fakeWsConnection()
+    createSelectionWsApi(conn).subselect('ODD')
+    expect(sent).toEqual([{ type: 'selection.subselect', mode: 'ODD' }])
+  })
+
   it('never puts a source on the wire — the desk stamps it', () => {
     const { conn, sent } = fakeWsConnection()
     createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], null)

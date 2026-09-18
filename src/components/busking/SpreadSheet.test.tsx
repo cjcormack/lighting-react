@@ -70,7 +70,9 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures, fixtureTypes: [], fixtureByKey: new Map(fixtures.map((f) => [f.key, f])), typeByKey: new Map() }),
 }))
 
-import { SpreadSheet, previewBarsOf, selectedCellCount } from './SpreadSheet'
+import { SpreadSheet, previewBarsOf } from './SpreadSheet'
+import { selectedCells } from '@/lib/cellsSubSelection'
+import { lookLayerTarget } from './buskingTypes'
 
 const group: BuskingTarget = {
   type: 'group',
@@ -437,10 +439,14 @@ describe('Over', () => {
     const cells = radio('Over', /^Cells/)
     expect(cells).toBeEnabled()
     expect(cells).toHaveTextContent('Cells2')
-    expect(selectedCellCount([group, barTarget], fixtures)).toBe(2)
+    // The count is the Cells chip's own expansion (`lib/cellsSubSelection.ts`), so Over: Cells and
+    // the chip count cells one way; this is the same three answers the tab's own counter gave.
+    const count = (...targets: BuskingTarget[]) =>
+      selectedCells(targets.map(lookLayerTarget), { rows: [], groups: [], fixtures }).length
+    expect(count(group, barTarget)).toBe(2)
     // A cell already selected on its own is one head; the parent selected too counts its cells once.
-    expect(selectedCellCount([cell], fixtures)).toBe(1)
-    expect(selectedCellCount([cell, barTarget], fixtures)).toBe(2)
+    expect(count(cell)).toBe(1)
+    expect(count(cell, barTarget)).toBe(2)
   })
 })
 

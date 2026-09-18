@@ -1,8 +1,12 @@
 import { useCallback, useMemo } from 'react'
 import type { CueTarget } from '@/api/cuesApi'
+import type { SubselectMode } from '@/api/selectionApi'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
-import { clearDeskSelection, toggleDeskSelection, useSelectionPair } from '@/store/selection'
+import { useBuskRigQuery } from '@/store/busk'
+import { clearDeskSelection, subselectDeskSelection, toggleDeskSelection, useSelectionPair } from '@/store/selection'
+import { effectiveRig } from '@/lib/buskRig'
+import { subselectTargets } from '@/lib/cellsSubSelection'
 import { getLocalSelection, setLocalSelection, useDeskFollow } from '@/lib/deskFollow'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
 
@@ -34,12 +38,24 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  * A Map keyed by `buskingTargetKey` rather than an array, because every other part of the pad asks
  * "is this one selected" far more often than it iterates, and a group and a fixture can share a
  * name.
+ *
+ * **The sub-selection is the one write with a rule** (busk-further plan D12), and the split is the
+ * same: following, the Cells chip sends `selection.subselect {mode}` and the desk rewrites its
+ * targets over its own rig order; unlinked, `lib/cellsSubSelection.ts` rewrites the tab's copy by
+ * the same rule over the rig document, which is why this hook reads `useBuskRigQuery` at all — the
+ * desk walks the rig for *Next* / *Prev*, so the mirror must too. That module is pinned against the
+ * server's fixture; nothing here derives anything.
  */
-export function useBuskingSelection() {
+export function useBuskingSelection(projectId: number) {
   const following = useDeskFollow()
   const { targets, families } = useSelectionPair()
   const { data: groups } = useGroupListQuery()
   const { data: fixtures } = useFixtureListQuery()
+  const { data: rig, isError: rigFailed } = useBuskRigQuery(projectId)
+  // `RigBand`'s guard, for its reason: `effectiveRig(undefined, …)` is the show-all fallback, and a
+  // built rig walked in fallback order until the query lands is a wrong answer with no desk frame
+  // to correct it. A failed read falls back as the band does.
+  const rigLoaded = rig != null || rigFailed
 
   const selectedTargets = useMemo(() => {
     const out = new Map<string, BuskingTarget>()
@@ -104,5 +120,31 @@ export function useBuskingSelection() {
     [following],
   )
 
-  return { selectedTargets, families, toggleTarget, clearSelection }
+  /**
+   * Rewrite the selection's targets by [mode] — the Cells chip. The mask is untouched on both arms,
+   * and on the local arm a rewrite that changes nothing writes nothing, as the desk's would emit no
+   * frame. The rig is `effectiveRig`'s: an empty one is every group then every fixture, the desk's
+   * own order for an empty rig — and until the rig has answered the local arm does nothing at all
+   * rather than walk the fallback for a rig that may be built.
+   */
+  const subselect = useCallback(
+    (mode: SubselectMode) => {
+      if (following) {
+        subselectDeskSelection(mode)
+        return
+      }
+      if (!rigLoaded) return
+      const local = getLocalSelection()
+      const next = subselectTargets(local.targets, mode, {
+        rows: effectiveRig(rig, groups, fixtures).rows,
+        groups: groups ?? [],
+        fixtures: fixtures ?? [],
+      })
+      if (next === local.targets) return
+      setLocalSelection({ targets: [...next], families: local.families })
+    },
+    [following, rigLoaded, rig, groups, fixtures],
+  )
+
+  return { selectedTargets, families, toggleTarget, clearSelection, subselect }
 }

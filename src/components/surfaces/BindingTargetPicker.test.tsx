@@ -33,6 +33,12 @@ vi.mock('@/store/fixtures', () => ({
   }),
 }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/windows', () => ({
+  useDeskWindows: () => [
+    { id: 'w1', windowId: 'a', name: 'Screen 1', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
+    { id: 'w2', windowId: 'b', name: 'Screen 2', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
+  ],
+}))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
 // The three record libraries, behind `useRecordBindingOptions`.
 vi.mock('@/store/looks', () => ({
@@ -158,6 +164,31 @@ describe('BindingTargetPicker record targets', () => {
     renderPicker(false, value)
     expect(screen.getByText(kindLabel)).toBeInTheDocument()
     expect(screen.getByText(fieldLabel)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Busk window — focus', 'Window', { type: 'buskFocusSet', windowName: 'Screen 2', focus: 'pads' } as BindingTarget],
+    ['Busk window — sheet', 'Window', { type: 'buskSheetToggle', windowName: 'Screen 2' } as BindingTarget],
+    ['Selection — cells', 'Mode', { type: 'selectionCells', mode: 'ODD' } as BindingTarget],
+  ])('offers %s and renders its body (busk-further plan D14)', (kindLabel, fieldLabel, value) => {
+    renderPicker(false, value)
+    expect(screen.getByText(kindLabel)).toBeInTheDocument()
+    expect(screen.getByText(fieldLabel)).toBeInTheDocument()
+  })
+
+  it('names the window and the mode a binding carries, and offers a window that is not signed in by its own name', () => {
+    renderPicker(false, { type: 'buskFocusSet', windowName: 'iPad', focus: 'rig' })
+    expect(screen.getByText('iPad')).toBeInTheDocument()
+    expect(screen.getByText('Rig')).toBeInTheDocument()
+    cleanup()
+    renderPicker(false, { type: 'selectionCells', mode: 'SECOND_HALF' })
+    expect(screen.getByText('2nd half')).toBeInTheDocument()
+  })
+
+  it('renders the selection-step kinds, which have no body to fill in', () => {
+    renderPicker(false, { type: 'selectionNext' })
+    expect(screen.getByText('Selection — next')).toBeInTheDocument()
+    expect(screen.getByText(/one place along rig order/)).toBeInTheDocument()
   })
 
   it('renders the page-step kinds, which have no body to fill in', () => {

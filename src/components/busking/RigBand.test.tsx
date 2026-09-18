@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { DndContext } from '@dnd-kit/core'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { DeskSelectionSnapshot } from '@/api/selectionApi'
@@ -18,8 +18,10 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  * The first test is the migration: an empty rig draws what the target band drew — every group then
  * every fixture, groups badged. The rest are the band's own: a built rig draws its rows; the three
  * cell modes expand; a tile press toggles the whole fixture (and a cell tile its cell) through the
- * one `{type, key}` shape; the rows handle clamps; *Cells* (session 7's) is drawn inert and
- * *Spread…* opens the side sheet's tab; and below `md` the band is one row with a row chip.
+ * one `{type, key}` shape; the rows handle clamps; the Cells chip presses one desk op per mode and
+ * *Spread…* opens the side sheet's tab; and below `md` the band is one row with a row chip. Session 7's
+ * block is the pips: a tap toggles a cell, a mouse drag across them is a run, a finger runs only
+ * after a hold, and a tile with every cell selected reads `all`.
  */
 
 let groups: GroupSummary[] = []
@@ -117,6 +119,7 @@ function draw(
         families={families}
         onToggle={handlers.onToggle ?? (() => {})}
         onClear={handlers.onClear ?? (() => {})}
+        onSubselect={handlers.onSubselect ?? (() => {})}
         editing={handlers.editing ?? false}
         compact={handlers.compact ?? false}
         focus={handlers.focus ?? 'split'}
@@ -243,13 +246,116 @@ describe('the rig band', () => {
     expect(screen.getByText('Bar L · Cell 2 · 1 head')).toBeInTheDocument()
   })
 
-  it('draws the live bar and read-only pips through the stage’s colour dispatch', () => {
+  it('draws the live bar and the pips through the stage’s colour dispatch, the pips beside the tile’s button', () => {
     rigData = builtRig()
     draw()
-    const bar = screen.getByRole('button', { name: 'Bar L' })
-    const pips = bar.querySelector('[data-rig-pips]')!
+    const pips = screen.getByRole('group', { name: 'Bar L cells' })
     expect(pips.children).toHaveLength(4)
     expect((pips.children[2] as HTMLElement).style.background).toBe('rgb(0, 0, 2)')
+    // A button cannot hold buttons: the row is a sibling of the tile's press, over the same box.
+    expect(screen.getByRole('button', { name: 'Bar L' }).contains(pips)).toBe(false)
+  })
+
+  describe('the pips (session 7)', () => {
+    const pip = (n: number) => screen.getByRole('checkbox', { name: `Bar L · Cell ${n}` })
+    const mouse = { button: 0, pointerId: 1, pointerType: 'mouse' }
+
+    it('toggles a cell on a tap, as `{type: \'fixture\', key}` through the one handler — once for a mouse', () => {
+      rigData = builtRig()
+      const onToggle = vi.fn()
+      draw([], { onToggle })
+      fireEvent.pointerDown(pip(2), mouse)
+      fireEvent.pointerUp(pip(2), mouse)
+      fireEvent.click(pip(2))
+      expect(onToggle.mock.calls.map((c) => c[0])).toEqual([{ type: 'fixture', key: 'bar-1.pixel-1' }])
+      // The keyboard's activation is a click with no run before it, and toggles.
+      fireEvent.click(pip(3))
+      expect(onToggle).toHaveBeenLastCalledWith({ type: 'fixture', key: 'bar-1.pixel-2' })
+    })
+
+    it('runs across the pips a mouse crosses, each toggled once', () => {
+      rigData = builtRig()
+      const onToggle = vi.fn()
+      draw([], { onToggle })
+      fireEvent.pointerDown(pip(1), mouse)
+      fireEvent.pointerMove(pip(2), mouse)
+      fireEvent.pointerMove(pip(3), mouse)
+      fireEvent.pointerMove(pip(2), mouse)
+      fireEvent.pointerUp(pip(2), mouse)
+      expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0', 'bar-1.pixel-1', 'bar-1.pixel-2'])
+      // A second pointer's moves are not this run's.
+      fireEvent.pointerDown(pip(4), mouse)
+      fireEvent.pointerMove(pip(1), { ...mouse, pointerId: 2 })
+      expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0', 'bar-1.pixel-1', 'bar-1.pixel-2', 'bar-1.pixel-3'])
+    })
+
+    it('runs for a finger only after a hold — a moving finger is the browser’s pan — and grows the pip under it to 44px', () => {
+      vi.useFakeTimers()
+      try {
+        rigData = builtRig()
+        const onToggle = vi.fn()
+        draw([], { onToggle })
+        const touch = { button: 0, pointerId: 7, pointerType: 'touch', clientX: 10, clientY: 10 }
+        // Moved before the hold: nothing, and the hold is off.
+        fireEvent.pointerDown(pip(1), touch)
+        fireEvent.pointerMove(pip(2), { ...touch, clientX: 40 })
+        act(() => vi.advanceTimersByTime(600))
+        expect(onToggle).not.toHaveBeenCalled()
+        fireEvent.pointerUp(pip(2), touch)
+        // Held still: the run starts on the pip under the finger, and follows it.
+        fireEvent.pointerDown(pip(1), touch)
+        act(() => vi.advanceTimersByTime(500))
+        expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0'])
+        expect(pip(1).className).toContain('h-11')
+        fireEvent.pointerMove(pip(2), { ...touch, clientX: 12 })
+        expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0', 'bar-1.pixel-1'])
+        expect(pip(2).className).toContain('h-11')
+        expect(pip(1).className).not.toContain('h-11')
+        fireEvent.pointerUp(pip(2), touch)
+        expect(pip(2).className).not.toContain('h-11')
+        // The click the release generates is the run's, not a second toggle.
+        fireEvent.click(pip(2))
+        expect(onToggle).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reads a fixture tile `all` when every cell is selected, badged `4 of 4`, and its press releases the cells', () => {
+      rigData = builtRig()
+      const onToggle = vi.fn()
+      draw(barCells.map((cell) => ({ type: 'fixture', key: cell.key, fixture: barFixture, element: cell })), { onToggle })
+      const bar = screen.getByRole('button', { name: 'Bar L' })
+      expect(bar).toHaveAttribute('aria-pressed', 'true')
+      expect(bar.className).toContain('ring-primary/50')
+      // Not `4`: cells-all and parent-selected are different selections with different presses.
+      expect(within(bar).getByText('4 of 4')).toBeInTheDocument()
+      for (let n = 1; n <= 4; n += 1) expect(pip(n)).toBeChecked()
+      // From `all` the tile goes off — cell by cell, since toggling the parent would only add it.
+      fireEvent.click(bar)
+      expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(barCells.map((c) => c.key))
+    })
+
+    it('reads every pip checked while the parent is selected, badged `4`, and the press is the parent', () => {
+      // The desk narrows the parent on a pip press under it, so a pip there must not read dark.
+      rigData = builtRig()
+      const onToggle = vi.fn()
+      draw([{ type: 'fixture', key: 'bar-1', fixture: barFixture }], { onToggle })
+      const bar = screen.getByRole('button', { name: 'Bar L' })
+      expect(within(bar).getByText('4')).toBeInTheDocument()
+      for (let n = 1; n <= 4; n += 1) expect(pip(n)).toBeChecked()
+      fireEvent.click(bar)
+      expect(onToggle).toHaveBeenCalledWith({ type: 'fixture', key: 'bar-1' })
+    })
+
+    it('is inert in Edit layout, where the tile’s whole face is the drag handle', () => {
+      rigData = builtRig()
+      const onToggle = vi.fn()
+      draw([], { onToggle, editing: true })
+      expect(screen.getByRole('group', { name: 'Bar L cells' }).className).toContain('pointer-events-none')
+      fireEvent.pointerDown(pip(1), mouse)
+      expect(onToggle).not.toHaveBeenCalled()
+    })
   })
 
   it('summarises the selection in heads, and clears through the handler', () => {
@@ -267,9 +373,40 @@ describe('the rig band', () => {
     expect(screen.getByText('nothing selected').className).toContain('min-w-[8rem]')
   })
 
-  it('draws Cells inert and the family pill, and Spread… opens the side sheet’s Spread tab', () => {
+  it('presses the Cells chip as one op per mode — five on the face, four in the menu — and labels only the last press', () => {
+    const onSubselect = vi.fn()
+    draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
+    const trigger = screen.getByRole('button', { name: 'More sub-selections' })
+    expect(trigger).toHaveTextContent('Cells: All')
+    for (const [name, mode] of [
+      ['Cells: Odd', 'ODD'],
+      ['Cells: Even', 'EVEN'],
+      ['Cells: Next', 'NEXT'],
+      ['Cells: Prev', 'PREV'],
+      ['Cells: All', 'ALL'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name }))
+      expect(onSubselect).toHaveBeenLastCalledWith(mode)
+      expect(trigger).toHaveTextContent(name)
+    }
+    for (const [item, mode] of [
+      ['1st half', 'FIRST_HALF'],
+      ['2nd half', 'SECOND_HALF'],
+      ['Invert', 'INVERT'],
+      ['Masters only', 'MASTERS'],
+    ] as const) {
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: item }))
+      expect(onSubselect).toHaveBeenLastCalledWith(mode)
+      expect(trigger).toHaveTextContent(`Cells: ${item}`)
+    }
+    expect(onSubselect).toHaveBeenCalledTimes(9)
+    // Nothing on the face is derived from the selection: the desk keeps no sub-selection state.
+    expect(screen.getByRole('button', { name: 'Cells: Odd' })).not.toHaveAttribute('aria-pressed')
+  })
+
+  it('draws the family pill, and Spread… opens the side sheet’s Spread tab', () => {
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], {}, ['COLOUR'])
-    expect(screen.getByRole('button', { name: 'Cells: All' })).toBeDisabled()
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
     expect(getBuskSheet()).not.toBe('spread')
@@ -283,6 +420,18 @@ describe('the rig band', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Spread…' }))
     expect(getBuskSheet()).toBe('spread')
+  })
+
+  it('folds the Cells chip’s nine modes into the compact verbs menu below md', () => {
+    const onSubselect = vi.fn()
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { compact: true, onSubselect })
+    expect(screen.queryByRole('button', { name: 'More sub-selections' })).not.toBeInTheDocument()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'All', 'Odd', 'Even', 'Next', 'Prev', '1st half', '2nd half', 'Invert', 'Masters only', 'Spread…', 'Locate', 'Clear',
+    ])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Invert' }))
+    expect(onSubselect).toHaveBeenCalledWith('INVERT')
   })
 
   it('clamps the rows handle to 1…N, and the handle writes the window’s fact', () => {

@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -31,6 +32,7 @@ import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { targetKey } from '@/lib/targetKey'
 import { cn } from '@/lib/utils'
 import type { CueTarget } from '@/api/cuesApi'
+import type { SubselectMode } from '@/api/selectionApi'
 import type { HeldRecord } from '@/api/handApi'
 import type { BuskRigCellMode, BuskRigRow } from '@/api/buskRigApi'
 import { useGroupListQuery } from '@/store/groups'
@@ -40,6 +42,7 @@ import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
 import { setBuskFocus, setBuskRigRows, setBuskSheet, useBuskRigRows } from '@/lib/buskWindow'
+import { SUBSELECT_FACE_MODES, SUBSELECT_MENU_MODES, SUBSELECT_MODE_LABELS } from '@/lib/cellsSubSelection'
 import {
   applyDrop,
   effectiveRig,
@@ -75,12 +78,21 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * nothing built sees what the target band showed. There is **one render path**: the fallback is a
  * set of rows like any other, only its tiles carry no address and take no drop.
  *
- * **A press is a plain toggle**, as it was. The label row is the design's (`Main.dc.html`): the
- * selection summary, the family pill, the desk chip, then the verbs — *Cells* drawn **inert**
- * until session 7 lands it, *Spread…* (opens the side sheet's Spread tab), Locate, Highlight,
- * Clear — and the `n of N rows`
+ * **A press is a plain toggle**, as it was, and a **pip is a press of its own** (session 7): a
+ * `PIPS` tile's cells toggle `{type: 'fixture', key: element.key}` through the same `onToggle`, and
+ * a drag across them is a run (`RigTile`). The label row is the design's (`Main.dc.html`): the
+ * selection summary, the family pill, the desk chip, then the verbs — the **Cells chip** (below),
+ * *Spread…* (opens the side sheet's Spread tab), Locate, Highlight, Clear — and the `n of N rows`
  * handle under the rows. Below `md` the band is one row with a row chip and the verbs in a menu
- * (the phone board), and there is no editing: the palette is not drawn there either.
+ * (the phone board), where the chip's nine modes sit under a *Cells* heading, and there is no
+ * editing: the palette is not drawn there either.
+ *
+ * **The Cells chip is one desk op** (busk-further plan D12): five modes on its face — All · Odd ·
+ * Even · Next · Prev — and the other four in its menu, each press `onSubselect(mode)`, which is
+ * `selection.subselect` while this window follows the desk and `lib/cellsSubSelection.ts`'s mirror
+ * over the tab's copy when it is unlinked (`useBuskingSelection`). The desk keeps **no**
+ * sub-selection state, so nothing on the face is derived from the selection: the chip's label
+ * (*Cells: Odd*) is only the mode last pressed here, and it resets with the band.
  *
  * **The handle reads and writes the window's `busk.rigRows`** (`lib/buskWindow.ts`), clamped to
  * the rig on read, and **snaps at both ends** (busk-further plan D6): one more than the last row
@@ -104,6 +116,8 @@ export interface RigBandProps {
   families: AttributeFamily[] | null
   onToggle: (target: CueTarget) => void
   onClear: () => void
+  /** The Cells chip's press — one desk op, or the client mirror when unlinked (D12). */
+  onSubselect: (mode: SubselectMode) => void
   editing: boolean
   /** Below `md`: one row with a row chip, 48px tiles, the verbs in a menu. */
   compact: boolean
@@ -130,6 +144,7 @@ function RigBandBody({
   families,
   onToggle,
   onClear,
+  onSubselect,
   editing,
   compact,
   focus,
@@ -168,13 +183,25 @@ function RigBandBody({
   const fewerRows = () => (shown <= 1 ? setBuskFocus('pads') : setBuskRigRows(shown - 1))
   const moreRows = () => (shown >= effective.rows.length ? setBuskFocus('rig') : setBuskRigRows(shown + 1))
 
+  // Every cell the selection **covers**: the cells selected on their own, and every cell of a
+  // selected whole fixture — the desk's `TargetCoverage` reads a cell as covered by its parent, so
+  // a pip under a selected parent must read checked, or its press (which narrows the parent) would
+  // be the dark-pip-that-deselects reading `presenceOf` refuses below for a cell tile.
   const selectedCells = useMemo(() => {
     const cells = new Set<string>()
     for (const target of selectedTargets.values()) {
-      if (target.type === 'fixture' && target.element != null) cells.add(target.key)
+      if (target.type !== 'fixture') continue
+      if (target.element != null) cells.add(target.key)
+      else for (const element of target.fixture.elements ?? []) cells.add(element.key)
     }
     return cells
   }, [selectedTargets])
+
+  /** Is this tile's whole fixture selected as itself — which is what tells `4` from `4 of 4`. */
+  const wholeSelected = useCallback(
+    (tile: RenderTile): boolean => tile.kind === 'fixture' && selectedTargets.has(targetKey(tile.target)),
+    [selectedTargets],
+  )
 
   // The parent↔cell relation runs both ways (D11: a parent covers its cells): a fixture tile reads
   // `some` when one of its cells is selected elsewhere, and a cell or run tile reads `all` while
@@ -190,7 +217,13 @@ function RigBandBody({
         return lit === 0 ? 'none' : lit === tile.targets.length ? 'all' : 'some'
       }
       if (selectedTargets.has(targetKey(tile.target))) return 'all'
-      if (tile.kind === 'fixture' && tile.cells.some((cell) => selectedCells.has(cell.key))) return 'some'
+      if (tile.kind === 'fixture' && tile.cells.length > 0) {
+        const lit = tile.cells.filter((cell) => selectedCells.has(cell.key)).length
+        // Every cell selected reads `all` as the whole fixture does: what a run across all the pips
+        // leaves, and what *Cells: All* would widen to the parent.
+        if (lit === tile.cells.length) return 'all'
+        if (lit > 0) return 'some'
+      }
       return 'none'
     },
     [selectedTargets, selectedCells],
@@ -198,8 +231,18 @@ function RigBandBody({
 
   // A run is one pad: pressed from `all` it goes off, from anything else it goes on — toggling
   // each cell independently would carry a half-lit run to its complement, which is `some` again.
+  // A fixture tile lit only by its cells follows the same rule: from `all` it goes off, cell by
+  // cell, because toggling the parent there would *add* it (the desk never reads a parent as
+  // covered by its cells) and the tile would not visibly move.
   const press = useCallback(
     (tile: RenderTile) => {
+      if (tile.kind === 'fixture' && tile.cells.length > 0 && !selectedTargets.has(targetKey(tile.target))) {
+        const lit = tile.cells.filter((cell) => selectedCells.has(cell.key))
+        if (lit.length === tile.cells.length) {
+          tile.cells.forEach((cell) => onToggle({ type: 'fixture', key: cell.key }))
+          return
+        }
+      }
       if (tile.kind !== 'run') {
         onToggle(tile.target)
         return
@@ -208,7 +251,7 @@ function RigBandBody({
       if (lit.length === tile.targets.length) tile.targets.forEach(onToggle)
       else tile.targets.filter((target) => !selectedTargets.has(targetKey(target))).forEach(onToggle)
     },
-    [onToggle, selectedTargets],
+    [onToggle, selectedTargets, selectedCells],
   )
 
   // ── The label row's verbs ──
@@ -311,19 +354,7 @@ function RigBandBody({
         {/* `showSubject`: the page strip below carries the same pill for the page, and two bare
             *Desk* chips a row apart would be worse than either alone. */}
         {!editing && <DeskChip showSubject />}
-        {/* The Cells chip is session 7's (`selection.subselect`); drawn so the row has its shape,
-            inert so it promises nothing the desk cannot do from this window yet. */}
-        {!editing && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            disabled
-            title="Sub-selection — All · Odd · Even · Next · Prev — arrives with session 7"
-          >
-            Cells: All
-          </Button>
-        )}
+        {!editing && !compact && <CellsChip onSubselect={onSubselect} />}
         {editing ? (
           <Button
             variant="ghost"
@@ -343,6 +374,14 @@ function RigBandBody({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {/* Below `md` the chip's modes sit here: the label row has no room for a second chip. */}
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+              {[...SUBSELECT_FACE_MODES, ...SUBSELECT_MENU_MODES].map((mode) => (
+                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
+                  {SUBSELECT_MODE_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setBuskSheet('spread')} title="Spread a value across the selection">
                 Spread…
               </DropdownMenuItem>
@@ -425,8 +464,10 @@ function RigBandBody({
               compact={compact}
               lookup={lookup}
               presenceOf={presenceOf}
+              wholeSelected={wholeSelected}
               selectedCells={selectedCells}
               onPress={press}
+              onPressCell={onToggle}
               onPlace={placeHeld}
             />
           ))}
@@ -512,6 +553,63 @@ function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   return null
 }
 
+/**
+ * The Cells chip (D12): *Cells: <last>* opening the four menu modes, then the five face modes as
+ * their own presses. `last` is the mode pressed here most recently and nothing more — the desk
+ * keeps no sub-selection, so there is nothing to read one back from.
+ */
+function CellsChip({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
+  const [last, setLast] = useState<SubselectMode>('ALL')
+  const press = (mode: SubselectMode) => {
+    setLast(mode)
+    onSubselect(mode)
+  }
+  return (
+    <div data-cells-chip className="flex h-6 shrink-0 items-center rounded-md border bg-card">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More sub-selections"
+            title="Sub-selection over rig order — 1st half · 2nd half · Invert · Masters only"
+            className="inline-flex h-full items-center gap-1 border-r px-2 text-xs font-medium hover:bg-accent"
+          >
+            Cells: {SUBSELECT_MODE_LABELS[last]}
+            <ChevronDown className="size-3 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {SUBSELECT_MENU_MODES.map((mode) => (
+            <DropdownMenuItem key={mode} onSelect={() => press(mode)}>
+              {SUBSELECT_MODE_LABELS[mode]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {SUBSELECT_FACE_MODES.map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          aria-label={`Cells: ${SUBSELECT_MODE_LABELS[mode]}`}
+          title={CELLS_MODE_TITLES[mode]}
+          onClick={() => press(mode)}
+          className="h-full px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          {SUBSELECT_MODE_LABELS[mode]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const CELLS_MODE_TITLES: Partial<Record<SubselectMode, string>> = {
+  ALL: 'Every selected cell widened to its whole fixture',
+  ODD: 'Every other unit in rig order, from the first — cells where a selected head has them',
+  EVEN: 'Every other unit in rig order, from the second',
+  NEXT: 'The whole selection one step along rig order; one cell when only cells are selected',
+  PREV: 'The whole selection one step back along rig order',
+}
+
 function RowChip({
   rows,
   index,
@@ -554,8 +652,10 @@ function RigRow({
   compact,
   lookup,
   presenceOf,
+  wholeSelected,
   selectedCells,
   onPress,
+  onPressCell,
   onPlace,
 }: {
   row: BuskRigRow
@@ -566,8 +666,10 @@ function RigRow({
   compact: boolean
   lookup: TileLookup
   presenceOf: (tile: RenderTile) => EffectPresence
+  wholeSelected: (tile: RenderTile) => boolean
   selectedCells: ReadonlySet<string>
   onPress: (tile: RenderTile) => void
+  onPressCell: (target: CueTarget) => void
   onPlace: (row: number, rowName: string, held: HeldRecord) => void
 }) {
   const { source, target, foreign, commit } = useRigEdit()
@@ -606,11 +708,13 @@ function RigRow({
           at={inDocument ? at : null}
           stored={inDocument ? stored : null}
           presence={presenceOf(rendered)}
+          wholeSelected={wholeSelected(rendered)}
           selectedCells={selectedCells}
           editing={editing}
           compact={compact}
           lookup={lookup}
           onPress={() => onPress(rendered)}
+          onPressCell={(element) => onPressCell({ type: 'fixture', key: element.key })}
           onRemove={() => commit((rig) => removeTile(rig, at))}
           onSetMode={(mode: BuskRigCellMode, split?: number) =>
             commit((rig) => setTile(rig, at, { cellMode: mode, cellSplit: split ?? null }))

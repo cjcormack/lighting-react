@@ -18,8 +18,8 @@ import { useBuskingSelection } from './useBuskingSelection'
  * pad is talking about; a group answering to its name in one and its key in the other would light a
  * pad that a tap then failed to clear.
  */
-export function useBuskingState() {
-  const { selectedTargets, families, toggleTarget, clearSelection } = useBuskingSelection()
+export function useBuskingState(projectId: number) {
+  const { selectedTargets, families, toggleTarget, clearSelection, subselect } = useBuskingSelection(projectId)
   // The **resolved** stack, not the layer list: the pads ask about coverage and the desk has
   // already answered, so this view never subscribes to the layers themselves.
   const { data: programmerApplied } = useProgrammerAppliedQuery()
@@ -40,6 +40,8 @@ export function useBuskingState() {
     families,
     toggleTarget,
     clearSelection,
+    /** The Cells chip's write: one desk op while following, the mirror over the tab's copy when not. */
+    subselect,
     programmerApplied,
   }
 }

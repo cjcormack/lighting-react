@@ -156,6 +156,18 @@ describe('targetControlKind', () => {
     expect(targetControlKind({ type: 'buskPagePrev' })).toBe('button')
     expect(targetControlKind({ type: 'buskPageSet', pageUuid: 'g' })).toBe('button')
   })
+
+  it('puts the busk-further plan’s five on a button — the mirror of BindingControlKind.kt (D14)', () => {
+    // Two window commands and three sub-selection rewrites, each a press; `refuseWrongKind` would
+    // refuse any of them on a fader, and this is the half that dims the drop before the 400.
+    expect(targetControlKind({ type: 'buskFocusSet', windowName: 'Screen 2', focus: 'pads' })).toBe('button')
+    expect(targetControlKind({ type: 'buskSheetToggle', windowName: 'Screen 2' })).toBe('button')
+    expect(targetControlKind({ type: 'selectionNext' })).toBe('button')
+    expect(targetControlKind({ type: 'selectionPrev' })).toBe('button')
+    expect(targetControlKind({ type: 'selectionCells', mode: 'ODD' })).toBe('button')
+    const fader = { type: 'surface-control', controlId: 'fader-1', kinds: ['continuous'] } as const
+    expect(canLand({ type: 'surface-chip', target: { type: 'selectionCells', mode: 'ODD' }, label: 'Odd', swatch: null }, fader)).toBe(false)
+  })
 })
 
 describe('canLand', () => {

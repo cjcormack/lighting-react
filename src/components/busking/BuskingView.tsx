@@ -151,8 +151,9 @@ export function BuskingView({ projectId }: { projectId: number }) {
     families,
     toggleTarget,
     clearSelection,
+    subselect,
     programmerApplied,
-  } = useBuskingState()
+  } = useBuskingState(projectId)
 
   const { data: pages, isLoading } = useBuskPagesQuery(projectId)
   const { data: rig } = useBuskRigQuery(projectId)
@@ -536,6 +537,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
               families={families}
               onToggle={toggleTarget}
               onClear={clearSelection}
+              onSubselect={subselect}
               editing={editing}
               compact={!docked}
               focus={shape}

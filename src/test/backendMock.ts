@@ -536,6 +536,7 @@ export function lightingApiMock() {
         set: () => {},
         toggle: () => {},
         clear: () => {},
+        subselect: () => {},
       },
       // Spelled out for the `selection` reason above: `store/busk.ts`'s `buskShowingPage` query
       // seeds its cache entry from `getState()`, and the fallback Proxy would hand it back a

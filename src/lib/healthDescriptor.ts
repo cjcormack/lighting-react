@@ -51,6 +51,10 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return "The busk bank this button places into no longer exists"
     case "missingPage":
       return "The busk page this button shows no longer exists"
+    // Transient, unlike every arm above it: a window of that name announcing clears it, and the
+    // desk re-evaluates on every registry change so the row goes green without a rebind.
+    case "missingWindow":
+      return `“${health.windowName}” is not signed in on any screen`
     case "lookNeedsSelection":
       // Not missing — still there, and the fix is different: give the effect its targets, or bind
       // the button to something a press can land on by itself.

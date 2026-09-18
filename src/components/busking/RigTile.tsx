@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { Layers, LayoutGrid, MoreHorizontal, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ import type { FixturePatch } from '@/api/patchApi'
 import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRigApi'
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
 import { FixtureAppearanceSource, type FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
+import { useLongPress } from '@/hooks/useLongPress'
 import { rigTileId, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
 import { LiveAppearanceReporter } from '@/lib/liveAppearance'
 import type { EffectPresence } from './buskingTypes'
@@ -27,9 +28,24 @@ import { useRigEdit } from './RigEditProvider'
  *
  * **A press is a plain toggle**, the target band's rule — the pad-shaped selection vocabulary
  * (`padPresenceClass`'s three rungs) so a lit tile means the same thing a lit pad does. A
- * multi-head fixture's tile draws its cells as **read-only pips** until session 7 makes them
- * tappable; a tap on the tile is the whole fixture, as today, and the tile reads `some` when part
- * of its cells is selected elsewhere (a marquee on the programmer, the other screen).
+ * multi-head fixture's tile draws its cells as **pips**, and a pip is a target of its own
+ * (busk-further plan D11, session 7): a tap toggles `{type: 'fixture', key: element.key}` through
+ * the one `toggleTarget`, a drag across the pips is a **run** — each pip crossed toggled once — and
+ * a tap on the tile is still the whole fixture. The tile reads `some` with its `n of N` when part
+ * of its cells is selected, wherever that selection was made, and `all` when every cell is.
+ *
+ * **The pips are a sibling of the tile's button, not children of it.** A button cannot hold
+ * buttons, and a pip has to be one — a tab stop, a checkbox role, a label naming the cell — so the
+ * live overlay (`TileLive`: the bar and the pips) is mounted beside the button over the same box,
+ * the bar `pointer-events-none` as before and the pip row taking the pointer. The gesture's rules are
+ * the marquee's (`useCellMarquee`): **a mouse runs at once** — the pip under the press toggles on
+ * `pointerdown`, the row takes pointer capture and every pip the pointer crosses toggles once — and
+ * **a touch or pen runs only after a hold** (`useLongPress`, 500ms), because on a touchscreen a
+ * finger pans and a distance-armed run would select cells on every scroll; a tap on a pip is the
+ * browser's own `click`. While a touch run is live the pip under the finger grows to **44px** (the
+ * design's *Cells* board: "18×8 at rest, 44px under a finger"), and a non-passive `touchmove` guard
+ * keeps the browser from panning under it — `touch-action` cannot say "only once held", being read
+ * at touch start. In *Edit layout* the row is inert, so a drag can start from the tile's whole face.
  *
  * **The live bar is the stage's own colour**, through `FixtureAppearanceSource` — the same
  * dispatch the 2D plot, the DOM marker and the mini-stage read (`docs/stage-vis-engineering.md`
@@ -53,13 +69,21 @@ export interface RigTileProps {
   /** The stored tile this render tile came from, for the cell-mode menu. Null on a fallback tile. */
   stored: BuskRigTile | null
   presence: EffectPresence
-  /** Element keys currently selected, for the pips and the `4 of 8` count. */
+  /**
+   * Is the tile's whole fixture selected as itself. `all` alone cannot say: every cell selected
+   * reads `all` too, and the two are different selections with different presses, so the badge keeps
+   * `4 of 4` for the cells and `4` for the parent.
+   */
+  wholeSelected: boolean
+  /** Every cell the selection covers — selected itself, or under a selected parent — for the pips and the `4 of 8` count. */
   selectedCells: ReadonlySet<string>
   editing: boolean
   /** The phone board: 48px tiles. */
   compact: boolean
   lookup: TileLookup
   onPress: () => void
+  /** A pip's toggle: the cell as `{type: 'fixture', key: element.key}`, through the one `toggleTarget`. */
+  onPressCell: (element: BuskRigElement) => void
   onRemove: () => void
   onSetMode: (mode: BuskRigCellMode, split?: number) => void
 }
@@ -88,11 +112,13 @@ export function RigTile({
   at,
   stored,
   presence,
+  wholeSelected,
   selectedCells,
   editing,
   compact,
   lookup,
   onPress,
+  onPressCell,
   onRemove,
   onSetMode,
 }: RigTileProps) {
@@ -133,7 +159,7 @@ export function RigTile({
     isGroup
       ? String(tile.group.memberCount)
       : tile.kind === 'fixture' && tile.cells.length > 0
-        ? selectedInTile > 0 && presence !== 'all'
+        ? selectedInTile > 0 && !wholeSelected
           ? `${selectedInTile} of ${tile.cells.length}`
           : String(tile.cells.length)
         : null
@@ -142,7 +168,8 @@ export function RigTile({
     editing && stored != null && stored.kind === 'FIXTURE' && stored.elementKey == null && (stored.patch?.elements?.length ?? 0) > 1
 
   return (
-    <div ref={setRef} data-rig-tile-id={id} className={cn('relative shrink-0', isDragging && 'opacity-40')}>
+    // `flex`, so the wrapper's box is the button's: the live overlay is positioned against it.
+    <div ref={setRef} data-rig-tile-id={id} className={cn('relative flex shrink-0', isDragging && 'opacity-40')}>
       <button
         type="button"
         {...(editing && inDocument ? attributes : {})}
@@ -167,8 +194,17 @@ export function RigTile({
             {count}
           </span>
         )}
-        {!isGroup && <TileLive tile={tile} cells={cells} selectedCells={selectedCells} lookup={lookup} />}
       </button>
+      {!isGroup && (
+        <TileLive
+          tile={tile}
+          cells={cells}
+          selectedCells={selectedCells}
+          lookup={lookup}
+          inert={editing}
+          onPressCell={onPressCell}
+        />
+      )}
       {editing && inDocument && (
         <button
           type="button"
@@ -269,11 +305,15 @@ function TileLive({
   cells,
   selectedCells,
   lookup,
+  inert,
+  onPressCell,
 }: {
   tile: Exclude<RenderTile, { kind: 'group' }>
   cells: BuskRigElement[]
   selectedCells: ReadonlySet<string>
   lookup: TileLookup
+  inert: boolean
+  onPressCell: (element: BuskRigElement) => void
 }) {
   const patch = lookup.patchByKey.get(tile.patch.key)
   if (patch == null) return null
@@ -296,6 +336,9 @@ function TileLive({
             pips={tile.kind === 'fixture' && tile.pips ? cells : []}
             allCells={allCells}
             selectedCells={selectedCells}
+            tileName={tile.name}
+            inert={inert}
+            onPressCell={onPressCell}
           />
         </>
       )}
@@ -316,6 +359,9 @@ function LiveBar({
   pips,
   allCells,
   selectedCells,
+  tileName,
+  inert,
+  onPressCell,
 }: {
   appearance: FixtureAppearance
   /** Segment indices to draw the bar from, or null for the whole fixture's colour. */
@@ -323,6 +369,9 @@ function LiveBar({
   pips: BuskRigElement[]
   allCells: BuskRigElement[]
   selectedCells: ReadonlySet<string>
+  tileName: string
+  inert: boolean
+  onPressCell: (element: BuskRigElement) => void
 }) {
   return (
     <>
@@ -334,27 +383,216 @@ function LiveBar({
         )}
       </span>
       {pips.length > 0 && (
-        <span
-          aria-hidden
-          data-rig-pips
-          className="pointer-events-none absolute right-3.5 bottom-[5px] left-3.5 flex gap-0.5"
-        >
-          {pips.map((cell) => {
-            const index = allCells.findIndex((candidate) => candidate.key === cell.key)
-            return (
-              <span
-                key={cell.key}
-                className={cn(
-                  'h-1 flex-1 rounded-[1px]',
-                  selectedCells.has(cell.key) && 'ring-1 ring-primary',
-                )}
-                style={sliceStyle(appearance, index)}
-              />
-            )
-          })}
-        </span>
+        <Pips
+          pips={pips}
+          allCells={allCells}
+          appearance={appearance}
+          selectedCells={selectedCells}
+          tileName={tileName}
+          inert={inert}
+          onPressCell={onPressCell}
+        />
       )}
     </>
+  )
+}
+
+/** How long a finger must hold still on a pip before a drag across the row is a run — the marquee's number. */
+const PIP_HOLD_MS = 500
+
+/**
+ * The pips: one checkbox-role button per cell, and the run gesture across them — see the file
+ * note for the rules. The row takes pointer capture for a live run, so every pip the pointer
+ * crosses is found by `elementFromPoint`; a test dispatching a `pointermove` at a pip reaches the
+ * same code through the event's own target.
+ */
+function Pips({
+  pips,
+  allCells,
+  appearance,
+  selectedCells,
+  tileName,
+  inert,
+  onPressCell,
+}: {
+  pips: BuskRigElement[]
+  allCells: BuskRigElement[]
+  appearance: FixtureAppearance
+  selectedCells: ReadonlySet<string>
+  tileName: string
+  inert: boolean
+  onPressCell: (element: BuskRigElement) => void
+}) {
+  const rowRef = useRef<HTMLSpanElement | null>(null)
+  /** The live run: the pointer that owns it and the cells it has already toggled. */
+  const run = useRef<{ pointerId: number; toggled: Set<string> } | null>(null)
+  /** A touch press waiting for its hold, and the pip it landed on. */
+  const pending = useRef<{ pointerId: number; key: string | null } | null>(null)
+  /** Set by a run's release: the click the browser is about to deliver is not a second toggle. */
+  const swallowClick = useRef(false)
+  /** The pip under a live touch run — the one drawn at 44px. */
+  const [hot, setHot] = useState<string | null>(null)
+  const touchGuard = useRef<((e: TouchEvent) => void) | null>(null)
+
+  const pressRef = useRef(onPressCell)
+  pressRef.current = onPressCell
+  const pipsRef = useRef(pips)
+  pipsRef.current = pips
+
+  const releaseTouchGuard = useCallback(() => {
+    if (touchGuard.current) {
+      window.removeEventListener('touchmove', touchGuard.current)
+      touchGuard.current = null
+    }
+  }, [])
+  useEffect(() => releaseTouchGuard, [releaseTouchGuard])
+
+  const toggle = useCallback((key: string | null) => {
+    const live = run.current
+    if (key == null || live == null || live.toggled.has(key)) return
+    const cell = pipsRef.current.find((pip) => pip.key === key)
+    if (cell == null) return
+    live.toggled.add(key)
+    pressRef.current(cell)
+  }, [])
+
+  const start = useCallback(
+    (pointerId: number, key: string | null, held: boolean) => {
+      run.current = { pointerId, toggled: new Set() }
+      // A finger's run is followed off the row and the browser's pan is refused for as long as
+      // it lasts (`useCellMarquee`'s `touchmove` guard, for its reason).
+      if (held) {
+        const guard = (e: TouchEvent) => e.preventDefault()
+        window.addEventListener('touchmove', guard, { passive: false })
+        touchGuard.current = guard
+        setHot(key)
+      }
+      try {
+        rowRef.current?.setPointerCapture(pointerId)
+      } catch {
+        // jsdom has no pointer capture; the browser always does.
+      }
+      toggle(key)
+    },
+    [toggle],
+  )
+
+  const end = useCallback(() => {
+    if (run.current != null) {
+      run.current = null
+      // The click this release generates lands on a pip (or the row, with capture) in the same
+      // task or the next; a click that never comes must not eat the next keyboard activation.
+      swallowClick.current = true
+      setTimeout(() => {
+        swallowClick.current = false
+      }, 350)
+    }
+    pending.current = null
+    setHot(null)
+    releaseTouchGuard()
+  }, [releaseTouchGuard])
+
+  // The touch arm: armed by time, never by distance, so a finger that moves before the hold is the
+  // browser's scroll and `useLongPress` cancels the hold on its travel.
+  const { handlers: hold } = useLongPress({
+    delayMs: PIP_HOLD_MS,
+    onLongPress: () => {
+      const press = pending.current
+      if (press == null || run.current != null) return
+      start(press.pointerId, press.key, true)
+    },
+  })
+
+  const pipAt = (e: React.PointerEvent): string | null => {
+    const direct = (e.target as Element | null)?.closest?.('[data-rig-pip]')
+    const under = direct ?? document.elementFromPoint?.(e.clientX, e.clientY)?.closest('[data-rig-pip]') ?? null
+    return under?.getAttribute('data-rig-pip') ?? null
+  }
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (inert || e.button !== 0 || run.current != null || pending.current != null) return
+    // The tile's own press must not see this: the row overlays the button.
+    e.stopPropagation()
+    const key = pipAt(e)
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      pending.current = { pointerId: e.pointerId, key }
+      hold.onPointerDown(e)
+      return
+    }
+    start(e.pointerId, key, false)
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const live = run.current
+    if (live != null) {
+      if (e.pointerId !== live.pointerId) return
+      const key = pipAt(e)
+      if (touchGuard.current) setHot(key)
+      toggle(key)
+      return
+    }
+    if (pending.current?.pointerId === e.pointerId) hold.onPointerMove(e)
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (run.current != null && e.pointerId !== run.current.pointerId) return
+    if (pending.current != null && pending.current.pointerId !== e.pointerId) return
+    hold.onPointerUp()
+    end()
+  }
+
+  const onPointerCancel = (e: React.PointerEvent) => {
+    if (run.current != null && e.pointerId !== run.current.pointerId) return
+    hold.onPointerCancel()
+    end()
+  }
+
+  return (
+    <span
+      ref={rowRef}
+      data-rig-pips
+      role="group"
+      aria-label={`${tileName} cells`}
+      className={cn(
+        'absolute right-3.5 bottom-[5px] left-3.5 flex items-end gap-0.5',
+        inert ? 'pointer-events-none' : 'touch-manipulation',
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onClickCapture={(e) => {
+        if (!swallowClick.current) return
+        swallowClick.current = false
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
+      {pips.map((cell) => {
+        const index = allCells.findIndex((candidate) => candidate.key === cell.key)
+        const selected = selectedCells.has(cell.key)
+        return (
+          <button
+            key={cell.key}
+            type="button"
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={`${tileName} · ${cell.name}`}
+            data-rig-pip={cell.key}
+            tabIndex={inert ? -1 : 0}
+            // The keyboard's toggle — a mouse or a finger has already gone through the run, and
+            // the click that follows a run is swallowed above.
+            onClick={() => onPressCell(cell)}
+            className={cn(
+              'min-w-0 flex-1 rounded-[1px] transition-[height] duration-100',
+              hot === cell.key ? 'z-10 h-11 ring-2 ring-primary' : 'h-1',
+              selected && hot !== cell.key && 'ring-1 ring-primary',
+            )}
+            style={sliceStyle(appearance, index)}
+          />
+        )
+      })}
+    </span>
   )
 }
 

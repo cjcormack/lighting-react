@@ -24,6 +24,10 @@ import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useLookListQuery } from "@/store/looks"
 import { useTemplateListQuery } from "@/store/templates"
 import { useBuskPagesQuery } from "@/store/busk"
+import { useDeskWindows } from "@/store/windows"
+import { BUSK_FOCUSES } from "@/lib/buskWindow"
+import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
+import { FOCUS_LABELS } from "./targetUtils"
 import { allBanks, allPads } from "@/lib/buskLayout"
 import { padFaceOf, templateSwatch } from "@/components/busking/padFace"
 import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
@@ -66,6 +70,13 @@ import type { CueTarget } from "@/api/cuesApi"
  * them on its single *Busk · Verse* row and so cannot distinguish "on this page's row" from "on
  * every page's row"; a project with ten pages would repeat two identical chips ten times, and a
  * chip repeated per page reads as page-*specific*, which is the one thing those two are not.
+ *
+ * **The busk-further plan's five (D14) split the same way.** *Focus · Split / Pads / Rig* and
+ * *Sheet* are per **window** — a row per registry name under *Desk*, from `useDeskWindows`, because
+ * a binding names a window by that name and a chip per window reads as window-specific, which it
+ * is; a duplicated name (two screens announcing *Screen 2*) is one row, since the desk sends the
+ * command to every row of the name. *Next · Prev · Odd · Even · Masters* sit on the Desk row
+ * **once**: they rewrite the one desk selection and name no window. The kind row stays at six.
  */
 
 /** The `Strip` drag handle's label, lowercased — searchable, but not a chip. */
@@ -455,6 +466,7 @@ export function SurfaceLibrary({
   const { data: looks } = useLookListQuery({ projectId })
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: pages } = useBuskPagesQuery(projectId)
+  const windows = useDeskWindows()
   const rigProperties = useRigProperties()
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<KindFilter>("all")
@@ -609,6 +621,29 @@ export function SurfaceLibrary({
       })
     }
 
+    // One row per registry **name**: the desk addresses every window of a name, so two rows for
+    // one name would be two chips for one press.
+    for (const name of [...new Set(windows.map((w) => w.name))]) {
+      out.push({
+        key: `window:${name}`,
+        name: `Window · ${name}`,
+        detail: "busk focus and sheet",
+        badge: "Desk",
+        kind: "desk",
+        strip: null,
+        chips: [
+          ...BUSK_FOCUSES.map((focus) =>
+            actionChip(`focus:${focus}`, `Focus · ${FOCUS_LABELS[focus]}`, {
+              type: "buskFocusSet",
+              windowName: name,
+              focus,
+            }),
+          ),
+          actionChip("sheet", "Sheet", { type: "buskSheetToggle", windowName: name }),
+        ],
+      })
+    }
+
     out.push({
       key: "desk",
       name: "Desk",
@@ -642,11 +677,18 @@ export function SurfaceLibrary({
         // The hand's own release. On the Desk row for the two page chips' reason: it names no
         // record and belongs to no page.
         actionChip("hand-drop", "Let go", { type: "handDrop" }),
+        // The sub-selection (busk-further plan D12, D14): the Cells chip's steps and its three
+        // most-pressed modes, once, because they rewrite the one desk selection.
+        actionChip("sel-next", SUBSELECT_MODE_LABELS.NEXT, { type: "selectionNext" }),
+        actionChip("sel-prev", SUBSELECT_MODE_LABELS.PREV, { type: "selectionPrev" }),
+        actionChip("sel-odd", SUBSELECT_MODE_LABELS.ODD, { type: "selectionCells", mode: "ODD" }),
+        actionChip("sel-even", SUBSELECT_MODE_LABELS.EVEN, { type: "selectionCells", mode: "EVEN" }),
+        actionChip("sel-masters", "Masters", { type: "selectionCells", mode: "MASTERS" }),
       ],
     })
 
     return out
-  }, [rigProperties, stacks, banks, deviceTypeKey, looks, templates, pages])
+  }, [rigProperties, stacks, banks, deviceTypeKey, looks, templates, pages, windows])
 
   const needle = search.trim().toLowerCase()
   const showKind = (rowKind: KindFilter) => kind === "all" || kind === rowKind

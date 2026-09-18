@@ -49,6 +49,27 @@ export interface SelectionSource {
   name: string
 }
 
+/**
+ * The ways `selection.subselect` rewrites the selection's **targets** (busk-further plan D12) — the
+ * Cells chip's face and menu, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
+ * button, sharing one rule on the desk. The nine names mirror `SubselectMode` in
+ * lighting7's `state/DeskSelection.kt`, and `cellsSubSelection.test.ts` pins the list against the
+ * server's own fixture: a tenth mode there fails here. The frame carries the name and nothing else —
+ * the mask is kept, and the desk stamps `source` from the announce as for every other write.
+ */
+export const SUBSELECT_MODES = [
+  'ALL',
+  'ODD',
+  'EVEN',
+  'FIRST_HALF',
+  'SECOND_HALF',
+  'INVERT',
+  'NEXT',
+  'PREV',
+  'MASTERS',
+] as const
+export type SubselectMode = (typeof SUBSELECT_MODES)[number]
+
 export interface DeskSelectionSnapshot {
   /** The desk selection, in the order targets were added. */
   targets: CueTarget[]
@@ -73,6 +94,12 @@ export interface SelectionWsApi {
   toggle(target: CueTarget): void
   /** Nothing selected, no mask, no mover. */
   clear(): void
+  /**
+   * Rewrite the targets by [mode] over the desk's rig order. The mask is kept; the answer is the
+   * ordinary `selection.state` frame, so the following arm needs nothing but this send. An unlinked
+   * window does not send this — it mirrors the rule client-side (`lib/cellsSubSelection.ts`).
+   */
+  subselect(mode: SubselectMode): void
 }
 
 interface SelectionStateMessage {
@@ -157,5 +184,6 @@ export function createSelectionWsApi(conn: InternalApiConnection): SelectionWsAp
       }),
     toggle: (target) => sendGesture(conn, { type: 'selection.toggle', target }),
     clear: () => sendGesture(conn, { type: 'selection.clear' }),
+    subselect: (mode) => sendGesture(conn, { type: 'selection.subselect', mode }),
   }
 }

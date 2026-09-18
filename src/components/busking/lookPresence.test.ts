@@ -80,6 +80,30 @@ describe('lookLayerPresence', () => {
 const templateApplied = (targets: AppliedTarget[]) =>
   applied(targets, { source: { kind: 'TEMPLATE', id: 4, uuid: 'ut4', name: 'Amber Breathe' } })
 
+describe('cells (busk-further plan D11)', () => {
+  // A cell is `{type: 'fixture', key: <elementKey>}` and the desk's `TargetCoverage` owns the
+  // parent↔cell rule: a layer on the whole bar covers a press on its cells, a layer on four cells
+  // does not cover the bar. Nothing here computes that — the ring reads the extents the desk
+  // resolved, so a cell selection is lit by what `applied` names and by nothing else.
+  const bar = { type: 'fixture', key: 'bar-1' } as const
+  const cells = [0, 1, 2].map((i) => ({ type: 'fixture', key: `bar-1.pixel-${i}` }) as const)
+
+  it('lights a cell selection only from the desk’s resolved extents, never from its parent here', () => {
+    // The desk names the parent and not the cells: this side does not widen it to them.
+    const parentOnly = [{ source: { kind: 'LOOK', id: 5, name: 'Wash' }, targets: [{ ...bar, state: 'all' }] }]
+    expect(lookLayerPresence(parentOnly as never, cells, 5)).toBe('none')
+    // The desk resolved the cells (`appliedState`'s extents fold the parent onto them): lit.
+    const resolved = [{ source: { kind: 'LOOK', id: 5, name: 'Wash' }, targets: cells.map((c) => ({ ...c, state: 'all' })) }]
+    expect(lookLayerPresence(resolved as never, cells, 5)).toBe('all')
+    expect(lookLayerPresence(resolved as never, [cells[0]!, { type: 'fixture', key: 'bar-1.pixel-9' }], 5)).toBe('some')
+  })
+
+  it('does not read a parent as covered by its cells — that direction is the desk’s to refuse too', () => {
+    const cellsOnly = [{ source: { kind: 'TEMPLATE', id: 2, name: 'Amber' }, targets: cells.map((c) => ({ ...c, state: 'all' })) }]
+    expect(templateLayerPresence(cellsOnly as never, [bar], 2)).toBe('none')
+  })
+})
+
 describe('templateLayerPresence', () => {
   it('lights the ring from the applied state, whatever the template holds', () => {
     // The rule that matters since a template can hold an **effect**: presence is read from the

@@ -25,13 +25,15 @@ let deskFamilies: AttributeFamily[] | null = null
 const setSelection = vi.fn()
 const toggleSelection = vi.fn()
 const clearSelection = vi.fn()
+const subselectSelection = vi.fn()
 
 const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] }
-const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par' }
+const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: [] }
 const bar = {
   key: 'bar-1',
   name: 'Bar L',
   typeKey: 'bar',
+  groups: [],
   elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })),
 }
 
@@ -47,10 +49,15 @@ vi.mock('@/store/selection', async () => {
     setDeskSelection: (t: CueTarget[], f?: AttributeFamily[] | null) => setSelection(t, f ?? null),
     toggleDeskSelection: (t: CueTarget) => toggleSelection(t),
     clearDeskSelection: () => clearSelection(),
+    subselectDeskSelection: (mode: string) => subselectSelection(mode),
   }
 })
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [movers] }) }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [par, bar] }) }))
+// An empty rig: the mirror walks `effectiveRig`'s fallback, every group then every fixture. `rigQuery`
+// is swapped to an in-flight read by the guard test.
+let rigQuery: { data: { rows: [] } | undefined; isError: boolean } = { data: { rows: [] }, isError: false }
+vi.mock('@/store/busk', () => ({ useBuskRigQuery: () => rigQuery }))
 
 import { useBuskingSelection } from './useBuskingSelection'
 
@@ -60,6 +67,8 @@ beforeEach(() => {
   setSelection.mockClear()
   toggleSelection.mockClear()
   clearSelection.mockClear()
+  subselectSelection.mockClear()
+  rigQuery = { data: { rows: [] }, isError: false }
 })
 
 afterEach(() => {
@@ -75,7 +84,7 @@ describe('useBuskingSelection', () => {
       { type: 'group', key: 'Movers' },
       { type: 'fixture', key: 'par-1' },
     ]
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     expect([...result.current.selectedTargets.keys()]).toEqual(['group:Movers', 'fixture:par-1'])
     const group = result.current.selectedTargets.get('group:Movers')
     expect(group?.type === 'group' && group.group.memberCount).toBe(4)
@@ -84,7 +93,7 @@ describe('useBuskingSelection', () => {
   it('hands the desk’s mask through beside the targets', () => {
     deskTargets = [{ type: 'fixture', key: 'par-1' }]
     deskFamilies = ['COLOUR']
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     expect(result.current.families).toEqual(['COLOUR'])
   })
 
@@ -93,7 +102,7 @@ describe('useBuskingSelection', () => {
     // One missing here means the fixture list is still arriving, so it returns on the next frame —
     // this must not become a second, client-side drop rule.
     deskTargets = [{ type: 'fixture', key: 'not-yet' }]
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     expect(result.current.selectedTargets.size).toBe(0)
     expect(setSelection).not.toHaveBeenCalled()
   })
@@ -101,7 +110,7 @@ describe('useBuskingSelection', () => {
   it('hands a toggle to the desk rather than deciding it here — by {type, key}, a group by name', () => {
     // The desk narrows a partly covered group head by head (D2). Doing it here would need the
     // group's members, which `GroupSummary` does not carry — and a second answer would drift.
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     result.current.toggleTarget({ type: 'fixture', key: 'par-1' })
     expect(toggleSelection).toHaveBeenCalledWith({ type: 'fixture', key: 'par-1' })
     result.current.toggleTarget({ type: 'group', key: 'Movers' })
@@ -110,7 +119,7 @@ describe('useBuskingSelection', () => {
   })
 
   it('clears through the desk', () => {
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     result.current.clearSelection()
     expect(clearSelection).toHaveBeenCalled()
   })
@@ -119,7 +128,7 @@ describe('useBuskingSelection', () => {
     it('shows the snapshot taken at unlink, and stops following the desk', () => {
       deskTargets = [{ type: 'fixture', key: 'par-1' }]
       deskFamilies = ['COLOUR']
-      const { result } = renderHook(() => useBuskingSelection())
+      const { result } = renderHook(() => useBuskingSelection(1))
       act(() => unlinkFromDesk({ targets: deskTargets, families: deskFamilies }))
       expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:par-1'])
       expect(result.current.families).toEqual(['COLOUR'])
@@ -133,7 +142,7 @@ describe('useBuskingSelection', () => {
     })
 
     it('writes to the tab’s own copy, keeps the mask on a toggle, and never touches the desk', () => {
-      const { result } = renderHook(() => useBuskingSelection())
+      const { result } = renderHook(() => useBuskingSelection(1))
       act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] }))
 
       act(() => result.current.toggleTarget({ type: 'group', key: 'Movers' }))
@@ -153,7 +162,7 @@ describe('useBuskingSelection', () => {
 
     it('adopts the desk’s selection on re-link and drops the copy', () => {
       deskTargets = [{ type: 'group', key: 'Movers' }]
-      const { result } = renderHook(() => useBuskingSelection())
+      const { result } = renderHook(() => useBuskingSelection(1))
       act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'par-1' }], families: null }))
       expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:par-1'])
       act(() => relinkToDesk())
@@ -168,14 +177,65 @@ describe('useBuskingSelection', () => {
 describe('a cell in the selection', () => {
   it('rehydrates against the parent’s own element list, never by parsing the key', () => {
     deskTargets = [{ type: 'fixture', key: 'bar-1.pixel-1' }]
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     const cell = result.current.selectedTargets.get('fixture:bar-1.pixel-1')
     expect(cell).toMatchObject({ type: 'fixture', key: 'bar-1.pixel-1', fixture: { key: 'bar-1' }, element: { displayName: 'Cell 2' } })
   })
 
   it('toggles a cell by its element key, exactly as a rig tile hands it over', () => {
-    const { result } = renderHook(() => useBuskingSelection())
+    const { result } = renderHook(() => useBuskingSelection(1))
     act(() => result.current.toggleTarget({ type: 'fixture', key: 'bar-1.pixel-0' }))
     expect(toggleSelection).toHaveBeenCalledWith({ type: 'fixture', key: 'bar-1.pixel-0' })
+  })
+})
+
+describe('the sub-selection (D12)', () => {
+  it('is one desk op while following — the mode and nothing else, the desk answering with the frame', () => {
+    const { result } = renderHook(() => useBuskingSelection(1))
+    act(() => result.current.subselect('ODD'))
+    expect(subselectSelection).toHaveBeenCalledWith('ODD')
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
+  it('mirrors the rule over the tab’s own copy when unlinked, keeps the mask, and never reaches the desk', () => {
+    const { result } = renderHook(() => useBuskingSelection(1))
+    act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'bar-1' }], families: ['COLOUR'] }))
+
+    act(() => result.current.subselect('ODD'))
+    expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:bar-1.pixel-0'])
+    expect(result.current.families).toEqual(['COLOUR'])
+
+    // Next walks the empty rig's fallback order — every group, then every fixture — at cell
+    // granularity, since every selected target is a cell.
+    act(() => result.current.subselect('NEXT'))
+    expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:bar-1.pixel-1'])
+
+    act(() => result.current.subselect('ALL'))
+    expect([...result.current.selectedTargets.keys()]).toEqual(['fixture:bar-1'])
+
+    expect(subselectSelection).not.toHaveBeenCalled()
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
+  it('does nothing on the local arm until the rig has answered — the fallback is not a built rig’s order', () => {
+    rigQuery = { data: undefined, isError: false }
+    const { result } = renderHook(() => useBuskingSelection(1))
+    act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'bar-1' }], families: null }))
+    const before = getLocalSelection()
+    act(() => result.current.subselect('ODD'))
+    expect(getLocalSelection()).toBe(before)
+    // A failed read falls back as the band does: every group then every fixture.
+    rigQuery = { data: undefined, isError: true }
+    const failed = renderHook(() => useBuskingSelection(1))
+    act(() => failed.result.current.subselect('ODD'))
+    expect(getLocalSelection().targets).toEqual([{ type: 'fixture', key: 'bar-1.pixel-0' }])
+  })
+
+  it('writes nothing on the local arm for a rewrite that changes nothing, as the desk emits no frame', () => {
+    const { result } = renderHook(() => useBuskingSelection(1))
+    act(() => unlinkFromDesk({ targets: [{ type: 'fixture', key: 'par-1' }], families: null }))
+    const before = getLocalSelection()
+    act(() => result.current.subselect('MASTERS'))
+    expect(getLocalSelection()).toBe(before)
   })
 })

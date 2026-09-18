@@ -5,6 +5,8 @@ import type {
 } from "@/store/surfaces"
 import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
 import { axisSuffix } from "@/lib/colourAxis"
+import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
+import type { BuskFocus } from "@/lib/buskWindow"
 
 /** Flash targets wrap an inner continuous target; return the meaningful target. */
 export function effectiveTarget(target: BindingTarget): BindingTarget {
@@ -142,6 +144,19 @@ export function describeTarget(target: BindingTarget): string {
       return "Busk · previous page"
     case "buskPageSet":
       return `Busk page ${shortUuid(target.pageUuid)}`
+    // The window-addressed pair name the window as the binding does — by registry name, which is
+    // the name and needs no resolving — and the focus it sets; the sub-selection three say the
+    // mode in the Cells chip's own words, so a button and the chip read as one rule.
+    case "buskFocusSet":
+      return `Busk focus · ${FOCUS_LABELS[target.focus]} · ${target.windowName}`
+    case "buskSheetToggle":
+      return `Busk sheet · ${target.windowName}`
+    case "selectionNext":
+      return "Selection · next"
+    case "selectionPrev":
+      return "Selection · prev"
+    case "selectionCells":
+      return `Cells · ${SUBSELECT_MODE_LABELS[target.mode]}`
     // A row this build cannot decode, kept by the tolerant decode so it can be rebound rather than
     // silently dropped. Naming the discriminator is the only useful thing to say about it.
     case "unknown":
@@ -165,6 +180,13 @@ export function describeTarget(target: BindingTarget): string {
       return "Unsupported target"
     }
   }
+}
+
+/** The three focus values as the busk view's segmented control spells them. */
+export const FOCUS_LABELS: Record<BuskFocus, string> = {
+  split: "Split",
+  pads: "Pads",
+  rig: "Rig",
 }
 
 /**

@@ -1,6 +1,6 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
-import { sameSelectionSnapshot, type DeskSelectionSnapshot } from '../api/selectionApi'
+import { sameSelectionSnapshot, type DeskSelectionSnapshot, type SubselectMode } from '../api/selectionApi'
 import type { CueTarget } from '../api/cuesApi'
 import type { AttributeFamily } from '../lib/attributeFamily'
 import { normaliseFamilies } from '../lib/selectionMask'
@@ -115,4 +115,15 @@ export function toggleDeskSelection(target: CueTarget): void {
 
 export function clearDeskSelection(): void {
   lightingApi.selection.clear()
+}
+
+/**
+ * The fourth write (busk-further plan D12): rewrite the desk selection's **targets** by [mode] —
+ * the Cells chip's press while this tab follows the desk. The desk walks its own rig order and
+ * answers with the ordinary state frame; nothing here derives the result, because a sub-selection
+ * is not a state the desk keeps and the rule lives in `state/DeskSelection.kt`. An unlinked tab
+ * never calls this — `useBuskingSelection`'s local arm mirrors the rule over the rig document.
+ */
+export function subselectDeskSelection(mode: SubselectMode): void {
+  lightingApi.selection.subselect(mode)
 }
