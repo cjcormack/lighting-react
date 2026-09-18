@@ -50,7 +50,7 @@ import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import { RigBand } from './RigBand'
-import { RigStrip } from './RigStrip'
+import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
 import { BuskFocusControl } from './BuskFocusControl'
 import { BuskEditProvider } from './BuskEditProvider'
@@ -61,6 +61,15 @@ import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
 import type { PadBehaviour } from './padBehaviour'
 import { type EffectPresence } from './buskingTypes'
+
+/**
+ * The short-viewport fold, duplicated per site by convention — see the module note and
+ * `shortViewport.test.ts`, which pins this spelling against every other copy.
+ */
+const SHORT_VIEWPORT = '(max-height: 500px)'
+
+/** Which board this window draws: the desk's, the short one (wide but not tall), or the narrow one. */
+export type BuskBoard = 'desk' | 'short' | 'narrow'
 
 /**
  * The busk view's body: the rig band, the page the operator built, and the side sheet — or, in
@@ -85,10 +94,23 @@ import { type EffectPresence } from './buskingTypes'
  * both, a copied link reproduces the shape, and a reload is never an arrival.
  *
  * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
- * a row chip, and Rig focus is the whole rig stacked. `isDesktop` stays, as the one query that
- * says which board this is; below it the side sheet is a bottom sheet or a right-hand overlay
- * through `useCellEditorForm`, opened from the page strip's button — which is inert until Colour
- * or Spread lands, since that sheet carries no Speed tab (D7).
+ * a row chip, and Rig focus is the whole rig stacked. Below `md` the side sheet is a bottom sheet
+ * or a right-hand overlay through `useCellEditorForm`, opened from the page strip's button onto
+ * Colour, since that sheet carries no Speed tab (D7).
+ *
+ * **Three boards, and short beats narrow** (`Phones.dc.html`, `Tablets.dc.html`). `md` says
+ * whether this is the desk board or the narrow one; the short-viewport fold — `SHORT_VIEWPORT`,
+ * this file's own copy of the 500px height query, by the convention `shortViewport.test.ts`
+ * enforces — says whether a window wide enough for the desk board has the height for it. A
+ * landscape phone is wider than `md` and has 297px under the ShowBar, so by width alone the rail
+ * would dock and the palette would be offered; on the **short board** instead the rig strip and
+ * the page strip merge into one 32px row (`RigStripContent` in `BuskPageStrip`'s `leading` slot —
+ * the same pieces, not a third strip), Split shows one row of 48px tiles with the row chip
+ * (`RigBand compact`), the side sheet **overlays** rather than docks (neither the fold nor the
+ * docked rail is drawn; `SideSheetOverlay` takes its right-hand form, Colour in its compact
+ * layout, from the merged row's *Sheet* button), and *Edit layout* is withheld as it is below
+ * `md`, since a palette drag needs both regions on screen. The defaults — Pads focus, the sheet
+ * folded — are already the ladder's in `lib/buskWindow.ts`; only which board is drawn changes here.
  *
  * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
  * live view.
@@ -112,6 +134,10 @@ import { type EffectPresence } from './buskingTypes'
  */
 export function BuskingView({ projectId }: { projectId: number }) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
+  const isShort = useMediaQuery(SHORT_VIEWPORT)
+  // Short beats narrow: a window below `md` is the narrow board whatever its height, and the short
+  // board is the desk board's width without its height.
+  const board: BuskBoard = !isDesktop ? 'narrow' : isShort ? 'short' : 'desk'
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -414,8 +440,12 @@ export function BuskingView({ projectId }: { projectId: number }) {
   // it to create a page from (`+ Page` is edit mode's, and *Edit layout* is disabled with none).
   const noPages = pages != null && pages.length === 0
   const shape = editing || noPages ? 'split' : focus
-  // Below `md` the overlay sheet's tabs, none of which has landed yet; the button says so.
+  // Off the desk board the sheet is an overlay, and these are the tabs it can open onto.
   const overlayTabs = sideSheetTabs(sheetForm)
+  const docked = board === 'desk'
+  // The short board's merged row: the rig strip's pieces lead the page strip while the rig is
+  // folded. In Split and Rig focus the band carries them itself, so the row holds only the page.
+  const merged = board === 'short' && shape === 'pads'
 
   const pageStrip = (folded: boolean) => (
     <BuskPageStrip
@@ -423,6 +453,20 @@ export function BuskingView({ projectId }: { projectId: number }) {
       activePageId={activePage?.id ?? null}
       editing={editing}
       folded={folded}
+      // Not while editing: the editing verbs are sized for the wrapping desk row, and a window
+      // shortened mid-edit keeps `editing` until Done. `merged` is already false there, since edit
+      // mode forces Split.
+      dense={board === 'short' && !folded && !editing}
+      editable={docked}
+      leading={
+        merged ? (
+          <RigStripContent
+            selectedTargets={selectedTargets}
+            families={families}
+            onUnfold={() => setBuskFocus('split')}
+          />
+        ) : undefined
+      }
       // The desk while this window follows it, this window's own copy once unlinked — and
       // the effect above mirrors whichever won into `?page=`. A click that never reached the
       // desk unlinks the window rather than overriding it silently; see `onPageSelect`.
@@ -444,7 +488,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
       }}
       controls={
         <>
-          {!isDesktop && !editing && (
+          {!docked && !editing && (
             <Button
               size="sm"
               variant="outline"
@@ -452,8 +496,8 @@ export function BuskingView({ projectId }: { projectId: number }) {
               disabled={overlayTabs.length === 0}
               title={
                 overlayTabs.length === 0
-                  ? 'The Colour and Spread tabs arrive with sessions 5 and 6; Speed is the ShowBar’s chip here'
-                  : 'Open the side sheet'
+                  ? 'Nothing to open here yet; Speed is the ShowBar’s chip'
+                  : `Open the ${overlayTabs[0].label} tab`
               }
               onClick={() => {
                 const first = overlayTabs[0]
@@ -477,11 +521,14 @@ export function BuskingView({ projectId }: { projectId: number }) {
               drag handles and take drops — and a dim over a drop target reads as "not here". Pads
               do not press in edit mode and tiles do not select; both say so by their cursors. */}
           {shape === 'pads' ? (
-            <RigStrip
-              selectedTargets={selectedTargets}
-              families={families}
-              onUnfold={() => setBuskFocus('split')}
-            />
+            // On the short board the strip's pieces lead the merged page row instead (`merged`).
+            !merged && (
+              <RigStrip
+                selectedTargets={selectedTargets}
+                families={families}
+                onUnfold={() => setBuskFocus('split')}
+              />
+            )
           ) : (
             <RigBand
               projectId={projectId}
@@ -490,7 +537,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
               onToggle={toggleTarget}
               onClear={clearSelection}
               editing={editing}
-              compact={!isDesktop}
+              compact={!docked}
               focus={shape}
             />
           )}
@@ -520,10 +567,12 @@ export function BuskingView({ projectId }: { projectId: number }) {
         {editing ? (
           <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} onRigKeys={onRigKeys} />
         ) : (
-          <SideSheet projectId={projectId} selectedTargets={selectedTargets} />
+          docked && <SideSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
         )}
       </div>
-      {!isDesktop && !editing && <SideSheetOverlay />}
+      {!docked && !editing && (
+        <SideSheetOverlay projectId={projectId} selectedTargets={selectedTargets} families={families} />
+      )}
     </div>
   )
 }

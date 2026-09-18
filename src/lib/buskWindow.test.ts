@@ -161,19 +161,42 @@ describe('the sheet is one fact', () => {
   })
 
   it('remembers only a live tab, so a hidden one cannot make the toggle flip fold to fold', () => {
-    // A `?sheet=colour` link before session 5: drawn as the fold, and the MIDI BuskSheetToggle
+    // A `?sheet=spread` link before session 6: drawn as the fold, and the MIDI BuskSheetToggle
     // must still open something.
-    applyBuskArrival({ focus: null, sheet: 'colour' })
-    expect(getBuskSheet()).toBe('colour')
+    applyBuskArrival({ focus: null, sheet: 'spread' })
+    expect(getBuskSheet()).toBe('spread')
     act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('speed')
     act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('none')
   })
 
-  it('unfolds onto Speed when nothing has been open yet', () => {
-    surface({ wide: false })
+  it('remembers Colour once it has been open, so the toggle unfolds back onto it', () => {
+    act(() => setBuskSheet('colour'))
+    act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('none')
+    act(() => toggleBuskSheet())
+    expect(getBuskSheet()).toBe('colour')
+  })
+
+  it('unfolds onto Colour where the sheet is an overlay, since no overlay form offers Speed', () => {
+    // A MIDI BuskSheetToggle on the short board: Speed is the ShowBar's chip there, so a memory
+    // of Speed would open a sheet with no tab — fold to fold.
+    surface({ short: true })
+    expect(getBuskSheet()).toBe('none')
+    act(() => toggleBuskSheet())
+    expect(getBuskSheet()).toBe('colour')
+    act(() => toggleBuskSheet())
+    expect(getBuskSheet()).toBe('none')
+    // Below md likewise.
+    surface({ wide: false })
+    act(() => toggleBuskSheet())
+    expect(getBuskSheet()).toBe('colour')
+  })
+
+  it('unfolds onto Speed when nothing has been open yet, where the rail docks', () => {
+    // A desk board folded by hand: the memory is empty and Speed is the docked sheet's first tab.
+    act(() => setBuskSheet('none'))
     act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('speed')
   })

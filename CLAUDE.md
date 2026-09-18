@@ -832,13 +832,68 @@ tab strip and the tab when the fact names a live tab and `SideSheetFold` (44px: 
 1's tempo, one glyph per live tab, the selection's colour off the stage's colour dispatch, the head
 count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
 so a MIDI `{sheet: 'toggle'}` unfolds onto the tab the operator had. **Speed is `BuskSpeedRail`
-mounted unchanged** inside the sheet; Colour and Spread are sessions 5 and 6 and the strip
-**hides** them until then (`LIVE_SHEET_TABS`): a tab with an empty state is a promise the desk
-cannot keep, and a fact naming a hidden tab draws the fold. Below `md` the sheet is a bottom sheet
-or a right-hand overlay through `useCellEditorForm`'s forms, opened from the page strip's button,
-and carries **no Speed tab** (Speed is the ShowBar's chip there) — which leaves it nothing to show
-this session, so the button is drawn inert with the reason on its title. The palette still
-replaces the whole region while editing.
+mounted unchanged** inside the sheet and **Colour is `ColourSheet`** (below); Spread is session 6
+and the strip **hides** it until then (`LIVE_SHEET_TABS` is the one list — adding a tab there
+lights it in the strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's
+memory at once): a tab with an empty state is a promise the desk cannot keep, and a fact naming a
+hidden tab draws the fold. Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on
+an upright phone, a right-hand sheet where the viewport is short, through `useCellEditorForm`'s
+forms — opened from the page strip's *Sheet* button onto Colour, and it carries **no Speed tab**
+(Speed is the ShowBar's chip there). The palette still replaces the whole region while editing.
+
+**The Colour tab writes literals to Local, and only that** (D8, `components/busking/ColourSheet.tsx`).
+Every drag is `programmer.setColour` per selected target — a group as a group write, a cell by its
+element key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
+cells (`planColourWrites`) — which is what a template pad's click does and what the programmer's
+colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no library referent
+for a layer to follow, and *Save as template…* (`NewTemplateFromSelectionSheet` over the sheet's
+targets, family Colour) is the route to something trackable. **The family mask is not consulted**:
+the desk's mask gates presses, not value writes, so the sheet does not refuse under a Position
+marquee — the header says what it is about to do (*Colour of 14 heads · writes to Local*) and reads
+the family pill, the honest answer the programmer's Set gives. A *Recent* chip is a press and goes
+through `useTemplatePress` under the mask like any other. The writes go through
+`hooks/useLivePush.ts`, the tempo fader's discipline lifted out of `BuskSpeedRail` and made generic
+over the value: dedupe on an equality, a 50 ms floor, a deferred value sent when the floor lifts,
+the release bypassing both. The editor itself is `components/fixtures/ColourPickerBody.tsx` — the
+picker, the typed R/G/B, the emitter rows and the six-channel buffer, extracted from
+`ColourPickerPopover` so the sheet and the grid's cell cannot answer a drag differently; the popover
+keeps only the open state, the keyboard wiring and its two surfaces. The emitter rows are the
+selection's **union read off the colour descriptors** — the emitters a `setColour` can drive,
+deliberately narrower than `targetEmitters`' probe, which also counts a plain slider in an emitter
+category for the template offer — with the count of heads that take any, and a head without an
+emitter simply does not receive that byte (an undeliverable white folds into RGB, as
+`useCellWriters` does). **A group is one group write only where its members agree on emitters**;
+otherwise it fans to one write per member carrying `sourceGroup`, because the desk writes a group
+colour verbatim per member and adds white only on a head that has one — it can fold white for none
+of them, so pure white as a group write over a mixed group would black out its RGB heads. **The
+buffer is seeded from the rig** (a Pick on mount and on every selection change, retried until the
+heads have reported), so a single-channel edit leaves the other RGB bytes where the rig has them,
+as it does in the cell — the emitters start at 0, since the appearance store exposes one folded
+colour and nothing per emitter; and **the release is read from the window**, as the tempo fader's is, since the
+picker binds its own release to the document. **Recent** is `recentTemplates` over the colour-family, generic, value
+templates the selection can take; a tap is a template **apply**, so it stamps `lastPressedAt`.
+**Pick** reads the selection's current colour off `lib/liveAppearance.ts` — a store every
+appearance leaf reports into, because `FixtureAppearanceSource` is a render prop and cannot be
+asked from a click — into the picker *without writing*: the first head in rig order wins
+(`rigHeadOrder` over `effectiveRig`, the desk's own order for an empty rig) and the field says
+*mixed* where the heads disagree. It reads the stage's colour as the mini-stage draws it — the hue
+normalised to full brightness, emitters folded in — and **only heads with a colour descriptor**: the
+dispatch answers a gel or the default tungsten for a colourless head, which is no colour this sheet
+could write, so a dimmer-only par in the selection is neither read nor a reason to say *mixed*. The rig tiles report, and the sheet mounts a hidden leaf per
+selected head as well, so Pick answers in Pads focus with the tiles folded away. The *Second
+colour* switch is session 6's seam (`onSpread`), drawn inert until that tab lands.
+
+**Short beats narrow.** `BuskingView` draws one of three boards: `md` says desk or narrow, and its
+own copy of the 500px height query (`shortViewport.test.ts` pins the spelling) says whether a
+window wide enough for the desk board has the height for it. A landscape phone is wider than `md`
+with 297px under the ShowBar, so on the **short board** the rig strip and the page strip merge into
+**one 32px row** — `RigStripContent`'s pieces in `BuskPageStrip`'s `leading` slot while the rig is
+folded, the same pieces and not a third strip — Split shows one row of 48px tiles with the row chip
+(`RigBand compact`), the side sheet **overlays** rather than docks (neither the fold nor the docked
+rail is drawn; `SideSheetOverlay`'s right-hand form, Colour in its compact layout, from the merged
+row's *Sheet* button), and *Edit layout* is withheld as it is below `md` (`editable` on the strip),
+since a palette drag needs both regions on screen. The defaults — Pads, the sheet folded — were
+already the ladder's; only which board is drawn changed.
 
 **The facts ride the announce and the Screens sheet sets them** — see §Windows, full screen and
 the hand for `viewOptions`, and `lib/windowViews.ts` for the descriptor the sheet renders from.
@@ -853,8 +908,8 @@ viewport's because the rail or the palette has already taken its share: at `md` 
 beside the rail and ~408px beside the palette, and four quarter-columns need ~600px before each can
 hold one 110px pad. Edit mode stacks too, with a gutter drawn as a strip between two stacked columns
 (still "the new column before column N"). Below `md` the palette is not shown and *Edit layout* is
-hidden with it — by decision, narrow widths get play mode only, and an edit mode with nothing to
-drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
+withheld with it — and on the short board too, through the strip's `editable` — by decision:
+narrow widths get play mode only, and an edit mode with nothing to drag from is a trap. `Done` stays at every width so a window narrowed mid-edit can leave.
 
 ### The rig
 

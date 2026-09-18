@@ -89,6 +89,7 @@ afterEach(() => {
   resetFullscreenState()
   resetUnsavedSheets()
   resetBuskWindowStores()
+  vi.unstubAllGlobals()
   resetBuskPageFollowStores()
 })
 
@@ -324,6 +325,19 @@ describe('the mounted bridge', () => {
 
   it('flips the sheet on {sheet: toggle} aimed at this row on the busk view, and re-announces', async () => {
     windowsWs.last = [row('s-1', 'w-1', 'Screen 1', '/projects/1/busk')]
+    // A desk window: jsdom has no matchMedia, which the busk surface reads as below `md` — and
+    // there the toggle unfolds onto Colour, since the overlay offers no Speed tab. The bridge is
+    // what this test is about, so it states the board.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.startsWith('(min-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }))
     setBuskSheet('speed')
     mountBridge('/projects/1/busk')
     await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())

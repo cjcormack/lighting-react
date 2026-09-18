@@ -9,6 +9,7 @@ import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
 import selectionBarSrc from './components/sheet/SelectionBar.tsx?raw'
 import cellEditorSurfaceSrc from './components/sheet/cells/CellEditorSurface.tsx?raw'
 import buskWindowSrc from './lib/buskWindow.ts?raw'
+import buskingViewSrc from './components/busking/BuskingView.tsx?raw'
 
 /**
  * The short-viewport fold is one decision written in three places, and this is what keeps them one
@@ -71,8 +72,10 @@ describe('the short-viewport fold', () => {
     // Like `SelectionBar`, the third is pinned by spelling and not by `SITES`: it carries no
     // Tailwind variant, and `SITES` is also what the class-name test below slices. The fourth is
     // `lib/buskWindow.ts`, whose defaults ladder (busk-further plan §3.4) folds the busk view's
-    // focus and sheet on the same height — its own copy, by the convention this file enforces.
-    for (const src of [programmerPageSrc, selectionBarSrc, cellEditorSurfaceSrc, buskWindowSrc]) {
+    // focus and sheet on the same height — its own copy, by the convention this file enforces. The
+    // fifth is `BuskingView.tsx`, which draws the short board (the merged strip, the overlay sheet)
+    // on the same height: short beats narrow, and the board and the defaults must fold together.
+    for (const src of [programmerPageSrc, selectionBarSrc, cellEditorSurfaceSrc, buskWindowSrc, buskingViewSrc]) {
       expect(src).toContain("const SHORT_VIEWPORT = '(max-height: 500px)'")
     }
   })

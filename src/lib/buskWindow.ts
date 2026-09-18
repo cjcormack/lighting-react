@@ -53,11 +53,12 @@ export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
 export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread']
 
 /**
- * The tabs that have landed. Colour and Spread are sessions 5 and 6, and until then the sheet
- * **hides** them — a tab with an empty state is a promise the desk cannot keep — so a picker offers
- * only these, and a fact naming a hidden tab draws the fold.
+ * The tabs that have landed. Spread is session 6, and until then the sheet **hides** it — a tab
+ * with an empty state is a promise the desk cannot keep — so a picker offers only these, and a fact
+ * naming a hidden tab draws the fold. This is the one list: adding a tab here lights it in the
+ * sheet's strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_ROWS_KEY = 'busk.rigRows'
@@ -75,6 +76,17 @@ export const TABLET_RIG_ROWS = 2
 const SHORT_VIEWPORT = '(max-height: 500px)'
 const CRAMPED_VIEWPORT = '(max-height: 750px)'
 const SHEET_DOCKS = '(min-width: 1024px)'
+// Tailwind's `md`: below it the rail is never drawn and the sheet is an overlay (`BuskingView`'s
+// narrow board); a short viewport at or above it is the short board, an overlay too.
+const RAIL_DRAWN = '(min-width: 768px)'
+
+/**
+ * The tab an overlay unfolds onto when nothing but Speed has been open: Speed is the ShowBar's chip
+ * wherever the sheet is an overlay (D7), so the overlay's tab list strips it, and a toggle that
+ * remembered only Speed would open a sheet that finds no tab — fold to fold, the dead door the
+ * memory exists to prevent.
+ */
+const OVERLAY_SHEET_TAB: BuskSheetTab = 'colour'
 
 export function isBuskFocus(value: unknown): value is BuskFocus {
   return typeof value === 'string' && (BUSK_FOCUSES as readonly string[]).includes(value)
@@ -112,8 +124,8 @@ export function isLiveSheetTab(value: unknown): value is BuskSheetTab {
 
 /**
  * The tab the sheet was last open on — what `toggle` unfolds onto. `speed` until one has been,
- * and **only ever a live tab**: the fact itself accepts the whole vocabulary (a `sheet=colour`
- * link may arrive before session 5 and is drawn as the fold), but remembering a hidden tab would
+ * and **only ever a live tab**: the fact itself accepts the whole vocabulary (a `sheet=spread`
+ * link may arrive before session 6 and is drawn as the fold), but remembering a hidden tab would
  * make the toggle flip fold ↔ fold for the life of the tab, which is the MIDI `BuskSheetToggle`
  * door silently dead.
  */
@@ -188,13 +200,17 @@ export interface BuskSurface {
   cramped: boolean
   /** Docking the rail leaves the page body its 600px — `lg` and up. */
   docks: boolean
+  /** The sheet is an overlay rather than a docked rail: below `md`, or short (the narrow and short boards). */
+  overlay: boolean
 }
 
 export function readBuskSurface(): BuskSurface {
+  const short = mediaEntry(SHORT_VIEWPORT).getSnapshot()
   return {
-    short: mediaEntry(SHORT_VIEWPORT).getSnapshot(),
+    short,
     cramped: mediaEntry(CRAMPED_VIEWPORT).getSnapshot(),
     docks: mediaEntry(SHEET_DOCKS).getSnapshot(),
+    overlay: short || !mediaEntry(RAIL_DRAWN).getSnapshot(),
   }
 }
 
@@ -202,21 +218,22 @@ function useBuskSurface(): BuskSurface {
   const short = useMedia(SHORT_VIEWPORT)
   const cramped = useMedia(CRAMPED_VIEWPORT)
   const docks = useMedia(SHEET_DOCKS)
-  return { short, cramped, docks }
+  const railDrawn = useMedia(RAIL_DRAWN)
+  return { short, cramped, docks, overlay: short || !railDrawn }
 }
 
 // ─── The defaults ladder (`Tablets.dc.html`) ───────────────────────────────
 
-export function defaultBuskFocus(surface: BuskSurface): BuskFocus {
+export function defaultBuskFocus(surface: Pick<BuskSurface, 'short'>): BuskFocus {
   return surface.short ? 'pads' : 'split'
 }
 
-export function defaultBuskSheet(surface: BuskSurface): BuskSheet {
+export function defaultBuskSheet(surface: Pick<BuskSurface, 'short' | 'docks'>): BuskSheet {
   if (surface.short || !surface.docks) return 'none'
   return 'speed'
 }
 
-export function defaultBuskRigRows(surface: BuskSurface): number {
+export function defaultBuskRigRows(surface: Pick<BuskSurface, 'cramped' | 'docks'>): number {
   return surface.cramped || !surface.docks ? TABLET_RIG_ROWS : DESK_RIG_ROWS
 }
 
@@ -276,9 +293,16 @@ export function setBuskSheet(sheet: BuskSheet): void {
 /**
  * Fold an open sheet, or unfold onto the tab it was last open on (`speed` before any). A fact
  * naming a tab that has not landed is drawn as the fold, so it toggles as the fold does: open.
+ * Where the sheet is an overlay, a memory of Speed unfolds onto [OVERLAY_SHEET_TAB] instead — the
+ * overlay offers no Speed tab, so opening onto it would open nothing.
  */
 export function toggleBuskSheet(): void {
-  setBuskSheet(isLiveSheetTab(getBuskSheet()) ? 'none' : lastSheetStore.getSnapshot())
+  if (isLiveSheetTab(getBuskSheet())) {
+    setBuskSheet('none')
+    return
+  }
+  const remembered = lastSheetStore.getSnapshot()
+  setBuskSheet(remembered === 'speed' && readBuskSurface().overlay ? OVERLAY_SHEET_TAB : remembered)
 }
 
 // ─── Arrival ───────────────────────────────────────────────────────────────

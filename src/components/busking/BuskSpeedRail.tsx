@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { Link2, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -6,6 +6,7 @@ import { BeatIndicator } from '@/components/BeatIndicator'
 import { ManageMastersLink } from '@/components/SpeedMasters'
 import { SpeedMasterDetailSheet } from '@/components/speedMasters/SpeedMasterDetailSheet'
 import { formatBpm, useBpmDraft } from '@/hooks/useBpmDraft'
+import { useLivePush } from '@/hooks/useLivePush'
 import { useLongPress } from '@/hooks/useLongPress'
 import { BuskLabel, BUSK_LABEL_CLASS } from './BuskLabel'
 import {
@@ -135,101 +136,24 @@ export function BuskSpeedRail() {
 }
 
 /**
- * Tempo writes for a running drag: applied as it goes, floored at {@link SLIDE_PUSH_MS}.
+ * Tempo writes for a running drag: {@link useLivePush} over the master's bpm — deduplicated on the
+ * whole BPM (the travel is about 0.4 BPM a pixel, so most moves land on the last one), floored at
+ * {@link SLIDE_PUSH_MS}, a deferred value held and sent when the floor lifts, and `flush` as the
+ * release that bypasses both. The discipline itself lives in the hook, since the Colour tab's drag
+ * needs exactly it over six bytes; what is left here is the master and one rule about it.
  *
- * The drag applies live because that is what a fader is for — the operator is watching the rig and
- * listening to the tempo, and a control that only lands on release makes that a guess-then-check
- * loop. The throttle is the traffic half of the same decision, not a softening of it: `pointermove`
- * fires up to once a frame and every write is broadcast to every socket on the desk.
- *
- * Two things it does beyond the interval. It **deduplicates on the value** — the travel is about
- * 0.4 BPM a pixel, so most moves land on the same whole BPM as the last one and are worth nothing
- * on the wire. And a deferred value is not dropped but **held and sent when the floor lifts**, so
- * the tempo keeps moving through a fast drag rather than stalling until the pointer slows.
- *
- * {@link flush} is the release: it bypasses both the interval and any armed timer, because the value
- * the operator let go on is the one that must land. It still dedupes — a release that changed
- * nothing since the last push has nothing to say.
+ * **A drag on one master must not leave state that a drag on the next one reads**: the dedupe is
+ * against *this* drag's own moves, and the master's tempo moves by every other route between
+ * drags, so the last-sent value is forgotten whenever the card's master changes as well as at the
+ * start of each drag.
  */
 function useLiveTempoPush(uuid: string | null) {
-  const lastSent = useRef<number | null>(null)
-  const lastSentAt = useRef(0)
-  const deferred = useRef<number | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const send = useCallback(
-    (bpm: number) => {
-      lastSent.current = bpm
-      lastSentAt.current = Date.now()
-      deferred.current = null
-      setSpeedMasterBpm(uuid, bpm)
-    },
-    [uuid],
-  )
-
-  const push = useCallback(
-    (bpm: number) => {
-      // The deferred value is recorded **before** the dedupe, not after it. Dropping a move that
-      // happens to land back on the value last sent would leave the previous move's tempo armed:
-      // drag 120 → 125 → 121 → 120 inside one 50 ms window and the timer would fire with 120's
-      // predecessor, putting the rig at a BPM the finger has already left until the release. The
-      // dedupe still happens — at both the places that actually send.
-      deferred.current = bpm
-      if (timer.current) return
-      if (bpm === lastSent.current) return
-      const wait = SLIDE_PUSH_MS - (Date.now() - lastSentAt.current)
-      if (wait <= 0) {
-        send(bpm)
-        return
-      }
-      timer.current = setTimeout(() => {
-        timer.current = null
-        const pending = deferred.current
-        if (pending != null && pending !== lastSent.current) send(pending)
-      }, wait)
-    },
-    [send],
-  )
-
-  const flush = useCallback(
-    (bpm: number) => {
-      if (timer.current) {
-        clearTimeout(timer.current)
-        timer.current = null
-      }
-      if (bpm !== lastSent.current) send(bpm)
-      deferred.current = null
-    },
-    [send],
-  )
-
-  // A drag interrupted by a re-render that unmounts the card leaves nothing armed behind it.
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  /**
-   * Forget what was last sent, for the start of a fresh drag.
-   *
-   * `lastSent` is only a dedupe against *this* drag's own moves. Between drags the master's tempo
-   * moves by every other route — TAP, the bpm field, another tab, a MIDI surface — so carrying it
-   * over means a drag that arms on exactly the value the previous one ended at sends nothing, while
-   * the card immediately reads that value and draws the fill at it. Arm, release without moving,
-   * and the display would state a tempo the desk is not running.
-   */
-  const reset = useCallback(() => {
-    lastSent.current = null
-    deferred.current = null
-  }, [])
-
-  // A drag on one master must not leave state that a drag on the next one reads.
+  const { push, flush, reset } = useLivePush<number>((bpm) => setSpeedMasterBpm(uuid, bpm), {
+    floorMs: SLIDE_PUSH_MS,
+  })
   useEffect(() => {
     reset()
   }, [uuid, reset])
-
   return { push, flush, reset }
 }
 

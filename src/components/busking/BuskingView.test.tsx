@@ -19,8 +19,8 @@ configure({ asyncUtilTimeout: 5000 })
 // presses has to wait for the *render*, not merely for the cache write — `findByTestId` on this
 // content is that wait, and without it the press sends the pair from the frame before last.
 vi.mock('./RigBand', () => ({
-  RigBand: ({ selectedTargets, focus }: { selectedTargets: Map<string, unknown>; focus: string }) => (
-    <div data-testid="target-band" data-focus={focus}>
+  RigBand: ({ selectedTargets, focus, compact }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean }) => (
+    <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'}>
       {[...selectedTargets.keys()].join(' ') || 'none'}
     </div>
   ),
@@ -31,18 +31,26 @@ vi.mock('./RigStrip', () => ({
       unfold
     </button>
   ),
+  // The strip's pieces, as the short board's merged row mounts them.
+  RigStripContent: ({ onUnfold }: { onUnfold: () => void }) => (
+    <button data-testid="rig-strip-content" onClick={onUnfold}>
+      unfold
+    </button>
+  ),
 }))
 vi.mock('./SideSheet', async () => {
   const real = await import('./SideSheet')
   return {
     sideSheetTabs: real.sideSheetTabs,
     SideSheet: () => <div data-testid="side-sheet" />,
-    SideSheetOverlay: () => null,
+    // The overlay as a marker of what it is mounted with; the real one is tested in its own file.
+    SideSheetOverlay: ({ projectId }: { projectId: number }) => <div data-testid="side-sheet-overlay" data-project={projectId} />,
   }
 })
 vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="palette" /> }))
 
 import { store } from '@/store'
+import { enterBuskEdit } from '@/store/buskEditSlice'
 import { restApi } from '@/store/restApi'
 import { BuskingView } from './BuskingView'
 import type { BuskPage, BuskPressResponse } from '@/api/buskApi'
@@ -193,24 +201,35 @@ function draw(pages: BuskPage[], path = '/projects/1/busk') {
   return { ...utils, calls }
 }
 
+/** Which board `matchMedia` describes: a desk screen by default; `short` is the landscape phone. */
+function surface({ short = false, narrow = false } = {}) {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) => ({
+      matches: query.includes('max-width')
+        ? narrow
+        : query.includes('500px')
+          ? short
+          : query.includes('750px')
+            ? short
+            : query.startsWith('(min-width') && !(narrow && query.includes('768px')),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }),
+  )
+}
+
 describe('the busk view', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     // jsdom has no matchMedia; the view asks it which board this is. A desk screen: every
     // `min-width` matches, neither height fold does, so the defaults are Split and Speed.
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string) => ({
-        matches: query.startsWith('(min-width'),
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        onchange: null,
-        dispatchEvent: () => false,
-      }),
-    )
+    surface()
   })
 
   afterEach(() => {
@@ -534,6 +553,84 @@ describe('the busk view', () => {
       await screen.findByRole('button', { name: 'Ballads' })
       expect(getBuskFocus()).toBe('rig')
       await waitFor(() => expect(shapeSeen.at(-1)).toBe('rig/none'))
+    })
+  })
+
+  describe('the short board — short beats narrow (Phones, landscape)', () => {
+    it('merges the rig strip and the page strip into one 32px row in Pads focus, with no docked sheet and no Edit layout', async () => {
+      surface({ short: true })
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      // The ladder's defaults on a short viewport: Pads, the sheet folded — read, not written.
+      expect(getBuskFocus()).toBe('pads')
+      expect(getBuskSheet()).toBe('none')
+      // One row: the strip's pieces lead the page strip; there is no strip row of its own.
+      const strip = document.querySelector('[data-busk-page-strip="open"]')!
+      expect(strip).toHaveAttribute('data-busk-page-strip-dense', 'true')
+      expect(strip.className).toContain('h-8')
+      expect(strip.querySelector('[data-testid="rig-strip-content"]')).not.toBeNull()
+      expect(screen.queryByTestId('rig-strip')).toBeNull()
+      expect(screen.queryByTestId('target-band')).toBeNull()
+      // Neither the fold nor the docked rail: the sheet is the overlay, opened from the row's button.
+      expect(screen.queryByTestId('side-sheet')).toBeNull()
+      expect(screen.getByTestId('side-sheet-overlay')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Edit layout' })).toBeNull()
+      const sheetButton = screen.getByRole('button', { name: /Sheet/ })
+      expect(sheetButton).toBeEnabled()
+      expect(sheetButton).toHaveAttribute('title', 'Open the Colour tab')
+      fireEvent.click(sheetButton)
+      expect(getBuskSheet()).toBe('colour')
+    })
+
+    it('shows the band compact — one row of 48px tiles with the row chip — in Split, on the dense page row', async () => {
+      surface({ short: true })
+      setBuskFocus('split')
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      const band = screen.getByTestId('target-band')
+      expect(band).toHaveAttribute('data-focus', 'split')
+      expect(band).toHaveAttribute('data-compact', 'true')
+      // Split carries the strip's pieces on the band itself; the page row holds only the page —
+      // and keeps a flexible spacer, so the controls still sit at the right edge.
+      const strip = document.querySelector('[data-busk-page-strip="open"]')!
+      expect(strip).toHaveAttribute('data-busk-page-strip-dense', 'true')
+      expect(strip.querySelector('[data-testid="rig-strip-content"]')).toBeNull()
+      expect(strip.querySelector(':scope > .flex-1')).not.toBeNull()
+      expect(screen.queryByTestId('side-sheet')).toBeNull()
+    })
+
+    it('draws the wrapping row, not the 32px one, while editing — a desk window shortened mid-edit keeps its verbs', async () => {
+      surface({ short: true })
+      store.dispatch(enterBuskEdit(emptyPage.id))
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      const strip = document.querySelector('[data-busk-page-strip="open"]')!
+      expect(strip).not.toHaveAttribute('data-busk-page-strip-dense')
+      expect(screen.getByText('Done')).toBeTruthy()
+    })
+
+    it('leaves the desk board as it was: two rows, the docked sheet, Edit layout offered, the band at full size', async () => {
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-compact', 'false')
+      const strip = document.querySelector('[data-busk-page-strip="open"]')!
+      expect(strip).not.toHaveAttribute('data-busk-page-strip-dense')
+      expect(screen.getByTestId('side-sheet')).toBeTruthy()
+      expect(screen.queryByTestId('side-sheet-overlay')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Edit layout' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: /Sheet/ })).toBeNull()
+    })
+
+    it('below md the sheet button opens the overlay onto Colour, and Edit layout is withheld', async () => {
+      surface({ narrow: true })
+      draw([emptyPage])
+      await screen.findByRole('button', { name: 'Ballads' })
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-compact', 'true')
+      expect(screen.queryByTestId('side-sheet')).toBeNull()
+      expect(screen.getByTestId('side-sheet-overlay')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Edit layout' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: /Sheet/ }))
+      expect(getBuskSheet()).toBe('colour')
     })
   })
 

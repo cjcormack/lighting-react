@@ -7,9 +7,11 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useCellEditorForm, type CellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { LIVE_SHEET_TABS, setBuskSheet, useBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
 import { cn } from '@/lib/utils'
 import { BuskSpeedRail } from './BuskSpeedRail'
+import { ColourSheet } from './ColourSheet'
 import { SideSheetFold } from './SideSheetFold'
 import type { BuskingTarget } from './buskingTypes'
 
@@ -17,11 +19,11 @@ import type { BuskingTarget } from './buskingTypes'
  * The busk view's **side sheet** — one rail, three tabs, one fold, one fact (busk-further plan
  * D7; `Sheets.dc.html` is the authority on layout).
  *
- * **Speed is `BuskSpeedRail` unchanged**, mounted here and nowhere else in play mode. Colour and
- * Spread are sessions 5 and 6, and until they land the strip **hides** them rather than drawing a
+ * **Speed is `BuskSpeedRail` unchanged**, mounted here and nowhere else in play mode. **Colour is
+ * `ColourSheet`** (D8): the colour editor's body hosted here, writing literals to Local for the
+ * selection. Spread is session 6, and until it lands the strip **hides** it rather than drawing a
  * tab with an empty state (`LIVE_SHEET_TABS` in `lib/buskWindow.ts` is the one list): a tab that
- * opens onto nothing is a promise the desk cannot keep. So this session's sheet is one live tab
- * and the fold.
+ * opens onto nothing is a promise the desk cannot keep.
  *
  * **The sheet is one fact, `busk.sheet`, and the fold is `none`.** There is no `sheetOpen`
  * beside it, whatever `Focus.dc.html`'s older sketch lists — the fold chevron writes `none`, a tab
@@ -30,11 +32,13 @@ import type { BuskingTarget } from './buskingTypes'
  * has not landed draws the fold, so a `sheet=colour` link arriving early is quiet rather than
  * broken.
  *
- * **Below `md` the rail is not drawn**, as it never was: the sheet is a bottom sheet on an upright
- * phone and a right-hand overlay where the viewport is short, through `useCellEditorForm`'s three
- * forms — the fold decides the form, the window decides the tab — and it carries **no Speed tab**,
- * because Speed is the ShowBar's chip there. With Colour and Spread still to land that sheet has
- * nothing to show yet, so `SideSheetOverlay` renders nothing and the page strip's button says why.
+ * **Off the desk board the rail is not drawn** — below `md`, as it never was, and on the short
+ * board (`BuskingView`'s `board`), where a docked 288px rail would leave the page a bank four pads
+ * wide: the sheet is `SideSheetOverlay`, a bottom sheet on an upright phone and a right-hand
+ * overlay where the viewport is short, through `useCellEditorForm`'s three forms — the fold
+ * decides the form, the window decides the tab — and it carries **no Speed tab**, because Speed is
+ * the ShowBar's chip below `md` and the bar is on screen on the short board too. It opens from the
+ * page strip's button onto Colour.
  *
  * The palette still replaces this whole region while editing; that swap is `BuskingView`'s.
  */
@@ -67,10 +71,12 @@ export function sideSheetTabs(form: 'docked' | CellEditorForm): readonly TabSpec
 export interface SideSheetProps {
   projectId: number
   selectedTargets: Map<string, BuskingTarget>
+  /** The selection's attribute mask, for the Colour tab's header pill. Null is every attribute. */
+  families: AttributeFamily[] | null
 }
 
-/** The docked sheet, `md` and up: the fold when `busk.sheet` is `none`, else the tab strip and the tab. */
-export function SideSheet({ projectId, selectedTargets }: SideSheetProps) {
+/** The docked sheet, on the desk board: the fold when `busk.sheet` is `none`, else the tab strip and the tab. */
+export function SideSheet({ projectId, selectedTargets, families }: SideSheetProps) {
   const sheet = useBuskSheet()
   const tabs = sideSheetTabs('docked')
   const open = tabs.find((tab) => tab.id === sheet)
@@ -111,17 +117,21 @@ export function SideSheet({ projectId, selectedTargets }: SideSheetProps) {
           Its own `border-l` continues the strip's, so the region has one left edge, not two. */}
       <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1">
         {open.id === 'speed' && <BuskSpeedRail />}
+        {open.id === 'colour' && (
+          <ColourSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+        )}
       </div>
     </div>
   )
 }
 
 /**
- * The sheet below `md`, as a bottom sheet or a right-hand sheet. Open while `busk.sheet` names a
- * tab this form offers; closing writes `none`, the same fact the fold chevron writes. Nothing to
- * show until Colour or Spread lands, so today it renders no content and never opens.
+ * The sheet off the desk board — below `md`, and on the short board — as a bottom sheet or a
+ * right-hand sheet. Open while `busk.sheet` names a tab this form offers; closing writes `none`,
+ * the same fact the fold chevron writes. Colour is the tab it opens onto; on the short board it
+ * takes the two-column compact layout, since that form exists for a viewport with no height.
  */
-export function SideSheetOverlay() {
+export function SideSheetOverlay({ projectId, selectedTargets, families }: SideSheetProps) {
   const form = useCellEditorForm()
   const sheet = useBuskSheet()
   const tabs = sideSheetTabs(form)
@@ -155,6 +165,16 @@ export function SideSheetOverlay() {
             </button>
           ))}
         </div>
+        {open?.id === 'colour' && (
+          <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
+            <ColourSheet
+              projectId={projectId}
+              selectedTargets={selectedTargets}
+              families={families}
+              compact={form === 'side-sheet'}
+            />
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )

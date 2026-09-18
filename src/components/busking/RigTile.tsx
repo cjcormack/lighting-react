@@ -17,6 +17,7 @@ import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRig
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
 import { FixtureAppearanceSource, type FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { rigTileId, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
+import { LiveAppearanceReporter } from '@/lib/liveAppearance'
 import type { EffectPresence } from './buskingTypes'
 import { RIG_DROP_DEPTH, type RigDropData, type RigTileDragData } from './buskDnd'
 import { useRigEdit } from './RigEditProvider'
@@ -282,17 +283,21 @@ function TileLive({
   return (
     <FixtureAppearanceSource patch={patch} fixture={fixture} fixtureType={fixtureType}>
       {(appearance) => (
-        <LiveBar
-          appearance={appearance}
-          slices={
-            tile.kind === 'fixture'
-              ? null
-              : cells.map((cell) => allCells.findIndex((candidate) => candidate.key === cell.key))
-          }
-          pips={tile.kind === 'fixture' && tile.pips ? cells : []}
-          allCells={allCells}
-          selectedCells={selectedCells}
-        />
+        <>
+          {/* The Colour tab's *Pick* reads what this leaf resolved (`lib/liveAppearance.ts`). */}
+          <LiveAppearanceReporter fixtureKey={tile.patch.key} appearance={appearance} />
+          <LiveBar
+            appearance={appearance}
+            slices={
+              tile.kind === 'fixture'
+                ? null
+                : cells.map((cell) => allCells.findIndex((candidate) => candidate.key === cell.key))
+            }
+            pips={tile.kind === 'fixture' && tile.pips ? cells : []}
+            allCells={allCells}
+            selectedCells={selectedCells}
+          />
+        </>
       )}
     </FixtureAppearanceSource>
   )
