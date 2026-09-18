@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { Gauge, Palette, PanelRightClose, Waves, type LucideIcon } from 'lucide-react'
 import {
   Sheet,
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { BuskSpeedRail } from './BuskSpeedRail'
 import { ColourSheet } from './ColourSheet'
 import { SideSheetFold } from './SideSheetFold'
+import { SpreadSheet, type SpreadSeed } from './SpreadSheet'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
@@ -21,9 +23,16 @@ import type { BuskingTarget } from './buskingTypes'
  *
  * **Speed is `BuskSpeedRail` unchanged**, mounted here and nowhere else in play mode. **Colour is
  * `ColourSheet`** (D8): the colour editor's body hosted here, writing literals to Local for the
- * selection. Spread is session 6, and until it lands the strip **hides** it rather than drawing a
- * tab with an empty state (`LIVE_SHEET_TABS` in `lib/buskWindow.ts` is the one list): a tab that
- * opens onto nothing is a promise the desk cannot keep.
+ * selection. **Spread is `SpreadSheet`** (D9, D10): two intents the desk resolves per head, and a
+ * preview drawn from its answer. `LIVE_SHEET_TABS` in `lib/buskWindow.ts` is still the one list —
+ * a fourth tab would be hidden there until it landed, because a tab that opens onto nothing is a
+ * promise the desk cannot keep.
+ *
+ * **The Colour tab's *Second colour* switch opens Spread with *From* set.** The hand-over is a
+ * `SpreadSeed` held by whichever host mounts the two tabs — they are never mounted together, so
+ * the seed travels through the host's state: the switch writes it and the fact, and `SpreadSheet`
+ * applies it once and asks for it to be dropped, so a later visit to the tab by any other door
+ * does not re-apply a stale colour.
  *
  * **The sheet is one fact, `busk.sheet`, and the fold is `none`.** There is no `sheetOpen`
  * beside it, whatever `Focus.dc.html`'s older sketch lists — the fold chevron writes `none`, a tab
@@ -75,9 +84,24 @@ export interface SideSheetProps {
   families: AttributeFamily[] | null
 }
 
+/**
+ * The *Second colour* hand-over, as one hook both hosts share: the seed, the switch's handler
+ * (which also opens the tab), and the drop the Spread tab calls once it has read it.
+ */
+function useSpreadSeed() {
+  const [seed, setSeed] = useState<SpreadSeed | null>(null)
+  const onSpread = useCallback((from: { r: number; g: number; b: number }) => {
+    setSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
+    setBuskSheet('spread')
+  }, [])
+  const onSeedConsumed = useCallback(() => setSeed(null), [])
+  return { seed, onSpread, onSeedConsumed }
+}
+
 /** The docked sheet, on the desk board: the fold when `busk.sheet` is `none`, else the tab strip and the tab. */
 export function SideSheet({ projectId, selectedTargets, families }: SideSheetProps) {
   const sheet = useBuskSheet()
+  const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs('docked')
   const open = tabs.find((tab) => tab.id === sheet)
   if (open == null) {
@@ -118,7 +142,16 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
       <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1">
         {open.id === 'speed' && <BuskSpeedRail />}
         {open.id === 'colour' && (
-          <ColourSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+          <ColourSheet projectId={projectId} selectedTargets={selectedTargets} families={families} onSpread={onSpread} />
+        )}
+        {open.id === 'spread' && (
+          <SpreadSheet
+            projectId={projectId}
+            selectedTargets={selectedTargets}
+            families={families}
+            seed={seed}
+            onSeedConsumed={onSeedConsumed}
+          />
         )}
       </div>
     </div>
@@ -128,12 +161,14 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
 /**
  * The sheet off the desk board — below `md`, and on the short board — as a bottom sheet or a
  * right-hand sheet. Open while `busk.sheet` names a tab this form offers; closing writes `none`,
- * the same fact the fold chevron writes. Colour is the tab it opens onto; on the short board it
- * takes the two-column compact layout, since that form exists for a viewport with no height.
+ * the same fact the fold chevron writes. It carries Colour and Spread; Colour is the tab the page
+ * strip's button opens onto, and on the short board both take their compact layout, since that
+ * form exists for a viewport with no height.
  */
 export function SideSheetOverlay({ projectId, selectedTargets, families }: SideSheetProps) {
   const form = useCellEditorForm()
   const sheet = useBuskSheet()
+  const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs(form)
   const open = tabs.find((tab) => tab.id === sheet)
   return (
@@ -172,6 +207,19 @@ export function SideSheetOverlay({ projectId, selectedTargets, families }: SideS
               selectedTargets={selectedTargets}
               families={families}
               compact={form === 'side-sheet'}
+              onSpread={onSpread}
+            />
+          </div>
+        )}
+        {open?.id === 'spread' && (
+          <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
+            <SpreadSheet
+              projectId={projectId}
+              selectedTargets={selectedTargets}
+              families={families}
+              compact={form === 'side-sheet'}
+              seed={seed}
+              onSeedConsumed={onSeedConsumed}
             />
           </div>
         )}

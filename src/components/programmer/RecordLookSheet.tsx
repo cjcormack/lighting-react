@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Loader2, XCircle } from 'lucide-react'
 import {
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import type { CueTarget } from '@/api/cuesApi'
 import { formatError } from '@/lib/formatError'
 import { useLookListQuery } from '@/store/looks'
 import { useRecordLookMutation } from '@/store/programmerOps'
@@ -44,6 +45,12 @@ export interface RecordLookSheetProps {
   projectId: number
   /** Preselect a Look to write into — set when opened from a library row. */
   targetLookId?: number
+  /**
+   * The selection to record over, when the opener is not the programmer's list — the busk view's
+   * Spread tab, whose selection is the desk's (groups as groups; the route expands them). Absent,
+   * the sheet reads the programmer scope's row selection as it always has.
+   */
+  targets?: CueTarget[]
 }
 
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
@@ -98,6 +105,7 @@ export function RecordLookSheet({
   onOpenChange,
   projectId,
   targetLookId,
+  targets,
 }: RecordLookSheetProps) {
   const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId })
   const [record, { isLoading, error, reset }] = useRecordLookMutation()
@@ -105,8 +113,14 @@ export function RecordLookSheet({
   // The programmer sheet's selection, published into the store by its list container — the same
   // read `RecordSheet` makes, and for the same reason: this sheet opens from the toolbar and from
   // the library, and neither has a prop path to the list holding the selection.
-  const selectedKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
+  const programmerKeys = useSelector((s: Parameters<typeof selectTargetKeys>[0]) =>
     selectTargetKeys(s, 'programmer'),
+  )
+  // The opener's own selection wins where it has one; the programmer scope is the fallback and
+  // not a union, since a busk window's Spread tab does not share the programmer list's scope.
+  const selection = useMemo<CueTarget[]>(
+    () => targets ?? programmerKeys.map((key) => ({ type: 'fixture' as const, key })),
+    [targets, programmerKeys],
   )
 
   const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
@@ -151,7 +165,7 @@ export function RecordLookSheet({
   const canSubmit = creating ? name.trim() !== '' : lookId !== ''
   // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected) while
   // this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
-  const scoped = selectedOnly && selectedKeys.length > 0
+  const scoped = selectedOnly && selection.length > 0
 
   const submit = async () => {
     try {
@@ -163,9 +177,7 @@ export function RecordLookSheet({
         lookId: creating ? undefined : Number(lookId),
         name: creating ? name.trim() : undefined,
         notes: creating && notes.trim() !== '' ? notes.trim() : undefined,
-        targets: scoped
-          ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
-          : undefined,
+        targets: scoped ? selection : undefined,
         effectIds: effectIds.length > 0 ? effectIds : undefined,
       }).unwrap()
       setResult(response)
@@ -267,19 +279,26 @@ export function RecordLookSheet({
               <input
                 type="checkbox"
                 checked={scoped}
-                disabled={selectedKeys.length === 0}
+                disabled={selection.length === 0}
                 onChange={(e) => setSelectedOnly(e.target.checked)}
                 className="size-4"
               />
-              Selected fixtures only
-              {selectedKeys.length > 0 && (
-                <span className="text-muted-foreground tabular-nums">({selectedKeys.length})</span>
+              {targets != null ? 'Selected targets only' : 'Selected fixtures only'}
+              {selection.length > 0 && (
+                // From the busk view the selection can hold a group, which the route expands to
+                // every member — so the count is of targets there, never of heads.
+                <span className="text-muted-foreground tabular-nums">
+                  ({selection.length}{targets != null && selection.some((t) => t.type === 'group') ? ', groups expanded' : ''})
+                </span>
               )}
             </label>
             <p className="text-xs text-muted-foreground">
-              {selectedKeys.length === 0
-                ? 'Select fixtures on the values sheet to record just those heads — recommended, ' +
-                  'or the look names every head the programmer is holding.'
+              {selection.length === 0
+                ? targets != null
+                  ? 'Select targets on the rig band to record just those heads — recommended, ' +
+                    'or the look names every head the programmer is holding.'
+                  : 'Select fixtures on the values sheet to record just those heads — recommended, ' +
+                    'or the look names every head the programmer is holding.'
                 : 'Record only these heads. A look names its own fixtures, so this is what decides ' +
                   'where recalling it lands.'}
             </p>

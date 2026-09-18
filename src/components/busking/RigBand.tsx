@@ -39,7 +39,7 @@ import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from 
 import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
-import { setBuskFocus, setBuskRigRows, useBuskRigRows } from '@/lib/buskWindow'
+import { setBuskFocus, setBuskRigRows, setBuskSheet, useBuskRigRows } from '@/lib/buskWindow'
 import {
   applyDrop,
   effectiveRig,
@@ -76,8 +76,9 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * set of rows like any other, only its tiles carry no address and take no drop.
  *
  * **A press is a plain toggle**, as it was. The label row is the design's (`Main.dc.html`): the
- * selection summary, the family pill, the desk chip, then the verbs — *Cells* and *Spread…* drawn
- * **inert** until sessions 7 and 6 land them, Locate, Highlight, Clear — and the `n of N rows`
+ * selection summary, the family pill, the desk chip, then the verbs — *Cells* drawn **inert**
+ * until session 7 lands it, *Spread…* (opens the side sheet's Spread tab), Locate, Highlight,
+ * Clear — and the `n of N rows`
  * handle under the rows. Below `md` the band is one row with a row chip and the verbs in a menu
  * (the phone board), and there is no editing: the palette is not drawn there either.
  *
@@ -342,7 +343,7 @@ function RigBandBody({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled title="The Spread tab arrives with session 6">
+              <DropdownMenuItem onSelect={() => setBuskSheet('spread')} title="Spread a value across the selection">
                 Spread…
               </DropdownMenuItem>
               <DropdownMenuItem disabled={locateTargets.length === 0} onSelect={locateSelection}>
@@ -356,14 +357,15 @@ function RigBandBody({
           </DropdownMenu>
         ) : (
           <>
-            {/* *Spread…* is session 6's — a selection verb beside Locate and Highlight that opens
-                the Spread tab pre-aimed at the selection. */}
+            {/* *Spread…* is a selection verb beside Locate and Highlight: it opens the Spread tab,
+                which reads the selection, and writes nothing but the sheet fact — below `md` the
+                overlay carries the tab, so the same write opens it there. */}
             <Button
               variant="ghost"
               size="sm"
               className="h-6 px-2 text-xs"
-              disabled
-              title="Spread a value across the selection — arrives with session 6"
+              onClick={() => setBuskSheet('spread')}
+              title="Spread a value across the selection"
             >
               Spread…
             </Button>

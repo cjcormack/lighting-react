@@ -53,12 +53,13 @@ export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
 export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread']
 
 /**
- * The tabs that have landed. Spread is session 6, and until then the sheet **hides** it — a tab
- * with an empty state is a promise the desk cannot keep — so a picker offers only these, and a fact
- * naming a hidden tab draws the fold. This is the one list: adding a tab here lights it in the
+ * The tabs that have landed — all three, since session 6 lit Spread. The list stays the one
+ * gate rather than collapsing into [BUSK_SHEETS]: a fourth tab would land the way Colour and
+ * Spread did, hidden until its session, because a tab with an empty state is a promise the desk
+ * cannot keep, and a fact naming a hidden tab draws the fold. Adding a tab here lights it in the
  * sheet's strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_ROWS_KEY = 'busk.rigRows'
@@ -124,8 +125,8 @@ export function isLiveSheetTab(value: unknown): value is BuskSheetTab {
 
 /**
  * The tab the sheet was last open on — what `toggle` unfolds onto. `speed` until one has been,
- * and **only ever a live tab**: the fact itself accepts the whole vocabulary (a `sheet=spread`
- * link may arrive before session 6 and is drawn as the fold), but remembering a hidden tab would
+ * and **only ever a live tab**: the fact itself accepts the whole vocabulary (a link naming a tab
+ * that has not landed is drawn as the fold), but remembering a hidden tab would
  * make the toggle flip fold ↔ fold for the life of the tab, which is the MIDI `BuskSheetToggle`
  * door silently dead.
  */

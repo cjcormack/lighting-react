@@ -18,6 +18,8 @@ import {
   setBuskRigRows,
   setBuskSheet,
   toggleBuskSheet,
+  isLiveSheetTab,
+  LIVE_SHEET_TABS,
   useBuskFocus,
   useBuskRigRows,
   useBuskSheet,
@@ -160,15 +162,21 @@ describe('the sheet is one fact', () => {
     expect(getBuskSheet()).toBe('speed')
   })
 
-  it('remembers only a live tab, so a hidden one cannot make the toggle flip fold to fold', () => {
-    // A `?sheet=spread` link before session 6: drawn as the fold, and the MIDI BuskSheetToggle
-    // must still open something.
+  it('remembers Spread once it has been open, so the toggle unfolds back onto it', () => {
+    // Session 6 lit the third tab; a `?sheet=spread` arrival is an ordinary open now, and the
+    // MIDI BuskSheetToggle folds and unfolds it like the other two.
     applyBuskArrival({ focus: null, sheet: 'spread' })
     expect(getBuskSheet()).toBe('spread')
     act(() => toggleBuskSheet())
-    expect(getBuskSheet()).toBe('speed')
-    act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('none')
+    act(() => toggleBuskSheet())
+    expect(getBuskSheet()).toBe('spread')
+  })
+
+  it('still gates the memory on the live list, so a fourth tab could land hidden the way the third did', () => {
+    expect(isLiveSheetTab('spread')).toBe(true)
+    expect(isLiveSheetTab('cheese')).toBe(false)
+    expect(LIVE_SHEET_TABS).toEqual(['speed', 'colour', 'spread'])
   })
 
   it('remembers Colour once it has been open, so the toggle unfolds back onto it', () => {

@@ -53,9 +53,14 @@ import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
  * allowed and useful: an effect template's own colour parameter may name a **value** colour
  * template, which is what this picker offers it.
  */
-function isOfferable(template: TemplateSummary): boolean {
+/**
+ * The one statement of which templates a colour *reference* may name — an FX colour parameter's
+ * chips here, and the Spread tab's From/To picker (which adds a requirement of its own on top).
+ */
+export function isOfferableColourTemplate(template: TemplateSummary): boolean {
   return template.family === 'COLOUR' && template.isGeneric && template.kind === 'value'
 }
+const isOfferable = isOfferableColourTemplate
 
 export interface ColourTemplates {
   /** The offerable templates, in library order. Empty while loading, or outside a project. */

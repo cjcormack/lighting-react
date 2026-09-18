@@ -303,6 +303,71 @@ export interface ProgrammerConflict {
   cueId?: number
 }
 
+// ── Spread ──────────────────────────────────────────────────────────────────
+
+/** Titan's four fan shapes, as `fx/SpreadPlan.kt` names them. */
+export type SpreadCurve = 'LINE' | 'MIRROR' | 'ARROW' | 'WINGS'
+
+/**
+ * A `DistributionStrategy` name the desk resolves through `byName`: `LINEAR` is rig order
+ * (`state/BuskRigOrder.kt`), `REVERSE` the other way, `CENTER_OUT` folds the two ends together,
+ * `RANDOM` is a permutation seeded from the request. The strategy has more names (`EDGES_IN`,
+ * `PING_PONG`, `SPLIT`, `POSITIONAL`, `UNIFIED`); the Spread tab offers these four, and
+ * `lib/spreadIntent.ts` says which of the design's labels has no desk order yet.
+ */
+export type SpreadOrder = 'LINEAR' | 'REVERSE' | 'CENTER_OUT' | 'RANDOM'
+
+/** Whether a multi-head fixture is one step or each of its cells is. */
+export type SpreadOver = 'HEADS' | 'CELLS'
+
+/**
+ * `POST /projects/{id}/programmer/spread` — a mirror of lighting7's `SpreadRequest`
+ * (`routes/programmerSpread.kt`). `from` and `to` are serialised `TemplateIntent`s of the
+ * property's shape, or `tmpl:{uuid}` for a colour; the desk interpolates in the intent's own space
+ * and resolves one literal per head, so nothing here is a value (busk-further plan D9).
+ */
+export interface SpreadRequest {
+  projectId: number
+  targets: CueTarget[]
+  /** The selection's attribute mask; absent is every attribute. */
+  families?: PropertyMaskGroup[]
+  /** A `TemplateProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
+  property: string
+  from: string
+  to: string
+  curve?: SpreadCurve
+  order?: SpreadOrder
+  parts?: number
+  over?: SpreadOver
+  fadeMs?: number
+  /** For `order = RANDOM`. */
+  seed?: number
+}
+
+/** One head's literal: the head, the property it actually landed on, and the intent it was given. */
+export interface SpreadWrite {
+  target: CueTarget
+  propertyName: string
+  value: string
+}
+
+export interface SpreadSkip {
+  target: CueTarget
+  reason: string
+}
+
+/**
+ * The desk's answer: what it wrote, in the order it used (rig order), and what it could not.
+ * Every list is optional on this side because the server omits a defaulted empty collection
+ * (`encodeDefaults = false`), the `TemplateSummary.rows` rule.
+ */
+export interface SpreadResponse {
+  written?: SpreadWrite[]
+  skipped?: SpreadSkip[]
+  /** The property's family, when the mask kept it out — then nothing was written. */
+  skippedFamilies?: string[]
+}
+
 export const programmerOpsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     recordProgrammer: build.mutation<RecordResponse, RecordRequest>({
@@ -388,7 +453,26 @@ export const programmerOpsApi = restApi.injectEndpoints({
           : [],
     }),
 
-
+    /**
+     * `POST /projects/{id}/programmer/spread` — fan, resolved on the desk (busk-further plan D9).
+     *
+     * A REST mutation for this file's reason: the Spread tab's preview strip is drawn from the
+     * structured reply and nothing else, and the programmer WS channel has no reply to draw from.
+     * It invalidates nothing — every write lands as an ordinary Local entry and rides
+     * `programmer.entryChanged`, which is how the rig tiles and the grid already learn of it.
+     *
+     * **Not** in `SILENT_ENDPOINTS`: the two 400s (`SPREAD_INVALID`, `SPREAD_NEEDS_SELECTION`) are
+     * toasted by `errorToastMiddleware` under the endpoint's own id, so a Live gesture that keeps
+     * failing replaces one toast rather than stacking twenty. The tab pre-empts the second with its
+     * own sentence (the strip's) and never sends under an empty selection.
+     */
+    spread: build.mutation<SpreadResponse, SpreadRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/programmer/spread`,
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -398,4 +482,5 @@ export const {
   useRecordLookMutation,
   useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
+  useSpreadMutation,
 } = programmerOpsApi

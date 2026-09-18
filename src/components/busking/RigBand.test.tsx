@@ -7,7 +7,7 @@ import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { resetDeskFollowStores } from '@/lib/deskFollow'
-import { getBuskFocus, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
+import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
@@ -18,8 +18,8 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  * The first test is the migration: an empty rig draws what the target band drew — every group then
  * every fixture, groups badged. The rest are the band's own: a built rig draws its rows; the three
  * cell modes expand; a tile press toggles the whole fixture (and a cell tile its cell) through the
- * one `{type, key}` shape; the rows handle clamps; the two verbs that belong to later sessions are
- * drawn inert; and below `md` the band is one row with a row chip.
+ * one `{type, key}` shape; the rows handle clamps; *Cells* (session 7's) is drawn inert and
+ * *Spread…* opens the side sheet's tab; and below `md` the band is one row with a row chip.
  */
 
 let groups: GroupSummary[] = []
@@ -267,12 +267,22 @@ describe('the rig band', () => {
     expect(screen.getByText('nothing selected').className).toContain('min-w-[8rem]')
   })
 
-  it('draws Cells and Spread… inert, and the family pill', () => {
+  it('draws Cells inert and the family pill, and Spread… opens the side sheet’s Spread tab', () => {
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], {}, ['COLOUR'])
     expect(screen.getByRole('button', { name: 'Cells: All' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Spread…' })).toBeDisabled()
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
+    expect(getBuskSheet()).not.toBe('spread')
+    fireEvent.click(screen.getByRole('button', { name: 'Spread…' }))
+    // The verb writes the sheet fact and nothing else: the selection is untouched.
+    expect(getBuskSheet()).toBe('spread')
+  })
+
+  it('offers Spread… in the compact verbs menu too, opening the same tab', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { compact: true })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Spread…' }))
+    expect(getBuskSheet()).toBe('spread')
   })
 
   it('clamps the rows handle to 1…N, and the handle writes the window’s fact', () => {

@@ -367,12 +367,13 @@ describe('the two doors out', () => {
     ])
   })
 
-  it('keeps the Second colour switch inert until session 6 wires it, and hands it the colour once it does', () => {
+  it('hands the Second colour switch the current colour once wired, and draws it inert on a host with no Spread tab', () => {
     const { unmount } = draw([group])
     expect(screen.getByRole('switch')).toBeDisabled()
     unmount()
     const onSpread = vi.fn()
     draw([group], { onSpread })
+    expect(screen.getByRole('switch')).toBeEnabled()
     fireEvent.change(screen.getByLabelText('B'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('switch'))
     expect(onSpread).toHaveBeenCalledWith({ r: 255, g: 0, b: 7, w: 0, a: 0, uv: 0 })

@@ -832,13 +832,15 @@ tab strip and the tab when the fact names a live tab and `SideSheetFold` (44px: 
 1's tempo, one glyph per live tab, the selection's colour off the stage's colour dispatch, the head
 count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
 so a MIDI `{sheet: 'toggle'}` unfolds onto the tab the operator had. **Speed is `BuskSpeedRail`
-mounted unchanged** inside the sheet and **Colour is `ColourSheet`** (below); Spread is session 6
-and the strip **hides** it until then (`LIVE_SHEET_TABS` is the one list — adding a tab there
-lights it in the strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's
-memory at once): a tab with an empty state is a promise the desk cannot keep, and a fact naming a
-hidden tab draws the fold. Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on
-an upright phone, a right-hand sheet where the viewport is short, through `useCellEditorForm`'s
-forms — opened from the page strip's *Sheet* button onto Colour, and it carries **no Speed tab**
+mounted unchanged** inside the sheet, **Colour is `ColourSheet`** and **Spread is `SpreadSheet`**
+(both below). All three have landed, and `LIVE_SHEET_TABS` stays the one list rather than
+collapsing into the sheet vocabulary: a fourth tab would land the way Colour and Spread did,
+**hidden** there until its session — adding a tab to that list lights it in the strip, the fold's
+glyph row, the Screens sheet's Sheet segment and the toggle's memory at once — because a tab with
+an empty state is a promise the desk cannot keep, and a fact naming a hidden tab draws the fold.
+Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upright phone, a
+right-hand sheet where the viewport is short, through `useCellEditorForm`'s forms — opened from
+the page strip's *Sheet* button onto Colour, carrying **Colour and Spread** and **no Speed tab**
 (Speed is the ShowBar's chip there). The palette still replaces the whole region while editing.
 
 **The Colour tab writes literals to Local, and only that** (D8, `components/busking/ColourSheet.tsx`).
@@ -881,7 +883,71 @@ normalised to full brightness, emitters folded in — and **only heads with a co
 dispatch answers a gel or the default tungsten for a colourless head, which is no colour this sheet
 could write, so a dimmer-only par in the selection is neither read nor a reason to say *mixed*. The rig tiles report, and the sheet mounts a hidden leaf per
 selected head as well, so Pick answers in Pads focus with the tiles folded away. The *Second
-colour* switch is session 6's seam (`onSpread`), drawn inert until that tab lands.
+colour* switch hands the current channels to `onSpread`, which both sheet hosts wire
+(`SideSheet.tsx`'s `useSpreadSeed`): it opens the Spread tab with *From* set to their **RGB** —
+a colour intent has no emitter component, so a white or amber the tab was driving does not
+travel — through a seed the host holds and the Spread tab drops once it has read it, so a later
+visit by any other door is not re-seeded with a stale colour. A host with no Spread tab to open
+leaves `onSpread` out and the switch draws inert.
+
+**The Spread tab resolves on the desk, and the client never lerps** (D9,
+`components/busking/SpreadSheet.tsx`, `lib/spreadIntent.ts`). The tab sends two intents of one
+property's shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`
+(`useSpreadMutation` in `store/programmerOps.ts` — REST for that file's own reason, the structured
+reply); the desk interpolates in the intent's own space, resolves one literal per head through the
+same `TemplateResolver` a template click uses, writes each into Local as an ordinary entry (so it
+rides `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and
+answers what it wrote. Only the desk knows a group's member order, each head's range, which cells a
+fixture has and what a colour means on a head with amber — the same rule that keeps
+`templateIntent.ts` a serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per
+family over `templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference
+through `colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an
+emitter) and `spreadIntent.test.ts` asserts its import list reaches no resolver. **The preview
+strip is drawn from the answer** — one bar per head, the `written[]` heads in the order the desk
+wrote them (rig order) and then the `skipped[]` heads, dimmed with the desk's reason on their
+titles, a multi-head fixture's cells folded into its bar (`previewBarsOf`). A skipped head sits
+after the written ones rather than in its rig position because the answer is two lists with no
+index, and recovering a position here would be a second copy of an order the desk owns. The strip
+is empty until the desk has answered, and it is cleared by a refusal, a property change and a
+selection change — it says it is the answer to *this* spread, and must not outlive the state it
+describes. The strip draws the answer to the **latest** request only: Live keeps several in
+flight and their answers can land out of order;
+`SpreadSheet.test.tsx` asserts the file never imports `sheet/fanMath.ts`, the client fan that lerps
+bytes over rows it can see. Curves are Titan's four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each
+drawn as a picture); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
+`LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
+for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
+an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
+is Rig again), offering it as something it is not would be worse than withholding it, and a
+disabled item in the row wrapped at 288px and read as a control that was merely off. A position
+spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
+convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
+hard stop. *Over: Cells* is enabled only where a
+selected fixture has elements, with the cell count (`selectedCellCount`). **Live** sends every
+adjustment through `useLivePush` with an equality over the whole request, the release read from the
+window as the Colour tab's is; off, only *Apply* writes, and an explicit Apply always sends. The
+window release flushes only while Live is on, since the switch can be toggled from the keyboard
+with no `pointerup` to clear the gesture; the typed fields keep a draft and commit only a number,
+so clearing one writes nothing and a leading minus can be typed; and the `skippedFamilies` toast is
+keyed like the endpoint's error toast, since a Live drag under a mask answers it on every write.
+Under an empty selection nothing is sent and the strip's own sentence is toasted — the desk would
+answer `SPREAD_NEEDS_SELECTION` otherwise, and `errorToastMiddleware` renders every 400 (the
+mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replaces one toast), so the
+tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property outside the
+selection's families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape —
+toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the mask names that
+the selection can take. The colour endpoints share one `ColourPickerBody` for whichever end is
+being edited, and its `combinedCss` is a **seed** that moves only when the tab means the knob to
+move (switching ends, Swap, the Colour tab's hand-over) — never the picker's own writes, for the
+ping-pong reason documented on that prop.
+
+**A spread is a result, not a template** (D10). *Save as Look…* opens `RecordLookSheet` over the
+selection — `record-look`, the same gesture every busked state is kept by; the sheet gained an
+optional `targets` prop for an opener whose selection is the desk's rather than the programmer
+list's — and nothing on the tab mints a template. A "spread template" would need a second grammar
+(two intents plus a curve) and a resolver that knows the selection's order at cook time, which no
+template does. The band's *Spread…* verb and its compact menu item open the tab, writing
+`busk.sheet` and nothing else.
 
 **Short beats narrow.** `BuskingView` draws one of three boards: `md` says desk or narrow, and its
 own copy of the 500px height query (`shortViewport.test.ts` pins the spelling) says whether a
@@ -953,8 +1019,9 @@ drawn and pressed, and **a cell is `{type: 'fixture', key: element.key}`**, the 
 `useBuskingSelection` rehydrates a cell target by looking the key up in its parent's own
 `elements`, so a fixture tile reads `some` with a `1 of 4` count when a cell is selected elsewhere.
 The pips are **read-only until session 7**: a tap on the tile is the whole fixture, a run tile
-toggles each of its cells, and the *Cells* chip and *Spread…* are drawn **inert** — present so the
-label row has its shape, disabled with the session that lands them on their `title`.
+toggles each of its cells, and the *Cells* chip is drawn **inert** — present so the label row has
+its shape, disabled with the session that lands it on its `title`. *Spread…* beside it is live: it
+opens the side sheet's Spread tab (§Focus and the side sheet).
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
 leaf per fixture tile — the third reader of `components/fixtures/fixtureAppearance.tsx` beside the

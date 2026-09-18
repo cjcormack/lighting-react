@@ -1,20 +1,32 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { getBuskSheet, resetBuskWindowStores, setBuskSheet } from '@/lib/buskWindow'
+import { LIVE_SHEET_TABS, getBuskSheet, resetBuskWindowStores, setBuskSheet } from '@/lib/buskWindow'
 import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
- * The side sheet (busk-further plan D7): two live tabs — Speed and, since session 5, Colour — and
- * the fold; the fold keeps the beat, master 1's tempo, the tab glyphs and the selection's colour;
- * off the desk board the sheet is an overlay carrying no Speed tab. The sheet is one fact —
- * `busk.sheet`, `none` for the fold.
+ * The side sheet (busk-further plan D7): three live tabs — Speed, Colour (session 5) and Spread
+ * (session 6) — and the fold; the fold keeps the beat, master 1's tempo, the tab glyphs and the
+ * selection's colour; off the desk board the sheet is an overlay carrying Colour and Spread and no
+ * Speed tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
+ * *Second colour* switch opens Spread with *From* set through the host's seed.
  */
 
 vi.mock('./BuskSpeedRail', () => ({ BuskSpeedRail: () => <div data-testid="speed-rail" /> }))
 vi.mock('./ColourSheet', () => ({
-  ColourSheet: ({ compact }: { compact?: boolean }) => <div data-testid="colour-sheet" data-compact={compact ? 'true' : 'false'} />,
+  ColourSheet: ({ compact, onSpread }: { compact?: boolean; onSpread?: (from: { r: number; g: number; b: number }) => void }) => (
+    <div data-testid="colour-sheet" data-compact={compact ? 'true' : 'false'}>
+      <button type="button" onClick={() => onSpread?.({ r: 245, g: 179, b: 66 })}>Second colour</button>
+    </div>
+  ),
+}))
+vi.mock('./SpreadSheet', () => ({
+  SpreadSheet: ({ compact, seed, onSeedConsumed }: { compact?: boolean; seed?: { from: { r: number; g: number; b: number }; key: number } | null; onSeedConsumed?: () => void }) => (
+    <div data-testid="spread-sheet" data-compact={compact ? 'true' : 'false'} data-seed={seed == null ? '' : JSON.stringify(seed.from)}>
+      <button type="button" onClick={() => onSeedConsumed?.()}>consume</button>
+    </div>
+  ),
 }))
 vi.mock('@/components/BeatIndicator', () => ({
   BeatIndicator: ({ master }: { master?: { index: number } }) => <span data-testid="beat" data-master={master?.index} />,
@@ -34,7 +46,7 @@ vi.mock('@/components/fixtures/fixtureAppearance', () => ({
     children({ color: '#ff0000', intensity: 1 }),
 }))
 
-import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
+import { SIDE_SHEET_TABS, SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
 
 function surface({ narrow = false, short = false } = {}) {
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -66,14 +78,34 @@ afterEach(() => {
 })
 
 describe('docked, on the desk board', () => {
-  it('offers Speed and Colour, with Spread hidden until its session lands', () => {
+  it('offers Speed, Colour and Spread', () => {
     setBuskSheet('speed')
     render(<SideSheet {...props} />)
     const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour', 'Spread'])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('speed-rail')).toBeInTheDocument()
-    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour'])
+    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour', 'spread'])
+  })
+
+  it('mounts the Spread tab in the panel when the fact names it', () => {
+    setBuskSheet('spread')
+    render(<SideSheet {...props} />)
+    expect(screen.getByRole('tab', { name: 'Spread' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('spread-sheet')).toHaveAttribute('data-compact', 'false')
+    expect(screen.getByTestId('spread-sheet')).toHaveAttribute('data-seed', '')
+    expect(screen.queryByTestId('colour-sheet')).toBeNull()
+  })
+
+  it('opens Spread with From set from the Colour tab’s Second colour switch, and drops the seed once it is read', () => {
+    setBuskSheet('colour')
+    render(<SideSheet {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Second colour' }))
+    expect(getBuskSheet()).toBe('spread')
+    expect(screen.getByTestId('spread-sheet')).toHaveAttribute('data-seed', JSON.stringify({ r: 245, g: 179, b: 66 }))
+    // Read once: the tab asks the host to drop it, so a later visit by another door is not re-seeded.
+    fireEvent.click(screen.getByRole('button', { name: 'consume' }))
+    expect(screen.getByTestId('spread-sheet')).toHaveAttribute('data-seed', '')
   })
 
   it('mounts the Colour tab in the panel, full layout, when the fact names it', () => {
@@ -104,7 +136,7 @@ describe('docked, on the desk board', () => {
     expect(document.querySelector('[data-fold-heads]')).toHaveTextContent('7')
     expect((document.querySelector('[data-fold-colour]') as HTMLElement).style.background).toBe('rgb(255, 0, 0)')
     // One glyph per live tab; a tap unfolds onto it.
-    expect(screen.queryByRole('button', { name: 'Open the Spread tab' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open the Spread tab' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Open the Colour tab' }))
     expect(getBuskSheet()).toBe('colour')
   })
@@ -116,21 +148,33 @@ describe('docked, on the desk board', () => {
     expect(getBuskSheet()).toBe('speed')
   })
 
-  it('draws the fold for a fact naming a tab that has not landed', () => {
-    setBuskSheet('spread')
-    render(<SideSheet {...props} />)
-    expect(document.querySelector('[data-side-sheet="none"]')).not.toBeNull()
-    expect(screen.queryByRole('tablist')).toBeNull()
+  it('draws the fold for a fact naming a tab that has not landed — none today, so the gate is pinned on the list', () => {
+    // Every tab has landed; what remains is the mechanism a fourth tab would land through. The
+    // strip draws exactly the live list, and nothing outside `LIVE_SHEET_TABS` reaches it.
+    expect(sideSheetTabs('docked').every((tab) => LIVE_SHEET_TABS.includes(tab.id))).toBe(true)
+    expect(SIDE_SHEET_TABS.map((t) => t.id)).toEqual([...LIVE_SHEET_TABS])
   })
 })
 
 describe('the overlay, off the desk board', () => {
-  it('carries no Speed tab in any overlay form — Speed is the ShowBar’s chip there (D7)', () => {
-    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour'])
-    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour'])
+  it('carries Colour and Spread and no Speed tab in any overlay form — Speed is the ShowBar’s chip there (D7)', () => {
+    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour', 'spread'])
+    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour', 'spread'])
     // `popover` is what a 640–767px window answers, where the rail is still not drawn: an overlay
     // with a Speed tab there would open onto nothing.
-    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour'])
+    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread'])
+  })
+
+  it('opens onto Spread as a right-hand sheet on the short board, compact, and Second colour crosses over to it', () => {
+    surface({ short: true })
+    setBuskSheet('colour')
+    render(<SideSheetOverlay {...props} />)
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Second colour' }))
+    expect(getBuskSheet()).toBe('spread')
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('tab', { name: 'Spread' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(dialog).getByTestId('spread-sheet')).toHaveAttribute('data-compact', 'true')
+    expect(within(dialog).getByTestId('spread-sheet')).toHaveAttribute('data-seed', JSON.stringify({ r: 245, g: 179, b: 66 }))
   })
 
   it('opens onto Colour as a bottom sheet below md, full layout, and closing writes none', () => {

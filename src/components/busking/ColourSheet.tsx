@@ -78,8 +78,11 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * drag let go outside the sheet still ends the gesture here rather than leaving a stale flag for
  * the next pointer to flush.
  *
- * The *Second colour* switch is session 6's seam: it hands the current colour to `onSpread` as the
- * Spread tab's *From*, and is drawn inert until that tab lands.
+ * The *Second colour* switch hands the current channels to `onSpread`, and the Spread tab's
+ * *From* is their **RGB** — a colour intent has no emitter component, so a white or amber this tab
+ * was driving does not travel (`SpreadSeed` in `SpreadSheet.tsx` says the same). The side sheet's
+ * two hosts wire it (`SideSheet.tsx`'s `useSpreadSeed`), and a host with no Spread tab to open
+ * leaves it out, which draws the switch inert.
  */
 
 export interface ColourSheetProps {
@@ -87,7 +90,7 @@ export interface ColourSheetProps {
   selectedTargets: Map<string, BuskingTarget>
   /** The selection's attribute mask, for the header's pill. Null is every attribute. */
   families: AttributeFamily[] | null
-  /** Session 6 wires this: open the Spread tab with *From* set. Absent, the switch is inert. */
+  /** Open the Spread tab with *From* set to the current colour. Absent, the switch is inert. */
   onSpread?: (from: ColourChannels) => void
   /** Force the two-column layout; the cramped height query answers it otherwise. */
   compact?: boolean
@@ -208,8 +211,12 @@ export function planColourWrites(
   return writes
 }
 
-/** The selection as the emitter probe reads it — a group as its members, a cell as itself. */
-function writeTargetsOf(selected: readonly BuskingTarget[], fixtures: readonly Fixture[] | undefined): WriteTarget[] {
+/**
+ * The selection as the emitter probe reads it — a group as its members, a cell as itself. Exported
+ * for the Spread tab, whose family segment asks the same `targetFamilies` question of the same
+ * expansion, so the two tabs cannot count a selection's heads two ways.
+ */
+export function writeTargetsOf(selected: readonly BuskingTarget[], fixtures: readonly Fixture[] | undefined): WriteTarget[] {
   const out: WriteTarget[] = []
   for (const target of selected) {
     if (target.type === 'group') {
@@ -510,7 +517,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
           size="sm"
           className="h-7 text-xs"
           disabled={onSpread == null}
-          title={onSpread == null ? 'The Spread tab arrives with session 6' : 'Open the Spread tab with this colour as From'}
+          title={onSpread == null ? 'No Spread tab to open from here' : 'Open the Spread tab with this colour as From'}
           onClick={() => onSpread?.(channels)}
         >
           Second colour, spread across the selection
