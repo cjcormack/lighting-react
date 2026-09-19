@@ -367,15 +367,17 @@ describe('the two doors out', () => {
     ])
   })
 
-  it('hands the Second colour switch the current colour once wired, and draws it inert on a host with no Spread tab', () => {
+  it('hands Spread to a second colour… the current colour once wired, as a plain button — never a switch — and draws it inert on a host with no Spread tab', () => {
     const { unmount } = draw([group])
-    expect(screen.getByRole('switch')).toBeDisabled()
+    // A button with a verb, not a `role="switch"` that never reads checked: it opens a tab and holds no state.
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
     unmount()
     const onSpread = vi.fn()
     draw([group], { onSpread })
-    expect(screen.getByRole('switch')).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeEnabled()
     fireEvent.change(screen.getByLabelText('B'), { target: { value: '7' } })
-    fireEvent.click(screen.getByRole('switch'))
+    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 255, g: 0, b: 7, w: 0, a: 0, uv: 0 })
   })
 })

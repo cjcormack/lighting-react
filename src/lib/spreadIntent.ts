@@ -97,7 +97,7 @@ export function defaultSpreadEndpoints(property: TemplateProperty): { from: Spre
   }
 }
 
-/** A colour endpoint from the Colour tab's channels — what its *Second colour* switch hands over. */
+/** A colour endpoint from the Colour tab's channels — what its *Spread to a second colour…* button hands over. */
 export function colourEndpointOf(rgb: { r: number; g: number; b: number }, policy: WhitePolicy = 'extract'): SpreadEndpoint {
   return { kind: 'colour', hex: rgbToHex(rgb.r, rgb.g, rgb.b).toUpperCase(), policy }
 }

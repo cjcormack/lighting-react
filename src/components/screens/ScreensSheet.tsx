@@ -260,12 +260,15 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
   const shownPageId = pageFollows ? (deskPageId ?? null) : Number(options.page ?? NaN)
   const shownPage = pages?.find((page) => page.id === shownPageId) ?? null
 
-  // A following row's link carries no page on purpose: a null desk page is *not* the first page
-  // (§The busk layout), and writing the fallback would unlink the new window where this one
-  // follows. "Copied" is a claim about *this* link, so it clears the moment the link changes.
+  // A following row's link carries no page on purpose — the desk's page included: the desk's
+  // showing page is the desk's to say, and a link naming it would unlink the new window onto a
+  // page this one merely follows (a null desk page is *not* the first page either, §The busk
+  // layout). An unlinked row's link names its own page, resolved against the list so a page that
+  // is gone is not minted into a link. "Copied" is a claim about *this* link, so it clears the
+  // moment the link changes.
   const link = windowSetupUrl(row.name, row.view, {
     ...options,
-    ...(shownPage == null ? {} : { page: String(shownPage.id) }),
+    page: !pageFollows && shownPage != null ? String(shownPage.id) : '',
   })
   useEffect(() => setCopied(false), [link])
 

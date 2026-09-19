@@ -4,7 +4,7 @@ import { BeatIndicator } from '@/components/BeatIndicator'
 import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance'
 import { formatBpm } from '@/hooks/useBpmDraft'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { setBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
+import { setBuskSheet, toggleBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
 import { usePatchListQuery } from '@/store/patches'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
@@ -14,8 +14,10 @@ import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
  * readouts a busking operator glances at — the beat and master 1's tempo — the tab glyphs, so a
  * folded rail is still one tap from any tab, the selection's colour as a dot, and its head count.
  *
- * A tap on a glyph unfolds onto that tab; the chevron unfolds onto whichever tab was last open.
- * Both write `busk.sheet` and nothing else — the fold is that fact's `none`, not a state of its own.
+ * A tap on a glyph unfolds onto that tab; the chevron unfolds onto whichever tab was last open —
+ * through `toggleBuskSheet`, the one reader of that memory, so the chevron and a MIDI
+ * `BuskSheetToggle` open the same tab. Both write `busk.sheet` and nothing else — the fold is that
+ * fact's `none`, not a state of its own.
  *
  * **The colour dot reads the stage's colour dispatch** (`FixtureAppearanceSource`), as the rig tile
  * does: the first selected fixture's, or the first member of the first selected group, so a fold
@@ -39,7 +41,7 @@ export function SideSheetFold({
     <div data-side-sheet="none" className="hidden w-11 shrink-0 flex-col items-center gap-3 border-l py-2 md:flex">
       <button
         type="button"
-        onClick={() => setBuskSheet(tabs[0]?.id ?? 'speed')}
+        onClick={toggleBuskSheet}
         aria-label="Unfold the side sheet"
         title="Unfold the side sheet"
         className="rounded p-1 text-muted-foreground hover:text-foreground"

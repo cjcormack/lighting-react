@@ -72,10 +72,17 @@ describe('the defaults ladder', () => {
     expect(defaultBuskRigRows(portrait)).toBe(2)
   })
 
-  it('keeps the rail open with 2 rows on an iPad in landscape, which is wide but cramped', () => {
+  it('keeps the rail open with 2 rows on a 1024×768 iPad in landscape, which is wide but cramped', () => {
     const landscape = { short: false, cramped: true, docks: true }
     expect(defaultBuskSheet(landscape)).toBe('speed')
     expect(defaultBuskRigRows(landscape)).toBe(2)
+  })
+
+  it('gives an 1180×820 iPad in landscape three rows — 820 clears the 750px cramped fold, which the Tablets ladder’s “2 rows” never anticipated', () => {
+    const tall = { short: false, cramped: false, docks: true }
+    expect(defaultBuskFocus(tall)).toBe('split')
+    expect(defaultBuskSheet(tall)).toBe('speed')
+    expect(defaultBuskRigRows(tall)).toBe(3)
   })
 
   it('is Pads with the sheet folded on a short viewport — a landscape phone', () => {

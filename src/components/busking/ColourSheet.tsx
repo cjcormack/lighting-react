@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pipette, Save } from 'lucide-react'
+import { Pipette, Save, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import type { TemplateSummary } from '@/api/templatesApi'
@@ -78,11 +78,11 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * drag let go outside the sheet still ends the gesture here rather than leaving a stale flag for
  * the next pointer to flush.
  *
- * The *Second colour* switch hands the current channels to `onSpread`, and the Spread tab's
+ * The *Spread to a second colour…* button hands the current channels to `onSpread`, and the Spread tab's
  * *From* is their **RGB** — a colour intent has no emitter component, so a white or amber this tab
  * was driving does not travel (`SpreadSeed` in `SpreadSheet.tsx` says the same). The side sheet's
  * two hosts wire it (`SideSheet.tsx`'s `useSpreadSeed`), and a host with no Spread tab to open
- * leaves it out, which draws the switch inert.
+ * leaves it out, which draws the button inert.
  */
 
 export interface ColourSheetProps {
@@ -90,7 +90,7 @@ export interface ColourSheetProps {
   selectedTargets: Map<string, BuskingTarget>
   /** The selection's attribute mask, for the header's pill. Null is every attribute. */
   families: AttributeFamily[] | null
-  /** Open the Spread tab with *From* set to the current colour. Absent, the switch is inert. */
+  /** Open the Spread tab with *From* set to the current colour. Absent, the button is inert. */
   onSpread?: (from: ColourChannels) => void
   /** Force the two-column layout; the cramped height query answers it otherwise. */
   compact?: boolean
@@ -509,10 +509,10 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2">
+        {/* A plain button, not a switch: it opens the Spread tab and holds no state of its own, so a
+            `role="switch"` that never read checked promised a toggle it could not be. */}
         <Button
           type="button"
-          role="switch"
-          aria-checked={false}
           variant="outline"
           size="sm"
           className="h-7 text-xs"
@@ -520,7 +520,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
           title={onSpread == null ? 'No Spread tab to open from here' : 'Open the Spread tab with this colour as From'}
           onClick={() => onSpread?.(channels)}
         >
-          Second colour, spread across the selection
+          <Waves className="size-3.5" /> Spread to a second colour…
         </Button>
         <span className="flex-1" />
         <Button

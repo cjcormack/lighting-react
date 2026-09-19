@@ -15,6 +15,7 @@ import {
   recordsOnRig,
   removeRow,
   removeTile,
+  relabelTile,
   renameRow,
   rigDropTargetFor,
   rigIdsFromPatches,
@@ -28,6 +29,7 @@ import {
   rigTileId,
   runsOf,
   setTile,
+  tileOwnName,
   toRigRequest,
   type RigIds,
 } from './buskRig'
@@ -216,6 +218,16 @@ describe('toRigRequest', () => {
     expect(JSON.stringify(body)).not.toContain('localKey')
   })
 
+  it('carries a label on either kind — a group tile’s must not be lost to the group arm’s early return', () => {
+    const rig = sampleRig()
+    rig.rows![0].tiles![0].label = 'Warm wash'
+    rig.rows![0].tiles![2].label = ' Left bar '
+    const body = toRigRequest(rig, ids)
+    expect(body.rows[0].tiles[0]).toEqual({ tileId: rig.rows![0].tiles![0].id, groupId: 7, cellMode: 'PIPS', label: 'Warm wash' })
+    expect(body.rows[0].tiles[2]).toMatchObject({ patchId: 11, label: 'Left bar' })
+    expect(body.rows[0].tiles[1]).not.toHaveProperty('label')
+  })
+
   it('sends cellSplit only with HALVES, and an element key only on a cell tile', () => {
     const rig: BuskRig = {
       rows: [
@@ -275,6 +287,28 @@ describe('editing a rig', () => {
     expect(rig.rows![0].tiles![2].cellMode).toBe('PIPS')
     expect(() => renameRow(rig, 0, 'Frozen')).not.toThrow()
     expect(() => applyDrop(rig, { kind: 'rig-tile', at: { row: 0, tile: 0 } }, { kind: 'tile', at: { row: 1, tile: 0 } })).not.toThrow()
+  })
+
+  it('names what a tile wears with no label the way expandTile applies one — shown name where a label replaces, fixture name where it composes', () => {
+    expect(tileOwnName(groupTile(frontWash))).toBe('front-wash')
+    expect(tileOwnName(fixtureTile(barL))).toBe('Bar L')
+    expect(tileOwnName(fixtureTile(barL, { cellMode: 'PER_CELL' }))).toBe('Bar L')
+    expect(tileOwnName(fixtureTile(barL, { cellMode: 'HALVES', cellSplit: 2 }))).toBe('Bar L')
+    const cell = fixtureTile(barL, { elementKey: 'bar-1.pixel-2', cellMode: 'WHOLE' })
+    expect(tileOwnName(cell)).toBe(expandTile(cell, 'k')[0].name)
+    // A label replaces the shown name on a cell tile and composes on a per-cell one.
+    expect(expandTile({ ...cell, label: 'Left' }, 'k')[0].name).toBe('Left')
+    expect(expandTile(fixtureTile(barL, { cellMode: 'PER_CELL', label: 'Left' }), 'k')[0].name).toContain('Left')
+  })
+
+  it('relabels a tile of either kind, and a blank or the record’s name clears the label', () => {
+    const rig = sampleRig()
+    expect(relabelTile(rig, { row: 0, tile: 0 }, ' Wash ').rows![0].tiles![0].label).toBe('Wash')
+    expect(relabelTile(rig, { row: 0, tile: 2 }, 'Left bar').rows![0].tiles![2].label).toBe('Left bar')
+    const cleared = relabelTile(relabelTile(rig, { row: 0, tile: 2 }, 'Left bar'), { row: 0, tile: 2 }, '  ')
+    expect(cleared.rows![0].tiles![2].label).toBeNull()
+    expect(relabelTile(rig, { row: 0, tile: 2 }, null).rows![0].tiles![2].label).toBeNull()
+    expect(relabelTile(rig, { row: 9, tile: 0 }, 'x')).toBe(rig)
   })
 
   it('sets a cell mode, clears the split on leaving HALVES, and leaves a group alone', () => {

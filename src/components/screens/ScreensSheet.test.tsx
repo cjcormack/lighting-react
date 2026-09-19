@@ -302,6 +302,19 @@ describe('ScreensSheet', () => {
       ])
     })
 
+    it('mints no page into a following row’s link, even with the desk on a page — the desk’s page is the desk’s to say', async () => {
+      const writeText = vi.fn(async () => {})
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+      busk.deskPageId = 1
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'true' } })
+      render(<ScreensSheet />)
+      // The row shows the desk's page…
+      expect(within(rowFor('Screen 2')).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('1')
+      // …and the link names none of it, or the new window would arrive unlinked onto a page this one follows.
+      fireEvent.click(within(rowFor('Screen 2')).getByRole('button', { name: 'Copy link for Screen 2' }))
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/projects/1/busk?window=Screen%202&focus=split&sheet=speed`)
+    })
+
     it('copies a link for the row that carries its whole setup', async () => {
       const writeText = vi.fn(async () => {})
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

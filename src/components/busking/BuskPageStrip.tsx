@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { selectSaveStatus } from '@/store/saveStatusSlice'
 import type { BuskPage } from '@/api/buskApi'
-import { buskPageTabId, parseBuskDragId } from '@/lib/buskLayout'
+import { allBanks, buskPageTabId, parseBuskDragId } from '@/lib/buskLayout'
+import { BuskLabel } from './BuskLabel'
 import { BuskPageChip } from './BuskPageChip'
 
 /**
@@ -41,6 +42,12 @@ import { BuskPageChip } from './BuskPageChip'
  * by `BuskingView` rather than mounted here, because in Rig focus this strip is the *folded* page
  * at the bottom of the body and the control has to be there too, or Rig focus would have no way
  * back — one strip component, placed twice, and the control travels with it.
+ *
+ * **Folded, it is the board's 40px strip and not the tab strip drawn folded** (`Phones.dc.html`
+ * note 8, busk-further plan §11): the page's name, its bank count and the controls, nothing else.
+ * Rig focus exists to give the band the height, and the full tab strip wraps on a phone and takes
+ * it back. A page is chosen in Split; the fold says which one this window is on and offers the one
+ * tap back.
  */
 
 function PageTab({
@@ -104,7 +111,7 @@ export interface BuskPageStripProps {
   onToggleEditing: () => void
   /** The Focus control (and, off the desk board, the sheet button), drawn beside *Edit layout* / *Done*. */
   controls?: ReactNode
-  /** Rig focus: the strip is the folded page at the bottom of the body, and says so with a top edge. */
+  /** Rig focus: the 40px folded page at the bottom of the body — name, bank count, the controls. */
   folded?: boolean
   /**
    * The short board's merged row (`Phones.dc.html`, landscape): a 32px row with the rig strip's
@@ -192,9 +199,24 @@ export function BuskPageStrip({
     }
   }
 
+  if (folded) {
+    const bankCount = active == null ? 0 : allBanks(active).length
+    return (
+      <div data-busk-page-strip="folded" className="flex h-10 shrink-0 items-center gap-2.5 border-t px-4">
+        <BuskLabel className="shrink-0 whitespace-nowrap">Pages</BuskLabel>
+        <span className="min-w-0 truncate text-[13px] font-semibold">{active?.name ?? '—'}</span>
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          {active == null ? '' : bankCount === 0 ? 'No banks' : `${bankCount} ${bankCount === 1 ? 'bank' : 'banks'}`}
+        </span>
+        <div className="flex-1" />
+        {controls}
+      </div>
+    )
+  }
+
   return (
     <div
-      data-busk-page-strip={folded ? 'folded' : 'open'}
+      data-busk-page-strip="open"
       data-busk-page-strip-dense={dense ? 'true' : undefined}
       className={cn(
         'flex shrink-0 items-center px-4',
@@ -202,7 +224,6 @@ export function BuskPageStrip({
         // row it was merged to save; the desk rows wrap, the verbs taking a second line at a
         // tablet width.
         dense ? 'h-8 gap-2 border-b' : 'flex-wrap gap-2.5 pt-2.5',
-        folded && !dense && 'border-t pb-2.5',
       )}
     >
       {leading}

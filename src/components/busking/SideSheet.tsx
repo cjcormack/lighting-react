@@ -28,9 +28,9 @@ import type { BuskingTarget } from './buskingTypes'
  * a fourth tab would be hidden there until it landed, because a tab that opens onto nothing is a
  * promise the desk cannot keep.
  *
- * **The Colour tab's *Second colour* switch opens Spread with *From* set.** The hand-over is a
+ * **The Colour tab's *Spread to a second colour…* button opens Spread with *From* set.** The hand-over is a
  * `SpreadSeed` held by whichever host mounts the two tabs — they are never mounted together, so
- * the seed travels through the host's state: the switch writes it and the fact, and `SpreadSheet`
+ * the seed travels through the host's state: the button writes it and the fact, and `SpreadSheet`
  * applies it once and asks for it to be dropped, so a later visit to the tab by any other door
  * does not re-apply a stale colour.
  *
@@ -85,7 +85,7 @@ export interface SideSheetProps {
 }
 
 /**
- * The *Second colour* hand-over, as one hook both hosts share: the seed, the switch's handler
+ * The *Second colour* hand-over, as one hook both hosts share: the seed, the button's handler
  * (which also opens the tab), and the drop the Spread tab calls once it has read it.
  */
 function useSpreadSeed() {

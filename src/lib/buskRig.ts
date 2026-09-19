@@ -290,6 +290,11 @@ function tileInput(tile: BuskRigTile, at: RigTileAddress, ids: RigIds): BuskRigT
   const input: BuskRigTileInput = { cellMode: tile.kind === 'GROUP' ? 'PIPS' : tile.cellMode }
   if (tile.id != null) input.tileId = tile.id
   const where = `row ${at.row + 1}, tile ${at.tile + 1}`
+  // The label is either kind's, so it is set before the kinds part — the GROUP arm returns early,
+  // and a label set only on the patch path silently reverted every group rename on the drained
+  // response (found by the session 8 review).
+  const label = tile.label?.trim()
+  if (label) input.label = label
   if (tile.kind === 'GROUP') {
     const name = tile.group?.name
     const id = name == null ? undefined : ids.groupIdByName.get(name)
@@ -316,8 +321,6 @@ function tileInput(tile: BuskRigTile, at: RigTileAddress, ids: RigIds): BuskRigT
   // `cellSplit` only with `HALVES`: the server ignores it elsewhere, and a stale one riding along
   // would be a second copy of a fact the mode already states.
   if (tile.cellMode === 'HALVES' && tile.cellSplit != null) input.cellSplit = tile.cellSplit
-  const label = tile.label?.trim()
-  if (label) input.label = label
   return input
 }
 
@@ -418,6 +421,22 @@ export function setTile(
   if (tile == null || tile.kind !== 'FIXTURE') return rig
   Object.assign(tile, patch)
   if (tile.cellMode !== 'HALVES') tile.cellSplit = null
+  return normaliseRig(next)
+}
+
+/**
+ * Set a tile's **label** — the name it wears on the band in place of its record's own (§11's
+ * *Rename tile…*). Either kind takes one, which is why this is not [setTile]: that mutator leaves a
+ * group tile alone because a group has no cell mode, and a label is the one field both kinds
+ * share. A blank or null clears it, so the tile reads its record's name again; `toRigRequest`
+ * omits an empty label and the desk stores none.
+ */
+export function relabelTile(rig: BuskRig, at: RigTileAddress, label: string | null): BuskRig {
+  const next = clone(rig)
+  const tile = tileAt(next, at)
+  if (tile == null) return rig
+  const trimmed = label?.trim() ?? ''
+  tile.label = trimmed === '' ? null : trimmed
   return normaliseRig(next)
 }
 
@@ -622,6 +641,25 @@ export function runsOf<T>(cells: readonly T[], split: number): T[][] {
  */
 function cellName(patchName: string, element: BuskRigElement): string {
   return element.name.includes(patchName) ? element.name : `${patchName} · ${element.name}`
+}
+
+/**
+ * The name a stored tile wears with **no label** — what *Rename tile…* is seeded with, and what
+ * clears the label when typed back. It follows how [expandTile] applies a label: on a group, a
+ * whole fixture and a **single-cell tile** the label *replaces* the name shown, so the own name is
+ * the name shown (`Bar L · Cell 3` for a cell tile); on a tile drawn per cell or in halves the
+ * label is the base the cell names *compose on* (`Left 1–2`, `Left · Cell 3`), so the own name is
+ * the fixture's. Kept beside [cellName] so the two cannot drift.
+ */
+export function tileOwnName(tile: BuskRigTile): string {
+  if (tile.kind === 'GROUP') return tile.group?.name ?? ''
+  const patch = tile.patch
+  if (patch == null) return ''
+  if (tile.elementKey != null) {
+    const element = patch.elements?.find((cell) => cell.key === tile.elementKey) ?? { key: tile.elementKey, name: tile.elementKey }
+    return cellName(patch.name, element)
+  }
+  return patch.name
 }
 
 export function expandTile(tile: BuskRigTile, tileKey: string): RenderTile[] {

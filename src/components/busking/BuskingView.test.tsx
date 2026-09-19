@@ -3,7 +3,7 @@ import { Provider } from 'react-redux'
 import { MemoryRouter, useSearchParams } from 'react-router'
 import { DndContext } from '@dnd-kit/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { installRelativeUrlRequest } from '@/test/backendMock'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
@@ -479,13 +479,20 @@ describe('the busk view', () => {
       expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
     })
 
-    it('fills the body with the band in Rig focus and folds the page to its strip at the bottom', async () => {
+    it('fills the body with the band in Rig focus and folds the page to the board’s 40px strip at the bottom — name, bank count, the Focus control', async () => {
       setBuskFocus('rig')
-      draw([emptyPage])
-      await screen.findByRole('button', { name: 'Ballads' })
+      draw([generated])
+      await screen.findByText('Ballads')
       expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'rig')
       const strip = document.querySelector('[data-busk-page-strip="folded"]')!
       expect(strip).not.toBeNull()
+      // The board's strip, not the tab strip drawn folded: 40px, the page named and its banks
+      // counted, no tabs and no page chip — a page is chosen in Split.
+      expect(strip.className).toContain('h-10')
+      expect(strip).toHaveTextContent('Ballads')
+      expect(strip).toHaveTextContent('1 bank')
+      expect(within(strip as HTMLElement).queryByRole('button', { name: 'Ballads' })).toBeNull()
+      expect(within(strip as HTMLElement).queryByRole('button', { name: /^Page:/ })).toBeNull()
       // The Focus control travels with the folded strip, and the band precedes it in the column.
       expect(strip.querySelector('[aria-label="Focus"]')).not.toBeNull()
       expect(screen.getByTestId('target-band').compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -550,7 +557,8 @@ describe('the busk view', () => {
       setBuskFocus('rig')
       setBuskSheet('none')
       draw([emptyPage], '/projects/1/busk?focus=pads&sheet=speed')
-      await screen.findByRole('button', { name: 'Ballads' })
+      // Rig focus folds the page to its strip, which names the page and draws no tab.
+      await screen.findByText('Ballads')
       expect(getBuskFocus()).toBe('rig')
       await waitFor(() => expect(shapeSeen.at(-1)).toBe('rig/none'))
     })

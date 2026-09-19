@@ -119,7 +119,7 @@ export interface SpreadSheetProps {
   selectedTargets: Map<string, BuskingTarget>
   /** The selection's attribute mask, sent with the request and drawn as the header's pill. Null is every attribute. */
   families: AttributeFamily[] | null
-  /** A *From* handed over by the Colour tab's *Second colour* switch; applied once, on change. */
+  /** A *From* handed over by the Colour tab's *Spread to a second colour…* button; applied once, on change. */
   seed?: SpreadSeed | null
   /** Called once a seed has been applied, so the host can drop it. */
   onSeedConsumed?: () => void
@@ -1064,7 +1064,7 @@ function barLabel(value: string): string {
 
 function PreviewStrip({ bars, kind, compact }: { bars: PreviewBar[]; kind: 'colour' | 'percent' | 'position' | 'level'; compact: boolean }) {
   return (
-    <div data-spread-preview className={cn('mt-1 flex items-end gap-0.5 overflow-x-auto', compact ? 'h-10' : 'h-14')}>
+    <div data-spread-preview className={cn('mt-1 flex items-end gap-0.5 overflow-x-auto', compact ? 'h-12' : 'h-16')}>
       {bars.map((bar) => (
         <div
           key={bar.key}
@@ -1092,9 +1092,23 @@ function PreviewStrip({ bars, kind, compact }: { bars: PreviewBar[]; kind: 'colo
               })
             )}
           </div>
-          <span className="truncate text-center text-[9px] leading-tight text-muted-foreground">
-            {bar.skipped != null ? '—' : bar.values.length === 1 ? barLabel(bar.values[0]) : bar.name}
-          </span>
+          {/* The value, then the head's name under it (`Spread.dc.html`: `245` over `L1`). A bar folding
+              several cells has no one value to state and carries its name alone; the values are on
+              its title. A skipped head reads a dash where the value would be. */}
+          {bar.values.length === 1 || bar.skipped != null ? (
+            <>
+              <span data-spread-bar-value className="truncate text-center text-[9px] leading-tight tabular-nums">
+                {bar.skipped != null ? '—' : barLabel(bar.values[0])}
+              </span>
+              <span data-spread-bar-name className="truncate text-center text-[9px] leading-tight text-muted-foreground">
+                {bar.name}
+              </span>
+            </>
+          ) : (
+            <span data-spread-bar-name className="truncate text-center text-[9px] leading-tight text-muted-foreground">
+              {bar.name}
+            </span>
+          )}
         </div>
       ))}
     </div>

@@ -797,12 +797,26 @@ exists: two screens at one desk showing two shapes of one view, pressed onto one
 **Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
 folds the rig to `RigStrip` (the summary, the family pill, the desk chip — what a press needs to
 be honest about — and a chevron that unfolds Split) and the page fills the body; **Rig** fills the
-body with every row and folds the page to `BuskPageStrip` at the bottom. **The Focus control is
+body with every row and folds the page to `BuskPageStrip`'s **40px folded arm** at the bottom —
+the page's name, its bank count and the Focus control, **not the tab strip drawn folded**
+(`Phones.dc.html` note 8, busk-further plan §11): Rig focus exists to give the band the height,
+the full tab strip wraps on a phone and takes it back, and a page is chosen in Split. **The Cells
+chip is not on the folded rig strip**, by decision (session 8): `Focus` and `Phones` draw the strip
+without it and `Cells` draws it with, and the strip carries what a press must be *honest* about,
+where the chip is a *write*. **Below `md` Rig focus stacks every row two tiles across, scrolling
+vertically with the band** (`Phones` note 6, `RigBand`'s `stackRows`, which `BuskingView` sets
+for the **narrow board only** — the short board is compact too but wider than `md`, and keeps its
+sideways rows): it is D15's replacement for the narrow-width target sheet, and a sideways scroll
+per row on a phone defeats the point of a list; Split there keeps the one sideways row with the
+row chip. **The Focus control is
 on the page strip in every shape** — below the band in Split and Pads, on the folded strip at the
 bottom in Rig, so Rig focus always has its way back — one strip component, placed twice, the
 control travelling with it through its `controls` slot; `RigStrip` carries only its chevron. The handle and the segmented control are **one setting** (D6): one
 more than the last row is Rig focus, one fewer than the first is Pads, so the handle's buttons are
-never disabled at the ends. **Edit mode forces Split** for its duration, because a palette drag
+never disabled at the ends. It is drawn for a **one-row rig too** (D6 says 1…N; hiding it below two
+rows left the segmented control as the only route) and **hidden off the desk board** — below `md`
+and on the short board, where the band is one row with a row chip and the segmented control is the
+route. **Edit mode forces Split** for its duration, because a palette drag
 needs both regions, and restores the window's focus on Done by never having written it; the
 control is disabled while editing rather than hidden, still lighting the stored focus, which is
 what Done returns to. A project with **no pages** forces Split too: its first-open screen lives in
@@ -814,7 +828,9 @@ cramped (750) height queries (`shortViewport.test.ts` pins both spellings) plus 
 for width: focus defaults to `pads` on a short viewport; the sheet to `speed` where docking the
 288px rail leaves the page its 600px (`lg` and up), `none` where it would stack the page (iPad
 portrait) or the viewport is short; the rows to three on a desk screen and two where cramped or
-below `lg`. `lg` rather than a measured body because the default has to be answerable off the busk
+below `lg` — so a 1024×768 iPad in landscape gets two, and an **820-tall** one (1180×820) gets
+**three**, since 820 clears the 750 fold; the `Tablets` board's "2 rows" never anticipated the
+taller iPad, and `buskWindow.test.ts` pins both cases. `lg` rather than a measured body because the default has to be answerable off the busk
 view: the announce carries these values from `Layout`, where there is no body to measure. Once the
 window has chosen, the tab fact wins and survives a reload.
 
@@ -831,7 +847,8 @@ own writes and is never an arrival.
 tab strip and the tab when the fact names a live tab and `SideSheetFold` (44px: the beat, master
 1's tempo, one glyph per live tab, the selection's colour off the stage's colour dispatch, the head
 count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
-so a MIDI `{sheet: 'toggle'}` unfolds onto the tab the operator had. **Speed is `BuskSpeedRail`
+so a MIDI `{sheet: 'toggle'}` **and the fold's chevron** unfold onto the tab the operator had —
+both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`
 mounted unchanged** inside the sheet, **Colour is `ColourSheet`** and **Spread is `SpreadSheet`**
 (both below). All three have landed, and `LIVE_SHEET_TABS` stays the one list rather than
 collapsing into the sheet vocabulary: a fourth tab would land the way Colour and Spread did,
@@ -882,8 +899,11 @@ asked from a click — into the picker *without writing*: the first head in rig 
 normalised to full brightness, emitters folded in — and **only heads with a colour descriptor**: the
 dispatch answers a gel or the default tungsten for a colourless head, which is no colour this sheet
 could write, so a dimmer-only par in the selection is neither read nor a reason to say *mixed*. The rig tiles report, and the sheet mounts a hidden leaf per
-selected head as well, so Pick answers in Pads focus with the tiles folded away. The *Second
-colour* switch hands the current channels to `onSpread`, which both sheet hosts wire
+selected head as well, so Pick answers in Pads focus with the tiles folded away. **The hex beside
+the picker is a read-out, not a field** (session 8's call): the typed route is R/G/B, as the
+programmer's colour cell has no hex field either. The *Spread to a
+second colour…* button — a plain button with a verb, since it opens a tab and holds no state a
+`role="switch"` could ever read as checked — hands the current channels to `onSpread`, which both sheet hosts wire
 (`SideSheet.tsx`'s `useSpreadSeed`): it opens the Spread tab with *From* set to their **RGB** —
 a colour intent has no emitter component, so a white or amber the tab was driving does not
 travel — through a seed the host holds and the Spread tab drops once it has read it, so a later
@@ -905,7 +925,9 @@ through `colourUtils`; `pct:` for a level or a beam role; degrees for a position
 emitter) and `spreadIntent.test.ts` asserts its import list reaches no resolver. **The preview
 strip is drawn from the answer** — one bar per head, the `written[]` heads in the order the desk
 wrote them (rig order) and then the `skipped[]` heads, dimmed with the desk's reason on their
-titles, a multi-head fixture's cells folded into its bar (`previewBarsOf`). A skipped head sits
+titles, a multi-head fixture's cells folded into its bar (`previewBarsOf`). A single-head bar
+carries the **value with the head's name under it**, as `Spread` draws it; a folded bar has no one
+value to state and carries its name alone, its values on its title. A skipped head sits
 after the written ones rather than in its rig position because the answer is two lists with no
 index, and recovering a position here would be a second copy of an order the desk owns. The strip
 is empty until the desk has answered, and it is cleared by a refusal, a property change and a
@@ -913,7 +935,9 @@ selection change — it says it is the answer to *this* spread, and must not out
 describes. The strip draws the answer to the **latest** request only: Live keeps several in
 flight and their answers can land out of order;
 `SpreadSheet.test.tsx` asserts the file never imports `sheet/fanMath.ts`, the client fan that lerps
-bytes over rows it can see. Curves are Titan's four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each
+bytes over rows it can see. The family segment is **Intensity · Colour · Position · Beam** with a
+**Property** row beneath it where a family holds more than one (zoom and frost under Beam): the
+board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each
 drawn as a picture); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
 `LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
@@ -1032,9 +1056,9 @@ a button cannot hold buttons — and a tap toggles `{type: 'fixture', key: eleme
 one `toggleTarget`, the shape `rowLocateTarget` publishes; a drag across them is a **run**, each pip
 crossed toggled once, with the marquee's arm rule: a mouse runs from `pointerdown` under pointer
 capture, a `touch` or `pen` runs only after a 500ms hold (a finger pans; a held one runs, and a
-non-passive `touchmove` guard stops the pan for as long as the run lasts), the pip under a held
-finger grows to 44px, and the click a run's release generates is swallowed so it is not a second
-toggle. **A pip reads checked while its parent is selected**, and the band folds the parent's cells
+non-passive `touchmove` guard stops the pan for as long as the run lasts), a pip rests at the
+board's 8px and the one under a held finger grows to 44px, and the click a run's release generates
+is swallowed so it is not a second toggle. **A pip reads checked while its parent is selected**, and the band folds the parent's cells
 into `selectedCells` for exactly that: the desk narrows the parent on such a press, and a dark pip
 whose press deselects is the reading `presenceOf`'s comment already refuses for a cell tile.
 **The desk owns the parent↔cell coverage rule** (`fx/TargetCoverage.kt`): a layer on the
@@ -1064,9 +1088,10 @@ module (`selectedCells`), so the chip and the tab cannot count cells two ways. B
 modes sit under a *Cells* heading in the band's verbs menu.
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
-leaf per fixture tile — the third reader of `components/fixtures/fixtureAppearance.tsx` beside the
-DOM marker and the 2D plot (the cues' `MiniStage` borrows only its default colour; the side sheet's
-fold is the fourth, one leaf for the selection's colour dot) — and a cell or run tile draws its own cells' colours off
+leaf per fixture tile — one of **five** mounting readers of `components/fixtures/fixtureAppearance.tsx`,
+beside the DOM marker, the 2D plot, the side sheet's fold (one leaf for the selection's colour dot)
+and the Colour tab's **hidden leaf per selected head**, which reports into `lib/liveAppearance.ts`
+for *Pick* (§Focus and the side sheet); the cues' `MiniStage` borrows only its default colour — and a cell or run tile draws its own cells' colours off
 the parent's per-element `segments` by the element's **position in the patch's cell list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
 
@@ -1094,10 +1119,26 @@ is created by the first thing dropped into it** (`rnewrow`): the server refuses 
 `+ Row` is the new-row zone rather than a button that mints a placeholder, and `normaliseRig` drops
 an empty row while keeping an empty rig. Rows reorder by their grip onto the gaps drawn while a row
 is lifted; `NameField` (extracted from `BuskBank`'s private `BankNameField`) is the row's name as it
-is the bank's. The `n of N rows` handle (D6) reads and writes the window's `busk.rigRows`
-(§Focus and the side sheet) and snaps at both ends; edit mode shows every row, since a hidden one
-cannot take a drop. Below `md` the band is one row with a row chip and the verbs in a menu, and
-there is no editing there.
+is the bank's, and **a tile's too**: every in-document tile carries a menu while editing (the cell
+modes on a multi-head fixture, *Rename tile…* on every kind, *Remove from rig* last), and *Rename
+tile…* swaps the tile's face for that field, seeded with the name shown, writing the tile's
+**`label`** — the column the rig has carried since session 3 and the UI §11 found missing. Saving
+the record's own name clears the label rather than storing a copy of it (`relabelTile`, which
+takes either kind; `setTile` is the cell-mode mutator and leaves a group alone). The seed is
+`tileOwnName`, which follows how `expandTile` applies a label: the name shown where the label
+*replaces* it (a group, a whole fixture, a single-cell tile — `Bar L · Cell 3`), the fixture's own
+name where the cell names *compose on* it (per cell, halves), and every drawn sibling of one stored
+tile takes the one label. `tileInput` sets the label **before** the GROUP arm's early return — a
+label set only on the patch path silently reverted every group rename on the drained response. The `n of N rows`
+handle (D6) reads and writes the window's `busk.rigRows` (§Focus and the side sheet), snaps at
+both ends, is drawn for a one-row rig and hidden off the desk board (below `md` and on the short
+board alike, `!compact`); edit mode shows every row, since a
+hidden one cannot take a drop. **The label row wraps rather than folding**: the verbs are a fixed
+~330px and at a tablet width they take a second line while the summary keeps a readable floor
+(seen on the desk at 800px) — Highlight does not fold into the menu at 1100 the way row C's does,
+by decision (session 8). Below `md` the band is one row with a row chip and the verbs in a menu,
+and there is no editing there; in Rig focus below `md` every row is stacked two tiles across
+(§Focus and the side sheet).
 
 ### The hand
 
@@ -2575,7 +2616,9 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
   mints `?window=…&page=…&focus=…&sheet=…` (`windowSetupUrl`): the row's whole setup, which a
   fresh window latches on arrival — the page only while the row holds one of its own, since a
   following row's null desk page is not "the first page" and writing it would unlink the new
-  window where this one follows.
+  window where this one follows. **A following row's link carries no page even with the desk on
+  one**: the code wrote the desk's page whenever it was non-null until session 8, and
+  `ScreensSheet.test.tsx` now pins a following row against a non-null desk page.
 - **The row's `id` is socket-minted and is what every command addresses**; the `windowId` is how a
   tab recognises its own row (`thisWindowRow`, first match). A duplicated tab copies its storage, so
   two rows can share a `windowId` and cannot be told apart from this side — D9 accepts that, the

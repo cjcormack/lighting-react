@@ -48,6 +48,7 @@ import {
   effectiveRig,
   expandTile,
   removeRow,
+  relabelTile,
   removeTile,
   renameRow,
   rigIdsFromPatches,
@@ -97,10 +98,13 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * **The handle reads and writes the window's `busk.rigRows`** (`lib/buskWindow.ts`), clamped to
  * the rig on read, and **snaps at both ends** (busk-further plan D6): one more than the last row
  * is Rig focus, one fewer than the first is Pads focus, so the segmented control on the page strip
- * and this handle are one setting. In **Rig focus** the band takes `focus="rig"`: every row, the
- * band filling the body and scrolling, no handle — below `md` too, where it is the whole rig
- * stacked and replaces the narrow-width target sheet (D15). Edit mode shows every row regardless,
- * since a hidden row cannot take a drop.
+ * and this handle are one setting. It is drawn for **one row too** (D6: 1…N) — a one-row rig still
+ * needs its way into Rig and Pads from the band. In **Rig focus** the band takes `focus="rig"`:
+ * every row, the band filling the body and scrolling, no handle. **Below `md` Rig focus stacks
+ * every row two tiles across, scrolling vertically** (`Phones.dc.html` note 6): it is D15's
+ * replacement for the narrow-width target sheet, and a sideways scroll per row on a phone would
+ * defeat the point of a list. Edit mode shows every row regardless, since a hidden row cannot take
+ * a drop.
  *
  * In *Edit layout* the band joins the app's one `DndContext` through `RigEditProvider`: rows
  * reorder by their grip onto the gaps between rows, a tile or a Rig-tab palette row lands on a tile,
@@ -119,8 +123,14 @@ export interface RigBandProps {
   /** The Cells chip's press — one desk op, or the client mirror when unlinked (D12). */
   onSubselect: (mode: SubselectMode) => void
   editing: boolean
-  /** Below `md`: one row with a row chip, 48px tiles, the verbs in a menu. */
+  /** Off the desk board — below `md` and on the short board: one row with a row chip, 48px tiles, the verbs in a menu. */
   compact: boolean
+  /**
+   * Below `md` only: Rig focus stacks every row two tiles across, scrolling with the band
+   * (`Phones.dc.html` note 6). Not on the short board — a landscape phone is wider than `md` and
+   * keeps its sideways rows, which is why this is not derived from [compact].
+   */
+  stackRows?: boolean
   /** Split shows `busk.rigRows` rows under the handle; Rig fills the body with every row. */
   focus: 'split' | 'rig'
 }
@@ -147,6 +157,7 @@ function RigBandBody({
   onSubselect,
   editing,
   compact,
+  stackRows = false,
   focus,
   rigLoaded,
 }: RigBandProps & { rigLoaded: boolean }) {
@@ -462,6 +473,7 @@ function RigBandBody({
               inDocument={!effective.fallback}
               editing={editing}
               compact={compact}
+              stacked={stackRows && focus === 'rig' && !editing}
               lookup={lookup}
               presenceOf={presenceOf}
               wholeSelected={wholeSelected}
@@ -484,7 +496,7 @@ function RigBandBody({
       )}
 
       {/* ── The rows handle ── */}
-      {!everyRow && !compact && effective.rows.length > 1 && (
+      {!everyRow && !compact && effective.rows.length > 0 && (
         <div className="mt-1.5 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
           <Button
             variant="ghost"
@@ -650,6 +662,7 @@ function RigRow({
   inDocument,
   editing,
   compact,
+  stacked,
   lookup,
   presenceOf,
   wholeSelected,
@@ -664,6 +677,8 @@ function RigRow({
   inDocument: boolean
   editing: boolean
   compact: boolean
+  /** Rig focus below `md`: the tiles in a two-column grid that scrolls with the band, not a sideways row. */
+  stacked: boolean
   lookup: TileLookup
   presenceOf: (tile: RenderTile) => EffectPresence
   wholeSelected: (tile: RenderTile) => boolean
@@ -719,6 +734,7 @@ function RigRow({
           onSetMode={(mode: BuskRigCellMode, split?: number) =>
             commit((rig) => setTile(rig, at, { cellMode: mode, cellSplit: split ?? null }))
           }
+          onRename={(label) => commit((rig) => relabelTile(rig, at, label))}
         />,
       )
     }
@@ -765,8 +781,9 @@ function RigRow({
         </div>
         <div
           ref={setBodyRef}
+          data-rig-row-body={stacked ? 'stacked' : 'row'}
           className={cn(
-            'flex gap-2 overflow-x-auto pb-1',
+            stacked ? 'grid grid-cols-2 gap-2 pb-1' : 'flex gap-2 overflow-x-auto pb-1',
             isOver && editable && !draggingRow && !foreign && 'rounded-lg bg-primary/5 ring-1 ring-inset ring-primary/40',
           )}
         >

@@ -122,6 +122,7 @@ function draw(
         onSubselect={handlers.onSubselect ?? (() => {})}
         editing={handlers.editing ?? false}
         compact={handlers.compact ?? false}
+        stackRows={handlers.stackRows ?? false}
         focus={handlers.focus ?? 'split'}
       />
     </DndContext>,
@@ -307,6 +308,8 @@ describe('the rig band', () => {
         act(() => vi.advanceTimersByTime(500))
         expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0'])
         expect(pip(1).className).toContain('h-11')
+        // The rest of the row rests at the board's 8px.
+        expect(pip(2).className).toContain('h-2')
         fireEvent.pointerMove(pip(2), { ...touch, clientX: 12 })
         expect(onToggle.mock.calls.map((c) => c[0].key)).toEqual(['bar-1.pixel-0', 'bar-1.pixel-1'])
         expect(pip(2).className).toContain('h-11')
@@ -472,6 +475,42 @@ describe('the rig band', () => {
     expect(getBuskFocus()).toBe('pads')
   })
 
+  it('draws the handle for a one-row rig too — 1…N, so a one-row rig still reaches Rig and Pads from the band (D6)', () => {
+    rigData = { rows: [{ id: 1, uuid: 'r1', name: 'Wash', tiles: [tile({ kind: 'FIXTURE', patch: parPatch })] }] }
+    setBuskRigRows(1)
+    draw()
+    expect(screen.getByText('1 of 1 rows')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
+    expect(getBuskFocus()).toBe('rig')
+    setBuskFocus('split')
+    fireEvent.click(screen.getByRole('button', { name: 'Show one row fewer' }))
+    expect(getBuskFocus()).toBe('pads')
+  })
+
+  it('stacks every row two tiles across, scrolling with the band, in Rig focus below md — never a sideways row', () => {
+    rigData = builtRig()
+    draw([], { focus: 'rig', compact: true, stackRows: true })
+    const bodies = [...document.querySelectorAll('[data-rig-row-body]')]
+    expect(bodies).toHaveLength(4)
+    expect(bodies.every((body) => body.getAttribute('data-rig-row-body') === 'stacked')).toBe(true)
+    expect(bodies[0].className).toContain('grid-cols-2')
+    expect(bodies[0].className).not.toContain('overflow-x-auto')
+    // The band is the scroller, vertically.
+    expect(document.querySelector('[data-rig-band="rig"]')!.className).toContain('overflow-y-auto')
+    cleanup()
+    // Split below md keeps the one sideways row, and the desk board's Rig focus keeps its rows.
+    draw([], { compact: true, stackRows: true })
+    expect(document.querySelector('[data-rig-row-body]')).toHaveAttribute('data-rig-row-body', 'row')
+    cleanup()
+    // The short board is compact too — 48px tiles, the row chip — but wider than `md`, so its Rig
+    // focus keeps the sideways rows: stacking is the narrow board's alone.
+    draw([], { focus: 'rig', compact: true })
+    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'row')).toBe(true)
+    cleanup()
+    draw([], { focus: 'rig' })
+    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'row')).toBe(true)
+  })
+
   it('shows every row with no handle in Rig focus, filling the body — below md too', () => {
     rigData = builtRig()
     setBuskRigRows(1)
@@ -499,17 +538,107 @@ describe('the rig band', () => {
   })
 
   describe('in Edit layout', () => {
-    it('offers a name field, a cross per tile and a cell-mode menu on a multi-head tile', () => {
+    it('offers a name field, a cross per tile and a menu on every tile, with the cell modes on a multi-head tile only', () => {
       rigData = builtRig()
       draw([], { editing: true })
       expect(screen.getAllByLabelText('Row name')).toHaveLength(4)
       expect(screen.getByLabelText('Remove Front wash from the rig')).toBeInTheDocument()
-      expect(screen.getByLabelText('Cell mode for Bar L')).toBeInTheDocument()
-      expect(screen.queryByLabelText('Cell mode for PAR 1')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Options for Bar L')).toBeInTheDocument()
+      expect(screen.getAllByLabelText('Options for PAR 1')).toHaveLength(2)
+      fireEvent.pointerDown(screen.getAllByLabelText('Options for PAR 1')[0], { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      expect(screen.queryByRole('menuitemradio', { name: 'Whole fixture only' })).not.toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Rename tile…' })).toBeInTheDocument()
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+      fireEvent.pointerDown(screen.getByLabelText('Options for Bar L'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      expect(screen.getByRole('menuitemradio', { name: 'Whole fixture only' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Rename tile…' })).toBeInTheDocument()
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
       expect(screen.getByRole('button', { name: 'Show every target' })).toBeEnabled()
       // The play verbs step aside while editing: tiles are drag handles, not toggles.
       expect(screen.queryByRole('button', { name: 'Cells: All' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    })
+
+    it('renames a tile in place — Rename tile… writes the tile’s label, and the record’s own name clears it', () => {
+      rigData = builtRig()
+      draw([], { editing: true })
+      fireEvent.pointerDown(screen.getByLabelText('Options for Front wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename tile…' }))
+      const field = screen.getByLabelText('Tile name') as HTMLInputElement
+      // Seeded with the name shown, so a rename edits rather than retypes.
+      expect(field.value).toBe('Front wash')
+      expect(document.activeElement).toBe(field)
+      fireEvent.change(field, { target: { value: 'Wash' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(commit).toHaveBeenCalledTimes(1)
+      const op = commit.mock.calls[0][0] as (rig: BuskRig) => BuskRig
+      expect(op(builtRig()).rows![0].tiles![0].label).toBe('Wash')
+      // The field is gone with the gesture, and the tile is a tile again.
+      expect(screen.queryByLabelText('Tile name')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Options for Front wash')).toBeInTheDocument()
+
+      // A labelled tile shows its label, and saving the record's own name back clears it.
+      cleanup()
+      commit.mockClear()
+      const labelled = builtRig()
+      labelled.rows![0].tiles![0].label = 'Wash'
+      rigData = labelled
+      draw([], { editing: true })
+      expect(screen.getByRole('button', { name: 'Wash' })).toBeInTheDocument()
+      fireEvent.pointerDown(screen.getByLabelText('Options for Wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename tile…' }))
+      const again = screen.getByLabelText('Tile name') as HTMLInputElement
+      expect(again.value).toBe('Wash')
+      expect(again.placeholder).toBe('Front wash')
+      fireEvent.change(again, { target: { value: 'Front wash' } })
+      fireEvent.keyDown(again, { key: 'Enter' })
+      const clear = commit.mock.calls[0][0] as (rig: BuskRig) => BuskRig
+      expect(clear(labelled).rows![0].tiles![0].label).toBeNull()
+    })
+
+    it('seeds a cell tile’s rename with the name shown, and a per-cell tile’s with the fixture’s name the cells compose on', () => {
+      rigData = builtRig()
+      draw([], { editing: true })
+      // The single-cell tile: its label replaces `Bar L · Cell 3`, so that is what the field edits.
+      // (The PER_CELL tile draws a `Bar L · Cell 3` of its own, earlier in the row; the cell tile is last.)
+      fireEvent.pointerDown(screen.getAllByLabelText('Options for Bar L · Cell 3').at(-1)!, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename tile…' }))
+      let field = screen.getByLabelText('Tile name') as HTMLInputElement
+      expect(field.value).toBe('Bar L · Cell 3')
+      expect(field.placeholder).toBe('Bar L · Cell 3')
+      fireEvent.change(field, { target: { value: 'Centre' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      let op = commit.mock.calls[0][0] as (rig: BuskRig) => BuskRig
+      expect(op(builtRig()).rows![1].tiles![2].label).toBe('Centre')
+      commit.mockClear()
+
+      // A PER_CELL tile draws four tiles from one stored tile; the label composes under each cell
+      // name, so every one of the four seeds `Bar L` and writes the one stored label.
+      fireEvent.pointerDown(screen.getAllByLabelText('Options for Bar L · Cell 2')[0], { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename tile…' }))
+      field = screen.getByLabelText('Tile name') as HTMLInputElement
+      expect(field.value).toBe('Bar L')
+      expect(field.placeholder).toBe('Bar L')
+      fireEvent.change(field, { target: { value: 'Left' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      op = commit.mock.calls[0][0] as (rig: BuskRig) => BuskRig
+      const next = op(builtRig())
+      expect(next.rows![1].tiles![0].label).toBe('Left')
+      expect(next.rows![1].tiles![1].label).toBeUndefined()
+    })
+
+    it('reverts a rename on Escape and writes nothing — the field is focused, so its blur is real', () => {
+      rigData = builtRig()
+      draw([], { editing: true })
+      fireEvent.pointerDown(screen.getByLabelText('Options for Front wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename tile…' }))
+      const field = screen.getByLabelText('Tile name') as HTMLInputElement
+      expect(document.activeElement).toBe(field)
+      fireEvent.change(field, { target: { value: 'Nope' } })
+      fireEvent.keyDown(field, { key: 'Escape' })
+      expect(commit).not.toHaveBeenCalled()
+      expect(screen.queryByLabelText('Tile name')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Front wash' })).toBeInTheDocument()
     })
 
     it('registers every drawn cell of one stored tile under its own drag id', () => {

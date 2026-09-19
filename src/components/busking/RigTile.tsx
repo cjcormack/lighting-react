@@ -17,10 +17,11 @@ import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRig
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
 import { FixtureAppearanceSource, type FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { useLongPress } from '@/hooks/useLongPress'
-import { rigTileId, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
+import { rigTileId, tileOwnName, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
 import { LiveAppearanceReporter } from '@/lib/liveAppearance'
 import type { EffectPresence } from './buskingTypes'
 import { RIG_DROP_DEPTH, type RigDropData, type RigTileDragData } from './buskDnd'
+import { NameField } from './NameField'
 import { useRigEdit } from './RigEditProvider'
 
 /**
@@ -42,8 +43,9 @@ import { useRigEdit } from './RigEditProvider'
  * `pointerdown`, the row takes pointer capture and every pip the pointer crosses toggles once — and
  * **a touch or pen runs only after a hold** (`useLongPress`, 500ms), because on a touchscreen a
  * finger pans and a distance-armed run would select cells on every scroll; a tap on a pip is the
- * browser's own `click`. While a touch run is live the pip under the finger grows to **44px** (the
- * design's *Cells* board: "18×8 at rest, 44px under a finger"), and a non-passive `touchmove` guard
+ * browser's own `click`. A pip rests at the board's **8px** and, while a touch run is live, the pip
+ * under the finger grows to **44px** (the design's *Cells* board: "18×8 at rest, 44px under a
+ * finger"), and a non-passive `touchmove` guard
  * keeps the browser from panning under it — `touch-action` cannot say "only once held", being read
  * at touch start. In *Edit layout* the row is inert, so a drag can start from the tile's whole face.
  *
@@ -53,6 +55,19 @@ import { useRigEdit } from './RigEditProvider'
  * leaf per fixture tile, mounted here rather than in the band, because the render prop's leaf
  * carries a fixed hook set per colour source and the band would otherwise mount one per head
  * whether or not the head is on a visible row. A group has no channels of its own and draws no bar.
+ *
+ * **In *Edit layout* every tile in the document carries a menu** (`Rig.dc.html`): the cell modes
+ * (D3) on a multi-head fixture, *Rename tile…* on every kind, *Remove from rig* last. A rename is
+ * the tile's **label** — the name it wears on the band in place of its record's own, the column the
+ * rig has carried since session 3 and the UI the reconciliation audit found missing (busk-further
+ * plan §11). It is edited in place: the menu item swaps the tile's face for a `NameField` seeded
+ * with **the name the label stands in for** (`tileOwnName`, beside `expandTile` because it follows
+ * how that function applies a label): the name shown for a group, a whole fixture or a single-cell
+ * tile, where a label replaces it; the fixture's own name for a tile drawn per cell or in halves,
+ * where the label is the base the cell names compose on — so a per-cell tile's field says
+ * `Bar L` under tiles reading `Bar L · Cell 1…4`, and every drawn sibling takes the one label,
+ * being one stored tile. Saving that name back clears the label rather than storing a copy of it,
+ * so there is a way back to the record's name without a second verb.
  */
 
 /** What a fixture tile's appearance leaf needs, looked up once by the band and threaded down. */
@@ -86,6 +101,8 @@ export interface RigTileProps {
   onPressCell: (element: BuskRigElement) => void
   onRemove: () => void
   onSetMode: (mode: BuskRigCellMode, split?: number) => void
+  /** *Rename tile…*: the stored tile's `label`, null to clear it back to the record's own name. */
+  onRename: (label: string | null) => void
 }
 
 const TILE_CLASS =
@@ -121,8 +138,10 @@ export function RigTile({
   onPressCell,
   onRemove,
   onSetMode,
+  onRename,
 }: RigTileProps) {
   const { source, foreign } = useRigEdit()
+  const [renaming, setRenaming] = useState(false)
   const draggingRow = source?.type === 'rig-row'
   // Per **render** tile, never per stored tile: see `rigTileId`.
   const id = at == null ? `rtile-fallback:${tile.key}` : rigTileId(at, tile.key)
@@ -164,8 +183,29 @@ export function RigTile({
           : String(tile.cells.length)
         : null
 
-  const modeMenu =
-    editing && stored != null && stored.kind === 'FIXTURE' && stored.elementKey == null && (stored.patch?.elements?.length ?? 0) > 1
+  const menu = editing && inDocument && stored != null
+  // The cell modes are a multi-head fixture's alone (D3); a cell tile and a group have none.
+  const multiHead =
+    stored != null && stored.kind === 'FIXTURE' && stored.elementKey == null && (stored.patch?.elements?.length ?? 0) > 1
+  // What the tile is called with no label — the name a rename is seeded with, and the one that
+  // clears it — as `expandTile` applies a label to this stored tile's kind (see the file note).
+  const ownName = stored == null ? tile.name : tileOwnName(stored)
+
+  if (renaming && stored != null) {
+    return (
+      <div ref={setRef} data-rig-tile-id={id} className="relative flex shrink-0">
+        <NameField
+          autoFocus
+          value={stored.label?.trim() || ownName}
+          label="Tile name"
+          placeholder={ownName}
+          onSave={(name) => onRename(name.trim() === ownName ? null : name)}
+          onDone={() => setRenaming(false)}
+          className={cn('rounded-lg px-3.5', compact ? 'h-12 min-w-[120px]' : 'h-13 min-w-[148px]')}
+        />
+      </div>
+    )
+  }
 
   return (
     // `flex`, so the wrapper's box is the button's: the live overlay is positioned against it.
@@ -180,6 +220,9 @@ export function RigTile({
         onClick={editing ? undefined : onPress}
         className={cn(
           TILE_CLASS,
+          // `flex-1`: in a stacked row (Rig focus below `md`) the wrapper is a grid cell and the
+          // button fills it; in a flex row the wrapper is content-sized and this changes nothing.
+          'flex-1',
           compact ? 'h-12 min-w-[120px]' : 'h-13 min-w-[148px]',
           presenceClass(presence),
           editing ? (inDocument ? 'cursor-grab' : 'cursor-default') : 'active:scale-[0.96]',
@@ -215,27 +258,39 @@ export function RigTile({
           <X className="size-2.5" strokeWidth={2.5} />
         </button>
       )}
-      {modeMenu && stored != null && (
-        <CellModeMenu tile={stored} name={tile.name} onSetMode={onSetMode} onRemove={onRemove} />
+      {menu && (
+        <TileMenu
+          tile={stored}
+          name={tile.name}
+          multiHead={multiHead}
+          onSetMode={onSetMode}
+          onRename={() => setRenaming(true)}
+          onRemove={onRemove}
+        />
       )}
     </div>
   )
 }
 
 /**
- * The four cell modes (D3), on the tile rather than in a mode: the whole fixture with pips, the
- * whole fixture only, one tile per cell, or `HALVES` with its split — 2 up to the cell count, which
- * is exactly the range the server accepts.
+ * Every in-document tile's menu while editing: the four cell modes (D3) on a multi-head fixture —
+ * the whole fixture with pips, the whole fixture only, one tile per cell, or `HALVES` with its
+ * split, 2 up to the cell count, which is exactly the range the server accepts — then *Rename
+ * tile…* on every kind, and *Remove from rig* last.
  */
-function CellModeMenu({
+function TileMenu({
   tile,
   name,
+  multiHead,
   onSetMode,
+  onRename,
   onRemove,
 }: {
   tile: BuskRigTile
   name: string
+  multiHead: boolean
   onSetMode: (mode: BuskRigCellMode, split?: number) => void
+  onRename: () => void
   onRemove: () => void
 }) {
   const cellCount = tile.patch?.elements?.length ?? 0
@@ -246,7 +301,7 @@ function CellModeMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Cell mode for ${name}`}
+          aria-label={`Options for ${name}`}
           className="absolute -top-[7px] -right-[7px] grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <MoreHorizontal className="size-3" />
@@ -254,36 +309,42 @@ function CellModeMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-          {tile.patch?.name} · {cellCount} cells
+          {multiHead ? `${tile.patch?.name} · ${cellCount} cells` : name}
         </DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={tile.cellMode}
-          onValueChange={(mode) => {
-            if (mode === 'HALVES') onSetMode('HALVES', tile.cellSplit ?? 2)
-            else onSetMode(mode as BuskRigCellMode)
-          }}
-        >
-          <DropdownMenuRadioItem value="PIPS">Whole fixture, cells on the tile</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="WHOLE">Whole fixture only</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="PER_CELL">One tile per cell · {cellCount} tiles</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="HALVES">Split into…</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <div className="flex flex-wrap gap-0.5 px-1 pb-1">
-          {splits.map((split) => (
-            <button
-              key={split}
-              type="button"
-              aria-pressed={tile.cellMode === 'HALVES' && tile.cellSplit === split}
-              onClick={() => onSetMode('HALVES', split)}
-              className={cn(
-                'rounded px-2 py-1 text-xs tabular-nums hover:bg-accent',
-                tile.cellMode === 'HALVES' && tile.cellSplit === split && 'bg-muted font-semibold',
-              )}
+        {multiHead && (
+          <>
+            <DropdownMenuRadioGroup
+              value={tile.cellMode}
+              onValueChange={(mode) => {
+                if (mode === 'HALVES') onSetMode('HALVES', tile.cellSplit ?? 2)
+                else onSetMode(mode as BuskRigCellMode)
+              }}
             >
-              {split}
-            </button>
-          ))}
-        </div>
+              <DropdownMenuRadioItem value="PIPS">Whole fixture, cells on the tile</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="WHOLE">Whole fixture only</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="PER_CELL">One tile per cell · {cellCount} tiles</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="HALVES">Split into…</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <div className="flex flex-wrap gap-0.5 px-1 pb-1">
+              {splits.map((split) => (
+                <button
+                  key={split}
+                  type="button"
+                  aria-pressed={tile.cellMode === 'HALVES' && tile.cellSplit === split}
+                  onClick={() => onSetMode('HALVES', split)}
+                  className={cn(
+                    'rounded px-2 py-1 text-xs tabular-nums hover:bg-accent',
+                    tile.cellMode === 'HALVES' && tile.cellSplit === split && 'bg-muted font-semibold',
+                  )}
+                >
+                  {split}
+                </button>
+              ))}
+            </div>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem onSelect={onRename}>Rename tile…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={onRemove}>
           Remove from rig
@@ -585,7 +646,7 @@ function Pips({
             onClick={() => onPressCell(cell)}
             className={cn(
               'min-w-0 flex-1 rounded-[1px] transition-[height] duration-100',
-              hot === cell.key ? 'z-10 h-11 ring-2 ring-primary' : 'h-1',
+              hot === cell.key ? 'z-10 h-11 ring-2 ring-primary' : 'h-2',
               selected && hot !== cell.key && 'ring-1 ring-primary',
             )}
             style={sliceStyle(appearance, index)}

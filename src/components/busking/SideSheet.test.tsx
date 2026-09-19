@@ -10,7 +10,7 @@ import type { BuskingTarget } from './buskingTypes'
  * (session 6) — and the fold; the fold keeps the beat, master 1's tempo, the tab glyphs and the
  * selection's colour; off the desk board the sheet is an overlay carrying Colour and Spread and no
  * Speed tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
- * *Second colour* switch opens Spread with *From* set through the host's seed.
+ * *Spread to a second colour…* button opens Spread with *From* set through the host's seed.
  */
 
 vi.mock('./BuskSpeedRail', () => ({ BuskSpeedRail: () => <div data-testid="speed-rail" /> }))
@@ -146,6 +146,15 @@ describe('docked, on the desk board', () => {
     render(<SideSheet {...props} />)
     fireEvent.click(screen.getByRole('button', { name: 'Unfold the side sheet' }))
     expect(getBuskSheet()).toBe('speed')
+  })
+
+  it('unfolds onto the tab that was last open — the memory a MIDI toggle reads — not always onto Speed', () => {
+    setBuskSheet('colour')
+    setBuskSheet('none')
+    render(<SideSheet {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Unfold the side sheet' }))
+    expect(getBuskSheet()).toBe('colour')
+    expect(screen.getByTestId('colour-sheet')).toBeInTheDocument()
   })
 
   it('draws the fold for a fact naming a tab that has not landed — none today, so the gate is pinned on the list', () => {

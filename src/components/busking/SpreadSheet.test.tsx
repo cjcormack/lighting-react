@@ -370,6 +370,14 @@ describe('the preview strip', () => {
     // A skipped head is dimmed with the reason on its title.
     expect(bars[2]).toHaveAttribute('data-spread-skipped', 'true')
     expect(bars[2]).toHaveAttribute('title', 'PAR 2: no colour on this head')
+    // A single-head bar carries the value with the head's name under it, as the board draws it; a
+    // bar folding several cells has no one value and carries its name alone; a skipped head a dash.
+    expect(bars[0].querySelector('[data-spread-bar-value]')).toHaveTextContent('#F5B342')
+    expect(bars[0].querySelector('[data-spread-bar-name]')).toHaveTextContent('PAR 1')
+    expect(bars[1].querySelector('[data-spread-bar-value]')).toBeNull()
+    expect(bars[1].querySelector('[data-spread-bar-name]')).toHaveTextContent('Bar L')
+    expect(bars[2].querySelector('[data-spread-bar-value]')).toHaveTextContent('—')
+    expect(bars[2].querySelector('[data-spread-bar-name]')).toHaveTextContent('PAR 2')
   })
 
   it('folds cells to their parent and keeps the desk’s order, as a pure function', () => {

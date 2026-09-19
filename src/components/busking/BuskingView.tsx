@@ -540,6 +540,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
               onSubselect={subselect}
               editing={editing}
               compact={!docked}
+              stackRows={board === 'narrow'}
               focus={shape}
             />
           )}
