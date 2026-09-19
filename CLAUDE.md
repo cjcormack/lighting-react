@@ -888,8 +888,71 @@ neither view, and only the overlay arms do — the rail's through its own window
 through Radix. The busk sheet has no resize handle either; the rail's width is a stored desk
 preference with a drag, and the sheet is a fixed 288px.
 
+**Both panels are dragged to width by one piece of code** — `useSidePanelResize` and
+`SidePanelResizeHandle`, the rail's drag lifted out so the busk sheet is resized by it rather than
+by a second copy. One ceiling for both (`SIDE_PANEL_MAX_WIDTH` 480) and a shared floor
+(`SIDE_PANEL_MIN_WIDTH` 260; `RAIL_MIN_WIDTH` / `RAIL_MAX_WIDTH` are aliases the rail's tests are
+written in) that a panel may raise for itself, each with its own key and default in
+**`localStorage`** — `programmer.rail.width` at 300, `busk.sheet.width` at 320.
+
+**A panel's floor is set by its header, and the sheet's is 320.** Three labelled tabs, the mode
+toggle and the fold chevron inside the chrome row's 12px gutters measure 304px, so at the shared
+260 that row overflowed by 38 and put *both buttons outside the panel* — reported from an iPad.
+The rail's header is two short labels with badges and fits at 240, which is why the floor is
+per-panel rather than one number raised for everyone. 320 and not 304 because a minimum sitting on
+the exact fit clips again the moment anything joins the row, which is how this broke: the row
+fitted until the mode toggle was added to it. A width stored below a panel's floor is lifted on
+read. And the row **degrades instead of clipping** now — the tab strip is a `min-w-0 flex-1
+overflow-hidden` group and the two buttons are `shrink-0`, so a row with no space loses the end of
+the last tab rather than pushing a control off the edge.
+`localStorage` and not the per-tab `sessionStorage` the other `busk.*` keys use, because a width is
+a fact about this desk's screen rather than about which of two windows you are looking at. The
+handle is drawn wherever the width on screen *is* the stored one: in overlay mode always (the
+operator chose to float it, so their drag still applies), and in push mode only where the panel
+docks — the rail's narrow push arm is a fixed 300px overlay a drag would not move.
+
+**The frame that holds the width takes the panel's contents as `children`, and that is
+load-bearing.** The width changes at pointer rate, so whatever holds it re-renders at pointer
+rate; `RailBodyFrame` and `DockedSideSheet` both take `children`, so the element references are
+unchanged between their renders and React skips those subtrees — otherwise a drag would rebuild
+the layer list and the FX list, or a colour picker mid-drag, sixty times a second.
+
+**Never give either panel a bare `duration-*` or `ease-*` class.** `tailwindcss-animate`
+re-declares `duration-*` as `animation-duration` while Tailwind's own still sets
+`transition-duration`, and CSS's initial `transition-property` is `all` — so a panel carrying one
+transitions **every** property, for as long as `usePanelEnter` latches the class, which is the
+whole time it is open. What it broke was the resize: every width the drag set was *transitioned*
+to, so the panel eased toward the pointer instead of following it. Reported from the desk as the
+drag feeling like an animation. `SIDE_PANEL_ENTER_CLASS` says `[animation-duration:300ms]` and
+`[animation-timing-function:…]` instead, which cannot leak.
+
+**Beside the content, or over it** — `lib/sidePanelMode.ts`, one `push` | `overlay` fact shared by
+both panels, per tab in `sessionStorage` like every other fact about how *this window* is arranged,
+toggled from `SidePanelModeToggle` in either header. It rests at `push`, which is what both panels
+already did, and it can only ever make a panel **float where it would have docked** — never dock
+where there is no room, because each surface keeps its own floor (the rail below 1200px of
+workspace, the sheet off the desk board). One fact and not one each: the two are deliberately one
+instrument, and a desk where the rail floats while the sheet pushes is two answers to one question.
+In overlay mode the rail has **one arm at every width**, so `collapsed` says nothing there — its
+header and strip each draw a single chevron instead of the docked/overlay pair, the resize handle
+is not drawn, and the body is mounted on `overlayOpen` alone (reading `!collapsed` there would hold
+a layer list, an FX list and every subscription under them alive behind a shut panel).
+
+**Neither panel ever draws its strip and its body at once.** The fold *is* the closed state of the
+panel — one control in two shapes — which is what the busk sheet always did and what the rail did
+not: it stood its 40px strip beside the open overlay at 704–1200. Reported from the desk, and the
+sheet's reading is the one kept, so the overlay is flush `right-0` rather than inset past a strip
+and the strip's chevron is open-only (its `aria-expanded` went with the state it distinguished).
+
 **Both panels animate their opening, and neither animates its closing** (`SIDE_PANEL_ENTER_CLASS`,
-`usePanelEnter`). The rail takes **one latch per arm** — `!collapsed` for the docked arm,
+`usePanelEnter`). The slide is the panel's **whole width**, bare `slide-in-from-right` as the
+`Sheet` primitive uses. It shipped as `slide-in-from-right-4` — 16px — and read as no animation at
+all, correctly: the content reflows by the panel's full width in one frame, so the eye takes the
+jump and never registers a slide a fifth of its size. **The reflow itself stays instant in push
+mode**, deliberately: animating it means animating `width`, which relayouts a virtualised grid every
+frame, needs `overflow: hidden` (which clips the rail's resize handle, drawn 3px outside its own
+left edge) and needs an inner fixed-width wrapper or the header's tabs reflow the whole way in.
+The rail takes **one latch per arm** — `!collapsed` for the docked arm,
 `overlayOpen` for the overlay one — because in the overlay arm the body is mounted the whole time
 and the container query alone draws it: a single `!collapsed || overlayOpen` rests at true, so
 opening the overlay transitions nothing and that arm never animated. The two results are OR-ed as

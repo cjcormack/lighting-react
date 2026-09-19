@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
+import { SidePanelModeToggle } from '@/components/sheet/SidePanelModeToggle'
+import { useSidePanelMode } from '@/lib/sidePanelMode'
 import {
   SIDE_PANEL_HEADER_BUTTON_CLASS,
   SIDE_PANEL_STRIP_CELL_CLASS,
@@ -125,6 +127,7 @@ export function ProgrammerRail() {
   const { projectId: projectIdParam } = useParams()
   const projectId = Number(projectIdParam)
   const arm = useRailArm()
+  const overlay = useSidePanelMode() === 'overlay'
   const { data: layers } = useProgrammerLayersQuery()
   const { data: effects } = useActiveEffectsQuery()
   const layerCount = layers?.length ?? 0
@@ -149,7 +152,14 @@ export function ProgrammerRail() {
   // changing hook count between renders.
   const expandEnter = usePanelEnter(!arm.collapsed)
   const overlayEnter = usePanelEnter(arm.overlayOpen)
-  const bodyEnter = expandEnter || overlayEnter
+  const bodyEnter = overlay ? overlayEnter : expandEnter || overlayEnter
+  // **What mounts the body, per mode.** In push mode the arm is CSS's, so the body has to be in
+  // the tree for whichever of the two arms is live: `!collapsed` answers the docked one and
+  // `overlayOpen` the narrow one. In overlay mode there is one arm and one flag — and reading
+  // `!collapsed` there would leave the body mounted behind a shut panel for the whole visit,
+  // holding a layer list, an FX list and every subscription under them, which is the cost this
+  // condition exists to avoid.
+  const bodyShown = overlay ? arm.overlayOpen : !arm.collapsed || arm.overlayOpen
   // Stable, because `RailBody` is memoised against a parent that re-renders on every selection
   // change — a fresh closure here would defeat that memo at marquee rate.
   const clearBand = useCallback(() => setBand(null), [])
@@ -198,7 +208,7 @@ export function ProgrammerRail() {
           </SheetContent>
         </Sheet>
       ) : (
-        (!arm.collapsed || arm.overlayOpen) && (
+        bodyShown && (
           <RailBodyFrame enter={bodyEnter}>
             <RailHeader layerCount={layerCount} fxCount={fxCount} />
             {body}
@@ -258,6 +268,7 @@ function CountBadge({ count }: { count: number }) {
  */
 function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: number }) {
   const arm = useRailArm()
+  const overlay = useSidePanelMode() === 'overlay'
   return (
     <div className={CHROME_ROW_CLASS}>
       <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
@@ -274,26 +285,47 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
         <CountBadge count={fxCount} />
       </span>
       <span className="flex-1" />
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@max-[1200px]:hidden')}
-        aria-label="Collapse the rail"
-        title="Collapse the rail to a strip"
-        onClick={arm.collapse}
-      >
-        <ChevronRight className="size-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@min-[1200px]:hidden')}
-        aria-label="Close the rail"
-        title="Close the rail"
-        onClick={arm.closeOverlay}
-      >
-        <ChevronRight className="size-3.5" />
-      </Button>
+      <SidePanelModeToggle />
+      {/* In overlay mode there is one arm, so one chevron, and it is the overlay's: the docked
+          arm's writes `collapsed`, which means nothing while the panel floats. In push mode the
+          arm is still the container query's, so both are drawn and each is hidden where it does
+          not belong — two buttons rather than one that reads the arm in JS, so neither flag is
+          ever written from the wrong arm (`RailArm`). */}
+      {overlay ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={SIDE_PANEL_HEADER_BUTTON_CLASS}
+          aria-label="Close the rail"
+          title="Close the rail"
+          onClick={arm.closeOverlay}
+        >
+          <ChevronRight className="size-3.5" />
+        </Button>
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@max-[1200px]:hidden')}
+            aria-label="Collapse the rail"
+            title="Collapse the rail to a strip"
+            onClick={arm.collapse}
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@min-[1200px]:hidden')}
+            aria-label="Close the rail"
+            title="Close the rail"
+            onClick={arm.closeOverlay}
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </>
+      )}
     </div>
   )
 }
@@ -537,38 +569,47 @@ function RailStrip({
   addEffect: AddEffectOffer
 }) {
   const arm = useRailArm()
+  const overlay = useSidePanelMode() === 'overlay'
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@max-[1200px]:hidden')}
-        aria-label="Expand the rail"
-        title="Show the layers and effects"
-        onClick={arm.expand}
-      >
-        <ChevronLeft className="size-3.5" />
-      </Button>
-      {/* One name and an `aria-expanded` state rather than a name that flips, so this and the
-          overlay header's own "Close the rail" — both on screen while it is open — are not two
-          controls announced by the same words. */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@min-[1200px]:hidden')}
-        aria-label="Open the rail"
-        aria-expanded={arm.overlayOpen}
-        title={
-          arm.overlayOpen ? 'Close the rail' : 'Show the layers and effects over the grid'
-        }
-        onClick={arm.overlayOpen ? arm.closeOverlay : arm.openOverlay}
-      >
-        {arm.overlayOpen ? (
-          <ChevronRight className="size-3.5" />
-        ) : (
+      {/* The strip is only ever on screen while the body is not (`RailStripFrame`), so its
+          chevron always opens — there is no "close" state for it to carry any more, and with it
+          went the `aria-expanded` that told the two apart while both were up. */}
+      {overlay ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={SIDE_PANEL_STRIP_CELL_CLASS}
+          aria-label="Open the rail"
+          title="Show the layers and effects over the grid"
+          onClick={arm.openOverlay}
+        >
           <ChevronLeft className="size-3.5" />
-        )}
-      </Button>
+        </Button>
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@max-[1200px]:hidden')}
+            aria-label="Expand the rail"
+            title="Show the layers and effects"
+            onClick={arm.expand}
+          >
+            <ChevronLeft className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@min-[1200px]:hidden')}
+            aria-label="Open the rail"
+            title="Show the layers and effects over the grid"
+            onClick={arm.openOverlay}
+          >
+            <ChevronLeft className="size-3.5" />
+          </Button>
+        </>
+      )}
       <StripCount
         band="layers"
         glyph={<Layers className="size-3.5" />}

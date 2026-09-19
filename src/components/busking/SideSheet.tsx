@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronRight, Gauge, Palette, Waves, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,8 +14,13 @@ import {
   SIDE_PANEL_BODY_CLASS,
   SIDE_PANEL_ENTER_CLASS,
   SIDE_PANEL_HEADER_BUTTON_CLASS,
+  SIDE_PANEL_OVERLAY_CLASS,
   usePanelEnter,
+  useSidePanelResize,
 } from '@/components/sheet/sidePanel'
+import { SidePanelResizeHandle } from '@/components/sheet/SidePanelResizeHandle'
+import { SidePanelModeToggle } from '@/components/sheet/SidePanelModeToggle'
+import { useSidePanelMode } from '@/lib/sidePanelMode'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { LIVE_SHEET_TABS, setBuskSheet, useBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
 import { cn } from '@/lib/utils'
@@ -124,45 +129,47 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
   // this component and only one is ever mounted, so a hook in either would see every appearance
   // as its first render and animate on arrival at the route as readily as on an unfold.
   const enter = usePanelEnter(open != null)
+  const overlay = useSidePanelMode() === 'overlay'
   if (open == null) {
     return <SideSheetFold projectId={projectId} selectedTargets={selectedTargets} tabs={tabs} />
   }
   return (
-    <div
-      data-side-sheet={open.id}
-      role="complementary"
-      aria-label="Side sheet"
-      className={cn(SIDE_PANEL_BODY_CLASS, 'hidden w-72 shrink-0 md:flex', enter && SIDE_PANEL_ENTER_CLASS)}
-    >
+    <DockedSideSheet openId={open.id} enter={enter} overlay={overlay}>
       <div role="tablist" aria-label="Side sheet" className={cn(CHROME_ROW_CLASS, 'gap-0.5')}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={tab.id === open.id}
-            onClick={() => setBuskSheet(tab.id)}
-            // `px-2`, not the 10px it was: three tabs and the fold chevron have to fit inside the
-            // header's own 12px gutter, and at 10px they came to 3px more than the 288px column
-            // has — which the browser pays for by eating the padding, leaving the chevron 4px
-            // from the edge instead of 12 and every tab a pixel narrower than it asked for.
-            className={cn(
-              'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
-              tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <tab.icon className="size-3.5" />
-            {tab.label}
-          </button>
-        ))}
-        <span className="flex-1" />
+        {/* **The tabs are what gives, and the two buttons never do.** The group takes the row's
+            slack and clips its own overflow, so a row too narrow for everything loses the end of
+            the last tab rather than pushing the mode toggle and the fold chevron outside the
+            panel — which is what happened when the toggle was added to a row already tuned to
+            fit. `SHEET_MIN_WIDTH` is set so this never actually bites; it is here so that the
+            next thing added to the row degrades instead of clipping. */}
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={tab.id === open.id}
+              onClick={() => setBuskSheet(tab.id)}
+              // `px-2`, not the 10px it was: at 10px the row came to more than the column has,
+              // which the browser pays for by eating the gutter.
+              className={cn(
+                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
+                tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <tab.icon className="size-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <SidePanelModeToggle className="shrink-0" />
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setBuskSheet('none')}
           aria-label="Fold the side sheet"
           title="Fold the sheet to its strip"
-          className={SIDE_PANEL_HEADER_BUTTON_CLASS}
+          className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, 'shrink-0')}
         >
           <ChevronRight className="size-3.5" />
         </Button>
@@ -185,6 +192,82 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
           />
         )}
       </div>
+    </DockedSideSheet>
+  )
+}
+
+/** The busk sheet's docked width, in px. `localStorage`, like the rail's: a width is a fact
+ *  about this desk's screen, not about which of two windows you are looking at — which is what
+ *  every other `busk.*` key in `sessionStorage` is. */
+const SHEET_WIDTH_KEY = 'busk.sheet.width'
+
+/**
+ * **This sheet's own floor, above the shared 260, and its header is what sets it.** Three
+ * labelled tabs (73 + 75 + 78) with 2px between them, the mode toggle and the fold chevron
+ * (24 each) inside the chrome row's 12px gutters come to **304px** — so at 260 the row overflowed
+ * by 38 and pushed both buttons clean outside the panel. Measured in the browser at 1180×820,
+ * where the Spread tab's own curve and order rows stop overflowing at the same 300.
+ *
+ * 320 rather than 304: a minimum that sits on the exact fit clips again the moment anything joins
+ * that row, which is precisely how this broke — the row fitted until the mode toggle was added to
+ * it. The default is the minimum, so the sheet opens at the narrowest width that is honest; it was
+ * 288, which is below the floor and is clamped up on read for any desk that stored it.
+ */
+const SHEET_MIN_WIDTH = 320
+const SHEET_DEFAULT_WIDTH = 320
+
+/**
+ * The panel around the sheet's header and tab: the width, the drag that sets it, and which of the
+ * two modes it is drawn in — `RailBodyFrame`'s counterpart, and the same `children` contract.
+ *
+ * **The contents arrive as `children` and that is load-bearing, not tidiness.** The width changes
+ * at pointer rate during a drag, so whatever holds it re-renders at pointer rate; holding it in
+ * `SideSheet` itself would re-render `BuskSpeedRail`, `ColourSheet` or `SpreadSheet` sixty times
+ * a second, and a colour picker being dragged is not a thing to rebuild per frame. As `children`
+ * the element reference is unchanged between the frame's renders, so React skips those subtrees
+ * entirely — exactly how `RailBodyFrame` keeps the rail's two lists out of its own drag.
+ */
+function DockedSideSheet({
+  openId,
+  enter,
+  overlay,
+  children,
+}: {
+  openId: string
+  enter: boolean
+  overlay: boolean
+  children: ReactNode
+}) {
+  const { width, resizing, onResizeStart } = useSidePanelResize({
+    storageKey: SHEET_WIDTH_KEY,
+    fallback: SHEET_DEFAULT_WIDTH,
+    min: SHEET_MIN_WIDTH,
+  })
+  const style = { '--sheet-w': `${width}px` } as CSSProperties
+  return (
+    <div
+      data-side-sheet={openId}
+      data-sheet-mode={overlay ? 'overlay' : 'push'}
+      role="complementary"
+      aria-label="Side sheet"
+      style={style}
+      className={cn(
+        SIDE_PANEL_BODY_CLASS,
+        // `relative` is the handle's containing block in push mode; in overlay mode the shared
+        // overlay class positions the panel itself and this is already satisfied.
+        'relative hidden w-[var(--sheet-w)] md:flex',
+        // Over the page, or beside it — `lib/sidePanelMode.ts`, one fact shared with the rail.
+        // Either way the fold is not drawn behind it: `SideSheet` renders the fold or the panel,
+        // never both, which is the reading the rail's strip was brought onto.
+        overlay ? SIDE_PANEL_OVERLAY_CLASS : 'shrink-0',
+        // `select-none` while the drag runs, so it does not paint a text selection across the
+        // page it crosses. The cursor is the handle's own.
+        resizing && 'select-none',
+        enter && SIDE_PANEL_ENTER_CLASS,
+      )}
+    >
+      <SidePanelResizeHandle label="the side sheet" onResizeStart={onResizeStart} />
+      {children}
     </div>
   )
 }

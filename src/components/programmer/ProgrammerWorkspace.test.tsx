@@ -12,6 +12,11 @@ import {
   useRailArm,
 } from './ProgrammerWorkspace'
 import { SIDE_PANEL_BODY_CLASS, usePanelEnter } from '@/components/sheet/sidePanel'
+import {
+  resetSidePanelModeStore,
+  setSidePanelMode,
+  useSidePanelMode,
+} from '@/lib/sidePanelMode'
 
 /**
  * The rail's three arms and the state behind them, driven through a stand-in rail that reads
@@ -32,9 +37,12 @@ function TestRail() {
   // the assertions below pin: a hook inside the frame sees every appearance as a first render.
   // One latch per arm, as the real rail does — the overlay arm's body is mounted the whole time,
   // so `!collapsed` alone can never see it open.
+  const overlay = useSidePanelMode() === 'overlay'
   const expandEnter = usePanelEnter(!arm.collapsed)
   const overlayEnter = usePanelEnter(arm.overlayOpen)
-  const enter = expandEnter || overlayEnter
+  const enter = overlay ? overlayEnter : expandEnter || overlayEnter
+  // The real rail's mount condition: one flag in overlay mode, both in push mode.
+  const bodyShown = overlay ? arm.overlayOpen : !arm.collapsed || arm.overlayOpen
   return (
     <>
       {/* The real rail's ternary: the sheet and the docked body are one body in two places. */}
@@ -43,7 +51,7 @@ function TestRail() {
           <button onClick={arm.closeSheet}>close sheet</button>
         </div>
       ) : (
-        (!arm.collapsed || arm.overlayOpen) && (
+        bodyShown && (
           <RailBodyFrame enter={enter}>
             <button onClick={arm.collapse}>collapse</button>
             <button onClick={arm.closeOverlay}>close</button>
@@ -77,6 +85,8 @@ const resizing = () => body().parentElement!.className.includes('select-none')
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
+  window.sessionStorage.clear()
+  resetSidePanelModeStore()
   railRenders = 0
 })
 
@@ -125,7 +135,8 @@ describe('ProgrammerWorkspace', () => {
     // Mounted, and unhidden for the narrow arm only: the wide arm still reads `collapsed`.
     expect(body().className).not.toContain('@max-[1200px]:hidden')
     expect(body().className).toContain('@min-[1200px]:hidden')
-    expect(body().className).toContain('@max-[1200px]:right-10')
+    // Flush to the edge: the strip is no longer beside it to be inset past.
+    expect(body().className).toContain('@max-[1200px]:right-0')
     expect(body().className).toContain('@max-[1200px]:w-[300px]')
 
     fireEvent.click(screen.getByText('close'))
@@ -280,6 +291,46 @@ describe('ProgrammerWorkspace', () => {
     expect(body().className).toContain('animate-in')
     fireEvent.click(screen.getByText('close'))
     expect(body().className).not.toContain('animate-in')
+  })
+
+  it('never draws the strip and the body at once, in either mode', () => {
+    // The busk sheet's reading, which the rail was brought onto: the fold IS the closed state of
+    // the panel, so the two are one control in two shapes. The rail used to stand its strip
+    // beside the open overlay at 704–1200, which is what looked wrong on the desk.
+    draw()
+    // Push mode, docked arm: open body, strip hidden by the wide query.
+    expect(body().className).not.toContain('@min-[1200px]:hidden')
+    expect(strip().className).toContain('@min-[1200px]:hidden')
+    // Push mode, narrow arm: opening the overlay hides the strip for that arm too.
+    fireEvent.click(screen.getByText('collapse'))
+    expect(strip().className).not.toContain('@max-[1200px]:hidden')
+    fireEvent.click(screen.getByText('open'))
+    expect(strip().className).toContain('@max-[1200px]:hidden')
+  })
+
+  it('takes one arm at every width in overlay mode, and hides the strip outright when open', () => {
+    setSidePanelMode('overlay')
+    draw()
+    // `collapsed` says nothing here: the only flag is `overlayOpen`, so nothing is mounted yet.
+    expect(screen.queryByRole('complementary')).toBeNull()
+    // The bare class, as a token: `@max-[704px]:hidden` is always there and contains the word.
+    const hiddenOutright = (el: HTMLElement) => el.className.split(' ').includes('hidden')
+    expect(hiddenOutright(strip())).toBe(false)
+
+    fireEvent.click(screen.getByText('open'))
+    const panel = body()
+    expect(panel).toHaveAttribute('data-rail-mode', 'overlay')
+    // One arm: absolute and flush at every width, with no 1200px pair to switch between.
+    expect(panel.className).toContain('absolute')
+    expect(panel.className).toContain('right-0')
+    expect(panel.className).not.toContain('@min-[1200px]:relative')
+    expect(panel.className).not.toContain('@max-[1200px]:absolute')
+    // The stored width applies here too — the operator chose to float it, so the drag they set
+    // still governs — and the handle is drawn, unqualified by any container query, because at
+    // every width in this mode the width on screen is the stored one.
+    expect(panel.className).toContain('w-[var(--rail-w)]')
+    expect(handle().className).not.toContain('@max-[1200px]:hidden')
+    expect(hiddenOutright(strip())).toBe(true)
   })
 
   it('renders the grid exactly once, and never inside the rail', () => {

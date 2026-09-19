@@ -1,6 +1,5 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -10,16 +9,29 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  clampPanelWidth,
   SIDE_PANEL_BODY_CLASS,
   SIDE_PANEL_ENTER_CLASS,
+  SIDE_PANEL_MAX_WIDTH,
+  SIDE_PANEL_MIN_WIDTH,
+  SIDE_PANEL_OVERLAY_CLASS,
   SIDE_PANEL_STRIP_CLASS,
+  useSidePanelResize,
 } from '@/components/sheet/sidePanel'
+import { SidePanelResizeHandle } from '@/components/sheet/SidePanelResizeHandle'
+import { useSidePanelMode } from '@/lib/sidePanelMode'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { cn } from '@/lib/utils'
 
-/** The rail's docked width, in px: the stored one is clamped into this range on every read. */
-export const RAIL_MIN_WIDTH = 260
-export const RAIL_MAX_WIDTH = 480
+/**
+ * The rail's docked width, in px: the stored one is clamped into this range on every read. The
+ * range itself is the shared panel's (`components/sheet/sidePanel.ts`) — the busk sheet drags
+ * between the same two numbers, because the two are one instrument and neither had a reason of
+ * its own for a different floor or ceiling. These names stay because the rail's own tests and
+ * doc comments are written in them.
+ */
+export const RAIL_MIN_WIDTH = SIDE_PANEL_MIN_WIDTH
+export const RAIL_MAX_WIDTH = SIDE_PANEL_MAX_WIDTH
 export const RAIL_DEFAULT_WIDTH = 300
 // Three more numbers govern the rail and are deliberately NOT constants here: the 1200px dock
 // breakpoint, the 704px bottom-sheet breakpoint and the overlay's 300px width. All three are
@@ -34,8 +46,7 @@ const COLLAPSED_KEY = 'programmer.rail.collapsed'
 
 /** A stored width is data: a value from an older build, or a hand edit, is clamped rather than trusted. */
 export function clampRailWidth(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return RAIL_DEFAULT_WIDTH
-  return Math.min(RAIL_MAX_WIDTH, Math.max(RAIL_MIN_WIDTH, Math.round(value)))
+  return clampPanelWidth(value, RAIL_DEFAULT_WIDTH)
 }
 
 /**
@@ -175,58 +186,16 @@ function useRailGeometry(): RailGeometry {
  * move *before* last.
  */
 export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: ReactNode }) {
-  const [storedWidth, setStoredWidth] = usePersistentState<number>(WIDTH_KEY, RAIL_DEFAULT_WIDTH)
   const [collapsed, setCollapsed] = usePersistentState<boolean>(COLLAPSED_KEY, false)
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
-  /** The width under the pointer while a drag runs; null when one is not. */
-  const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const drag = useRef<{ startX: number; startWidth: number; width: number } | null>(null)
-  const resizing = dragWidth != null
-  const width = dragWidth ?? clampRailWidth(storedWidth)
-
-  const onResizeStart = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return
-      e.preventDefault()
-      const startWidth = clampRailWidth(storedWidth)
-      drag.current = { startX: e.clientX, startWidth, width: startWidth }
-      setDragWidth(startWidth)
-    },
-    [storedWidth],
-  )
-
-  // The rest of the drag lives on the window: the pointer leaves a 5px handle on the first
-  // movement, and the release very often happens over the grid. Keyed on `resizing`, the boolean,
-  // never on the dragged width, or every move would tear the listeners down and rebuild them.
-  useEffect(() => {
-    if (!resizing) return
-    const onMove = (e: PointerEvent) => {
-      const current = drag.current
-      if (!current) return
-      // The rail is on the right, so dragging its left edge leftwards grows it.
-      const next = clampRailWidth(current.startWidth + (current.startX - e.clientX))
-      if (next === current.width) return
-      current.width = next
-      setDragWidth(next)
-    }
-    const onUp = () => {
-      const final = drag.current?.width
-      drag.current = null
-      setDragWidth(null)
-      // Committed once, on release, rather than per move: `usePersistentState` writes
-      // localStorage on every change, and a drag is sixty of them a second.
-      if (final != null) setStoredWidth(final)
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', onUp)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('pointercancel', onUp)
-    }
-  }, [resizing, setStoredWidth])
+  // The drag is `useSidePanelResize`'s, shared with the busk view's side sheet — the four rules
+  // that make it behave (window listeners, keyed on the boolean, `pointercancel`, the ref written
+  // by the handlers) are stated once there rather than once per panel.
+  const { width, resizing, onResizeStart } = useSidePanelResize({
+    storageKey: WIDTH_KEY,
+    fallback: RAIL_DEFAULT_WIDTH,
+  })
 
   // Escape closes the overlay. `defaultPrevented` is how a sheet or a popover open above it says
   // it took the key: Radix's dismissable layer prevents the default on the Escape it handles, so
@@ -312,12 +281,15 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
  */
 export function RailBodyFrame({ children, enter }: { children: ReactNode; enter: boolean }) {
   const arm = useRailArm()
+  const mode = useSidePanelMode()
   const { width, onResizeStart } = useRailGeometry()
   const style = { '--rail-w': `${width}px` } as CSSProperties
+  const overlay = mode === 'overlay'
   return (
     <div
       role="complementary"
       aria-label="Layers and effects"
+      data-rail-mode={overlay ? 'overlay' : 'push'}
       style={style}
       className={cn(
         // The shared docked-panel body — the busk view's side sheet is the same column, and
@@ -327,24 +299,40 @@ export function RailBodyFrame({ children, enter }: { children: ReactNode; enter:
         // computed there, above the conditional mount, or expanding a collapsed rail could never
         // be told from the view's first render.
         enter && SIDE_PANEL_ENTER_CLASS,
-        // ≥1200: beside the grid at the stored width, or gone when collapsed.
-        '@min-[1200px]:relative @min-[1200px]:w-[var(--rail-w)] @min-[1200px]:shrink-0',
-        arm.collapsed && '@min-[1200px]:hidden',
-        // <1200: over the grid's right edge, left of the 40px strip, and gone unless opened.
-        '@max-[1200px]:absolute @max-[1200px]:inset-y-0 @max-[1200px]:right-10 @max-[1200px]:z-20 @max-[1200px]:w-[300px] @max-[1200px]:shadow-[-12px_0_32px_rgba(0,0,0,0.55)]',
-        !arm.overlayOpen && '@max-[1200px]:hidden',
+        // **Overlay mode: one arm at every width the rail is drawn at.** The operator asked for
+        // the panel over the grid, so there is no 1200px switch to make and `overlayOpen` is the
+        // only flag — `collapsed` says nothing here, which is why the header and the strip draw
+        // a single chevron in this mode rather than the docked/overlay pair.
+        overlay && [
+          SIDE_PANEL_OVERLAY_CLASS,
+          // The operator's own width: they chose to float it, so the drag they set still applies.
+          // Push mode's narrow arm keeps its fixed 300 — there the *width* forced the overlay,
+          // and a stored 480 would leave a 704px workspace 224px of grid.
+          'w-[var(--rail-w)]',
+          !arm.overlayOpen && 'hidden',
+        ],
+        // **Push mode: the width decides, as it always did.** The mode can only make the rail
+        // float where it would have docked, never dock where a 300px column would leave the grid
+        // 400px — so the ≥1200 / <1200 pair below is untouched by it.
+        !overlay && [
+          // ≥1200: beside the grid at the stored width, or gone when collapsed.
+          '@min-[1200px]:relative @min-[1200px]:w-[var(--rail-w)] @min-[1200px]:shrink-0',
+          arm.collapsed && '@min-[1200px]:hidden',
+          // <1200: over the grid's right edge, and gone unless opened.
+          '@max-[1200px]:absolute @max-[1200px]:inset-y-0 @max-[1200px]:right-0 @max-[1200px]:z-20 @max-[1200px]:w-[300px] @max-[1200px]:shadow-[-12px_0_32px_rgba(0,0,0,0.55)]',
+          !arm.overlayOpen && '@max-[1200px]:hidden',
+        ],
         // <704: never here. The body is the bottom sheet's, and the sheet is a portal.
         '@max-[704px]:hidden',
       )}
     >
-      {/* The 5px handle, straddling the border. Docked arm only: the overlay is not sized. */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize the rail"
-        title="Drag to resize the rail"
-        onPointerDown={onResizeStart}
-        className="absolute inset-y-0 -left-[3px] z-10 w-[5px] cursor-col-resize touch-none hover:bg-primary/40 @max-[1200px]:hidden"
+      {/* The 5px handle, straddling the border. It is drawn wherever the width on screen is the
+          stored one: in overlay mode always, and in push mode only at the width that docks —
+          push mode's narrow arm is a fixed 300px overlay that a drag would not move. */}
+      <SidePanelResizeHandle
+        label="the rail"
+        onResizeStart={onResizeStart}
+        className={overlay ? undefined : '@max-[1200px]:hidden'}
       />
       {children}
     </div>
@@ -357,11 +345,19 @@ export function RailBodyFrame({ children, enter }: { children: ReactNode; enter:
  */
 export function RailStripFrame({ children }: { children: ReactNode }) {
   const arm = useRailArm()
+  const overlay = useSidePanelMode() === 'overlay'
   return (
     <div
       className={cn(
         SIDE_PANEL_STRIP_CLASS,
-        !arm.collapsed && '@min-[1200px]:hidden',
+        // **The strip and the body are never both up.** It used to stand beside the open overlay
+        // at 704–1200, which is what the busk sheet has never done — there the fold *is* the
+        // closed state of the panel, and the two are one control in two shapes. Reported from the
+        // desk as the rail looking wrong beside it, and the sheet's reading is the one kept.
+        // In push mode that is the `@max-[1200px]` arm; in overlay mode there is only one arm.
+        overlay
+          ? arm.overlayOpen && 'hidden'
+          : [!arm.collapsed && '@min-[1200px]:hidden', arm.overlayOpen && '@max-[1200px]:hidden'],
         '@max-[704px]:hidden',
       )}
     >

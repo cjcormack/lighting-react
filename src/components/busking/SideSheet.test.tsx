@@ -194,6 +194,34 @@ describe('docked, on the desk board', () => {
     )
   })
 
+  it('opens no narrower than its header needs, lifting a width stored below that floor', () => {
+    // The row is three labelled tabs plus the mode toggle and the fold chevron inside the chrome
+    // row's 12px gutters — 304px measured — so at the shared 260 both buttons were pushed clean
+    // outside the panel. A desk that stored the old width is lifted on read.
+    window.localStorage.setItem('busk.sheet.width', JSON.stringify(260))
+    setBuskSheet('speed')
+    render(<SideSheet {...props} />)
+    const panel = document.querySelector('[data-side-sheet="speed"]') as HTMLElement
+    expect(Number.parseInt(panel.style.getPropertyValue('--sheet-w'), 10)).toBeGreaterThanOrEqual(320)
+  })
+
+  it('lets the tabs give before the header’s buttons do', () => {
+    // Insurance rather than a live case: `SHEET_MIN_WIDTH` keeps the row fitting today. It is
+    // here so the next control added to that row degrades — clipping the end of the tab strip —
+    // instead of pushing the toggle and the chevron outside the panel, which is exactly what
+    // adding the mode toggle did.
+    setBuskSheet('speed')
+    render(<SideSheet {...props} />)
+    const tablist = screen.getByRole('tablist')
+    const group = tablist.querySelector('div') as HTMLElement
+    expect(group.className).toContain('min-w-0')
+    expect(group.className).toContain('overflow-hidden')
+    expect(group.className).toContain('flex-1')
+    for (const name of ['Fold the side sheet', 'Show the panel over the content']) {
+      expect(screen.getByRole('button', { name }).className).toContain('shrink-0')
+    }
+  })
+
   it('draws the fold for a fact naming a tab that has not landed — none today, so the gate is pinned on the list', () => {
     // Every tab has landed; what remains is the mechanism a fourth tab would land through. The
     // strip draws exactly the live list, and nothing outside `LIVE_SHEET_TABS` reaches it.

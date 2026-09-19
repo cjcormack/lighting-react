@@ -516,7 +516,10 @@ export function BuskingView({ projectId }: { projectId: number }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-0 flex-1">
+      {/* `relative` is the side sheet's containing block in overlay mode — it is absolutely
+          positioned against this row, over the page body, exactly as the programmer rail's
+          overlay arm is against the workspace row. */}
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Not dimmed while editing any more: the band is being *edited* then — its tiles are
               drag handles and take drops — and a dim over a drop target reads as "not here". Pads

@@ -292,15 +292,17 @@ describe('ProgrammerPage', () => {
   })
 
   it('mounts the value grid exactly once across an overlay open and close', () => {
-    // The narrow arm: the strip opens the rail *over* the grid, and Escape, the strip, the
-    // rail's own chevron or a press on the grid close it. Both flags are in the DOM under jsdom
-    // (the arms are container queries), so this drives the narrow arm's controls directly.
+    // The narrow arm: the strip opens the rail *over* the grid, and Escape, the rail's own
+    // chevron or a press on the grid close it. Both flags are in the DOM under jsdom (the arms
+    // are container queries), so this drives the narrow arm's controls directly.
     draw()
     fireEvent.click(screen.getByLabelText('Collapse the rail'))
     const stripToggle = () => screen.getByRole('button', { name: 'Open the rail' })
     fireEvent.click(stripToggle())
     expect(screen.getByTestId('layers')).toBeTruthy()
-    expect(stripToggle()).toHaveAttribute('aria-expanded', 'true')
+    // The strip is off screen while the body is up, so its chevron is open-only and carries no
+    // `aria-expanded` — there is no longer a moment when both it and the header's close chevron
+    // are on screen for the state to tell apart.
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -310,11 +312,12 @@ describe('ProgrammerPage', () => {
     fireEvent.pointerDown(screen.getByTestId('grid'))
     expect(screen.queryByTestId('layers')).toBeNull()
 
-    // The strip's chevron closes it too, and the overlay's own header chevron.
+    // The strip's chevron no longer closes it — the strip is off screen while the body is up,
+    // so it is open-only, and a second press on it is the same press as the first. Closing is
+    // Escape, a press on the grid, and the overlay's own header chevron.
     fireEvent.click(stripToggle())
     fireEvent.click(stripToggle())
-    expect(screen.queryByTestId('layers')).toBeNull()
-    fireEvent.click(stripToggle())
+    expect(screen.getByTestId('layers')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Close the rail'))
     expect(screen.queryByTestId('layers')).toBeNull()
     expect(gridMounts).toHaveBeenCalledTimes(1)

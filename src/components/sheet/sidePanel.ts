@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { usePersistentState } from '@/hooks/usePersistentState'
 
 /**
  * **One docked side panel, stated once** — the programmer's rail and the busk view's side sheet.
@@ -52,18 +53,54 @@ export const SIDE_PANEL_STRIP_CELL_CLASS =
 export const SIDE_PANEL_HEADER_BUTTON_CLASS = 'size-6 text-muted-foreground'
 
 /**
- * The enter animation, played once when the panel opens. Slide plus fade from the right, because
- * both panels arrive from the right edge and both leave a strip behind them — a bare fade would
- * not say where the column came from.
+ * Where an **overlay**-mode panel sits: over the content, against the right edge, under nothing.
+ * Both surfaces hide their strip while the panel is up (`SIDE_PANEL_MODE`), so this is flush
+ * `right-0` rather than inset by a strip width.
+ *
+ * No scrim, and it must not gain one: the rail overlays a grid the operator goes on clicking, and
+ * the sheet overlays pads they go on pressing. That is also why neither uses the `Sheet` primitive
+ * here — a Radix dialog is modal, and off the desk board (where it *is* used) the surface really
+ * is one thing at a time.
+ */
+export const SIDE_PANEL_OVERLAY_CLASS =
+  'absolute inset-y-0 right-0 z-20 shadow-[-12px_0_32px_rgba(0,0,0,0.55)]'
+
+/**
+ * The enter animation, played once when the panel opens: the panel's **whole width**, slid in from
+ * the right, plus a fade.
+ *
+ * It was `slide-in-from-right-4` — 16px — and the desk's verdict was that neither panel felt like
+ * it was animating at all, which was right. 16px of travel is smaller than the thing that happens
+ * beside it: the content reflows by the panel's full width in a single frame, so the eye reads the
+ * jump and never registers the slide. A full-width slide is what the app's own `Sheet` primitive
+ * uses (`slide-in-from-right`, bare), and it is the reason a sheet reads as arriving.
+ *
+ * **The content's reflow is still instant, in push mode, and that is a deliberate limit.** Making
+ * the page open smoothly means animating the panel's `width`, which relayouts a virtualised grid
+ * on every frame, needs `overflow: hidden` (which would clip the rail's resize handle, drawn 3px
+ * outside its own left edge) and needs an inner fixed-width wrapper or the header's tabs reflow
+ * all the way in. What the operator sees instead is the space opening at once and the panel
+ * arriving into it — the ordinary behaviour of every sheet on this desk.
  *
  * There is deliberately **no exit animation**. An exiting panel has to stay mounted for the length
  * of it, which for these two means holding a layer list, an FX list and their subscriptions —
  * or a colour picker mid-drag — alive after the operator has asked for them to go. The ask was to
  * animate the opening, and opening is the half that can be done without keeping state alive past
  * its welcome.
+ *
+ * **The duration and the easing are arbitrary *animation* properties, never `duration-300` and
+ * `ease-out`, and that is not a style preference.** Those two utilities set the transition
+ * properties as well — `tailwindcss-animate` re-declares `duration-*` as `animation-duration`,
+ * and Tailwind's own `duration-*` sets `transition-duration` — and CSS's initial
+ * `transition-property` is `all`. So a panel carrying them transitions **every** property over
+ * 300ms, and because `usePanelEnter` latches the class for as long as the panel is open, that
+ * lasts the whole visit. What it broke was the resize: dragging the handle set a new width every
+ * frame and each one was *transitioned* to, so the panel lagged behind the pointer and eased
+ * toward wherever it had last been told to go. Reported from the desk as the drag feeling like an
+ * animation rather than a drag. Nothing here may reintroduce a bare `duration-*` or `ease-*`.
  */
 export const SIDE_PANEL_ENTER_CLASS =
-  'animate-in fade-in-0 slide-in-from-right-4 duration-200 ease-out'
+  'animate-in fade-in-0 slide-in-from-right [animation-duration:300ms] [animation-timing-function:cubic-bezier(0,0,0.2,1)]'
 
 /**
  * Whether the panel should play its enter animation this render.
@@ -96,4 +133,133 @@ export function usePanelEnter(open: boolean): boolean {
     setEnter(open)
   }
   return enter
+}
+
+/**
+ * The width a docked panel may be dragged to. One range for both, because they are one
+ * instrument and neither has a reason of its own for a different floor or ceiling: below ~260 a
+ * layer row's name and a colour picker both stop fitting, and above ~480 either panel is taking
+ * more of a desk screen than the thing it annotates.
+ */
+export const SIDE_PANEL_MIN_WIDTH = 260
+export const SIDE_PANEL_MAX_WIDTH = 480
+
+/**
+ * A stored width is data: a value from an older build, or a hand edit, is clamped rather than
+ * trusted. `min` is the panel's own floor where it needs one above the shared 260 — see
+ * `useSidePanelResize`.
+ */
+export function clampPanelWidth(
+  value: unknown,
+  fallback: number,
+  min: number = SIDE_PANEL_MIN_WIDTH,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return Math.max(min, fallback)
+  return Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(min, Math.round(value)))
+}
+
+/**
+ * **The drag that sets a docked panel's width** — the programmer rail's, lifted out so the busk
+ * view's side sheet is resized by the same code rather than by a second copy of it.
+ *
+ * Both panels sit against the **right** edge, so dragging the handle leftwards grows them; a
+ * left-hand panel would need the sign flipped and there is deliberately no option for one until
+ * something needs it.
+ *
+ * Four properties are load-bearing, and each was a bug in the rail's own version first:
+ *
+ * - **The rest of the drag lives on `window`.** The pointer leaves a 5px handle on the first
+ *   movement, and the release very often happens over the content beside it.
+ * - **The effect is keyed on `resizing`, the boolean, never on the width** — keyed on the width,
+ *   every move would tear the listeners down and rebuild them.
+ * - **`pointercancel` ends it exactly as `pointerup` does.** On a touchscreen a drag the browser
+ *   reclaims as a pan ends with no release at all, and a panel left `resizing` would keep its
+ *   window listeners and write a width on the next pointer movement anywhere on the page with
+ *   nothing held down.
+ * - **The live width is written by the pointer handlers into a ref as well as state, never at
+ *   render time.** A fast drag can dispatch the last move and the release inside one task with no
+ *   re-render between, and a ref assigned during render would commit the width from the move
+ *   *before* last.
+ *
+ * The stored value is committed **once, on release**: `usePersistentState` writes storage on every
+ * change and a drag is sixty of them a second. It is `localStorage` and not the per-tab
+ * `sessionStorage` that `lib/sidePanelMode.ts` uses, because a width is a fact about this desk's
+ * screen rather than about which of two windows you are looking at.
+ *
+ * **Call it from a component the panel's contents do not re-render with.** The width changes at
+ * pointer rate, so whatever reads it re-renders at pointer rate: the rail's `RailBodyFrame` and
+ * the sheet's `DockedSideSheet` both take their contents as `children`, so a re-render reuses
+ * those element references and React skips the subtrees underneath.
+ */
+export interface SidePanelResize {
+  /** The committed width, or the live one while the handle is being dragged. */
+  width: number
+  /** A drag is in progress — the cursor and `select-none` follow this. */
+  resizing: boolean
+  /** The handle's `onPointerDown`; the rest of the drag is on `window`. */
+  onResizeStart: (e: ReactPointerEvent) => void
+}
+
+export function useSidePanelResize({
+  storageKey,
+  fallback,
+  min = SIDE_PANEL_MIN_WIDTH,
+}: {
+  storageKey: string
+  fallback: number
+  /**
+   * This panel's own floor, where the shared 260 is too narrow for its chrome. The **header** is
+   * usually what sets it, not the body: the rail's is two short labels with badges and fits at
+   * 240, where the sheet's is three labelled tabs plus the mode toggle and the fold chevron and
+   * needs 304. Measure it rather than guessing, and leave slack — a minimum sitting on the exact
+   * fit clips the moment anything is added to the row.
+   */
+  min?: number
+}): SidePanelResize {
+  const [storedWidth, setStoredWidth] = usePersistentState<number>(storageKey, fallback)
+  /** The width under the pointer while a drag runs; null when one is not. */
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
+  const drag = useRef<{ startX: number; startWidth: number; width: number } | null>(null)
+  const resizing = dragWidth != null
+  const width = dragWidth ?? clampPanelWidth(storedWidth, fallback, min)
+
+  const onResizeStart = useCallback(
+    (e: ReactPointerEvent) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      const startWidth = clampPanelWidth(storedWidth, fallback, min)
+      drag.current = { startX: e.clientX, startWidth, width: startWidth }
+      setDragWidth(startWidth)
+    },
+    [storedWidth, fallback, min],
+  )
+
+  useEffect(() => {
+    if (!resizing) return
+    const onMove = (e: PointerEvent) => {
+      const current = drag.current
+      if (!current) return
+      // The panel is on the right, so dragging its left edge leftwards grows it.
+      const next = clampPanelWidth(current.startWidth + (current.startX - e.clientX), fallback, min)
+      if (next === current.width) return
+      current.width = next
+      setDragWidth(next)
+    }
+    const onUp = () => {
+      const final = drag.current?.width
+      drag.current = null
+      setDragWidth(null)
+      if (final != null) setStoredWidth(final)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [resizing, setStoredWidth, fallback, min])
+
+  return { width, resizing, onResizeStart }
 }
