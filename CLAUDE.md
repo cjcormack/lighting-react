@@ -844,9 +844,9 @@ own writes and is never an arrival.
 
 **The sheet is one fact, and the fold is `none`.** There is no `sheetOpen` beside it, whatever
 `Focus.dc.html`'s older sketch lists — `SideSheet` (`components/busking/SideSheet.tsx`) draws the
-tab strip and the tab when the fact names a live tab and `SideSheetFold` (44px: the beat, master
-1's tempo, one glyph per live tab, the selection's colour off the stage's colour dispatch, the head
-count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
+tab strip and the tab when the fact names a live tab and `SideSheetFold` (the shared 40px strip:
+the beat, master 1's tempo, one glyph per live tab, the selection's colour off the stage's colour
+dispatch, the head count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
 so a MIDI `{sheet: 'toggle'}` **and the fold's chevron** unfold onto the tab the operator had —
 both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`
 mounted unchanged** inside the sheet, **Colour is `ColourSheet`** and **Spread is `SpreadSheet`**
@@ -859,6 +859,51 @@ Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upri
 right-hand sheet where the viewport is short, through `useCellEditorForm`'s forms — opened from
 the page strip's *Sheet* button onto Colour, carrying **Colour and Spread** and **no Speed tab**
 (Speed is the ShowBar's chip there). The palette still replaces the whole region while editing.
+
+**Its chrome is the programmer rail's, and both live in `components/sheet/sidePanel.ts`.** The two
+are one instrument in two views — a column against the right edge of a live view, folded to a strip
+of glyphs, a 40px header over a scroller — and they had drifted in exactly the measurements the
+chrome system exists to settle: the sheet was a transparent column on a 36px header with a 44px
+strip, whose chevron was `p-1` and whose tab glyphs were `p-1.5`, against the rail's opaque fill,
+40px header and 40px strip cells. The module states each once (`SIDE_PANEL_BODY_CLASS`,
+`_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`, `_ENTER_CLASS`), `sheetFrame.ts`'s
+model — a surface that wants to differ says so at its own import. **There is no
+`SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so both
+surfaces take `CHROME_ROW_CLASS` from `sheetFrame.ts` and a panel-specific name for it would have
+been the one measurement stated twice — the drift both modules exist to close. The overlay form's
+tab row takes it too, at `h-11`, so its inset went from 8px to 12: a tab row is a chrome row off
+the desk board as much as on it, and that one carries two tabs and no chevron. Three things carried across with it. The **fill is
+opaque** (`color-mix`, not `bg-card/40`), because both panels have an overlay arm over live
+content. The **chevron vocabulary is the rail's** — `ChevronLeft` opens, `ChevronRight` folds —
+where the sheet drew `PanelRightOpen` / `PanelRightClose`; the fold's chevron is the strip's own
+40px cell now, so the two strips start at the same line. And the fold is **40px, not 44**: 44 is
+the programmer's *phone handle*, a target for a finger, and both of these strips are drawn only on
+a board wide enough to dock. `Sheets.dc.html` §Folded, still cited above as the layout authority,
+draws that strip at 44 — **the commit wins**, as elsewhere in this doc.
+
+**What is deliberately not shared is the state.** The rail's `collapsed` is a persisted desk
+preference in `ProgrammerWorkspace`; this sheet's fold is `busk.sheet === 'none'`, a per-tab fact
+the announce, ⌘K, the Screens sheet and MIDI all write. Nor is Escape: a *docked* panel takes it on
+neither view, and only the overlay arms do — the rail's through its own window listener, this one's
+through Radix. The busk sheet has no resize handle either; the rail's width is a stored desk
+preference with a drag, and the sheet is a fixed 288px.
+
+**Both panels animate their opening, and neither animates its closing** (`SIDE_PANEL_ENTER_CLASS`,
+`usePanelEnter`). The rail takes **one latch per arm** — `!collapsed` for the docked arm,
+`overlayOpen` for the overlay one — because in the overlay arm the body is mounted the whole time
+and the container query alone draws it: a single `!collapsed || overlayOpen` rests at true, so
+opening the overlay transitions nothing and that arm never animated. The two results are OR-ed as
+separate statements, never `usePanelEnter(a) || usePanelEnter(b)`, which short-circuits past the
+second hook. The flag is **latched** while the panel is open — `animate-in` is a class, so a
+re-render that dropped it mid-flight would cut the animation off part-way, and both panels
+re-render freely while open — and it is **false on the first render** whatever the state says, or a
+panel whose stored preference is "open" would slide in on every arrival at the route and every
+reload. It must be computed in a component that *outlives* the panel: `ProgrammerRail` and
+`SideSheet` both render the strip or the body and stay mounted across the swap, so a hook inside
+either subtree would see every appearance as a first render. There is no exit animation because an
+exiting panel has to stay mounted for its duration, which here means holding a layer list, an FX
+list and their subscriptions — or a colour picker mid-drag — alive after the operator asked for
+them to go.
 
 **The Colour tab writes literals to Local, and only that** (D8, `components/busking/ColourSheet.tsx`).
 Every drag is `programmer.setColour` per selected target — a group as a group write, a cell by its

@@ -21,6 +21,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
+import {
+  SIDE_PANEL_HEADER_BUTTON_CLASS,
+  SIDE_PANEL_STRIP_CELL_CLASS,
+  usePanelEnter,
+} from '@/components/sheet/sidePanel'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
@@ -128,6 +134,22 @@ export function ProgrammerRail() {
   const [band, setBand] = useState<RailBand | null>(null)
   const addEffect = useProgrammerAddEffect()
   const closeAdd = useCallback(() => setAdding(null), [])
+  // The body's enter animation. Computed **here**, not in `RailBodyFrame`: that frame is mounted
+  // conditionally below, so a hook inside it sees every appearance as a first render and could
+  // never tell "the operator expanded the rail" from "the view just loaded with it open".
+  //
+  // **One latch per arm, because the two arms open for different reasons.** Docked, the body
+  // shows when `collapsed` goes false; in the overlay arm it is *mounted the whole time* and the
+  // container query alone decides whether it is drawn, so what opens it is `overlayOpen`. A
+  // single `usePanelEnter(!collapsed || overlayOpen)` cannot see the second: `collapsed` rests
+  // at false, so that expression is already true on the first render and opening the overlay
+  // transitions nothing — the overlay arm simply never animated. The two calls are separate
+  // statements and the *results* are OR-ed: `usePanelEnter(a) || usePanelEnter(b)` would
+  // short-circuit past the second hook on any render where the first answered true, which is a
+  // changing hook count between renders.
+  const expandEnter = usePanelEnter(!arm.collapsed)
+  const overlayEnter = usePanelEnter(arm.overlayOpen)
+  const bodyEnter = expandEnter || overlayEnter
   // Stable, because `RailBody` is memoised against a parent that re-renders on every selection
   // change — a fresh closure here would defeat that memo at marquee rate.
   const clearBand = useCallback(() => setBand(null), [])
@@ -177,7 +199,7 @@ export function ProgrammerRail() {
         </Sheet>
       ) : (
         (!arm.collapsed || arm.overlayOpen) && (
-          <RailBodyFrame>
+          <RailBodyFrame enter={bodyEnter}>
             <RailHeader layerCount={layerCount} fxCount={fxCount} />
             {body}
             <RailFooter onAdd={setAdding} addEffect={addEffect} />
@@ -237,7 +259,7 @@ function CountBadge({ count }: { count: number }) {
 function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: number }) {
   const arm = useRailArm()
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+    <div className={CHROME_ROW_CLASS}>
       <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
         <Layers className="size-3" />
         Layers
@@ -255,7 +277,7 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
       <Button
         variant="ghost"
         size="icon"
-        className="size-6 text-muted-foreground @max-[1200px]:hidden"
+        className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@max-[1200px]:hidden')}
         aria-label="Collapse the rail"
         title="Collapse the rail to a strip"
         onClick={arm.collapse}
@@ -265,7 +287,7 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
       <Button
         variant="ghost"
         size="icon"
-        className="size-6 text-muted-foreground @min-[1200px]:hidden"
+        className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@min-[1200px]:hidden')}
         aria-label="Close the rail"
         title="Close the rail"
         onClick={arm.closeOverlay}
@@ -520,7 +542,7 @@ function RailStrip({
       <Button
         variant="ghost"
         size="icon"
-        className="h-10 w-10 rounded-none border-b text-muted-foreground @max-[1200px]:hidden"
+        className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@max-[1200px]:hidden')}
         aria-label="Expand the rail"
         title="Show the layers and effects"
         onClick={arm.expand}
@@ -533,7 +555,7 @@ function RailStrip({
       <Button
         variant="ghost"
         size="icon"
-        className="h-10 w-10 rounded-none border-b text-muted-foreground @min-[1200px]:hidden"
+        className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@min-[1200px]:hidden')}
         aria-label="Open the rail"
         aria-expanded={arm.overlayOpen}
         title={

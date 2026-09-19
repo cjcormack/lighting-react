@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
-import { Gauge, Palette, PanelRightClose, Waves, type LucideIcon } from 'lucide-react'
+import { ChevronRight, Gauge, Palette, Waves, type LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
@@ -8,6 +9,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useCellEditorForm, type CellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
+import {
+  SIDE_PANEL_BODY_CLASS,
+  SIDE_PANEL_ENTER_CLASS,
+  SIDE_PANEL_HEADER_BUTTON_CLASS,
+  usePanelEnter,
+} from '@/components/sheet/sidePanel'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { LIVE_SHEET_TABS, setBuskSheet, useBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
 import { cn } from '@/lib/utils'
@@ -50,6 +58,14 @@ import type { BuskingTarget } from './buskingTypes'
  * page strip's button onto Colour.
  *
  * The palette still replaces this whole region while editing; that swap is `BuskingView`'s.
+ *
+ * **Its chrome is the programmer rail's, through `components/sheet/sidePanel.ts`.** The two are
+ * the same instrument — a column against the right edge of a live view, folded to a strip of
+ * glyphs — and they had drifted in every measurement the chrome system is supposed to settle. The
+ * body fill, the 40px header, the 40px strip cell, the chevron vocabulary (◀ opens, ▶ folds) and
+ * the enter animation all come from that module now; what stays this view's own is the *fact*
+ * behind the fold, because `busk.sheet` is a per-window value the announce, ⌘K, the Screens sheet
+ * and MIDI all write, where the rail's `collapsed` is a stored desk preference.
  */
 
 interface TabSpec {
@@ -104,12 +120,21 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
   const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs('docked')
   const open = tabs.find((tab) => tab.id === sheet)
+  // Latched here rather than inside the panel below: the fold and the panel are two subtrees of
+  // this component and only one is ever mounted, so a hook in either would see every appearance
+  // as its first render and animate on arrival at the route as readily as on an unfold.
+  const enter = usePanelEnter(open != null)
   if (open == null) {
     return <SideSheetFold projectId={projectId} selectedTargets={selectedTargets} tabs={tabs} />
   }
   return (
-    <div data-side-sheet={open.id} className="hidden w-72 shrink-0 flex-col md:flex">
-      <div role="tablist" aria-label="Side sheet" className="flex h-9 shrink-0 items-center gap-0.5 border-b border-l px-2">
+    <div
+      data-side-sheet={open.id}
+      role="complementary"
+      aria-label="Side sheet"
+      className={cn(SIDE_PANEL_BODY_CLASS, 'hidden w-72 shrink-0 md:flex', enter && SIDE_PANEL_ENTER_CLASS)}
+    >
+      <div role="tablist" aria-label="Side sheet" className={cn(CHROME_ROW_CLASS, 'gap-0.5')}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -117,8 +142,12 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
             role="tab"
             aria-selected={tab.id === open.id}
             onClick={() => setBuskSheet(tab.id)}
+            // `px-2`, not the 10px it was: three tabs and the fold chevron have to fit inside the
+            // header's own 12px gutter, and at 10px they came to 3px more than the 288px column
+            // has — which the browser pays for by eating the padding, leaving the chevron 4px
+            // from the edge instead of 12 and every tab a pixel narrower than it asked for.
             className={cn(
-              'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors',
+              'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
               tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -127,19 +156,21 @@ export function SideSheet({ projectId, selectedTargets, families }: SideSheetPro
           </button>
         ))}
         <span className="flex-1" />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setBuskSheet('none')}
           aria-label="Fold the side sheet"
-          title="Fold the sheet to its 44px strip"
-          className="rounded p-1 text-muted-foreground hover:text-foreground"
+          title="Fold the sheet to its strip"
+          className={SIDE_PANEL_HEADER_BUTTON_CLASS}
         >
-          <PanelRightClose className="size-4" />
-        </button>
+          <ChevronRight className="size-3.5" />
+        </Button>
       </div>
-      {/* The rail sizes itself and scrolls itself; the wrapper only hands it the column's height.
-          Its own `border-l` continues the strip's, so the region has one left edge, not two. */}
-      <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1">
+      {/* The tab sizes itself and scrolls itself; the wrapper only hands it the column's height.
+          The left edge is this panel's now, so a tab's own `border-l` is taken off — the region
+          has one line down its side, not two stacked on the same pixel. */}
+      <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
         {open.id === 'speed' && <BuskSpeedRail />}
         {open.id === 'colour' && (
           <ColourSheet projectId={projectId} selectedTargets={selectedTargets} families={families} onSpread={onSpread} />
@@ -182,7 +213,14 @@ export function SideSheetOverlay({ projectId, selectedTargets, families }: SideS
           <SheetTitle>{open?.label ?? 'Side sheet'}</SheetTitle>
           <SheetDescription>The busk view’s side sheet</SheetDescription>
         </SheetHeader>
-        <div role="tablist" aria-label="Side sheet" className="flex h-11 shrink-0 items-center gap-0.5 border-b px-2">
+        <div
+          role="tablist"
+          aria-label="Side sheet"
+          // The chrome row's own 12px gutter, at a touch height. Its inset was 8px and is
+          // 12 now, deliberately: a tab row is a chrome row here as much as on the desk board,
+          // and this one carries two tabs and no chevron, so it has the width to spare.
+          className={cn(CHROME_ROW_CLASS, 'h-11 gap-0.5')}
+        >
           {tabs.map((tab) => (
             <button
               key={tab.id}

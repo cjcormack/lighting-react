@@ -9,6 +9,11 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
+import {
+  SIDE_PANEL_BODY_CLASS,
+  SIDE_PANEL_ENTER_CLASS,
+  SIDE_PANEL_STRIP_CLASS,
+} from '@/components/sheet/sidePanel'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { cn } from '@/lib/utils'
 
@@ -293,6 +298,11 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
  * The width reaches the docked arm through a CSS variable rather than an inline `width`, because
  * an inline width could be overridden by nothing — the narrow arm has to be able to set its own.
  *
+ * `enter` is **required, not optional**: a caller that forgot it would get a panel that silently
+ * never animates, which reads as a plausible result rather than a mistake, and the compiler is
+ * the only thing that can tell the difference. It comes from `usePanelEnter`, which has to be
+ * called above this frame — see the hook's own comment for why.
+ *
  * Mounted by `ProgrammerRail` only while it can be seen in some arm (`!collapsed || overlayOpen`),
  * and not at all while the phone arm's sheet is open — that arm renders the same body inside the
  * sheet, and mounting it twice would be two layer lists, two FX lists and two subscriptions to
@@ -300,7 +310,7 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
  * the container query says otherwise — is accepted: nothing in the rail owns a selection, and the
  * alternative is a JS measurement of the width the container query already answers.
  */
-export function RailBodyFrame({ children }: { children: ReactNode }) {
+export function RailBodyFrame({ children, enter }: { children: ReactNode; enter: boolean }) {
   const arm = useRailArm()
   const { width, onResizeStart } = useRailGeometry()
   const style = { '--rail-w': `${width}px` } as CSSProperties
@@ -310,10 +320,13 @@ export function RailBodyFrame({ children }: { children: ReactNode }) {
       aria-label="Layers and effects"
       style={style}
       className={cn(
-        // An **opaque** fill, mixed from the card tint and the page background, rather than
-        // `bg-card/40`: docked, a 40% tint over the page reads the same, but the overlay sits over
-        // row B and the grid's column header, and a translucent rail let both bleed through it.
-        'flex min-h-0 flex-col border-l bg-[color-mix(in_oklab,var(--card)_40%,var(--background))]',
+        // The shared docked-panel body — the busk view's side sheet is the same column, and
+        // `components/sheet/sidePanel.ts` says why the fill is opaque rather than `bg-card/40`.
+        SIDE_PANEL_BODY_CLASS,
+        // The enter animation, latched by `usePanelEnter` in `ProgrammerRail` — it has to be
+        // computed there, above the conditional mount, or expanding a collapsed rail could never
+        // be told from the view's first render.
+        enter && SIDE_PANEL_ENTER_CLASS,
         // ≥1200: beside the grid at the stored width, or gone when collapsed.
         '@min-[1200px]:relative @min-[1200px]:w-[var(--rail-w)] @min-[1200px]:shrink-0',
         arm.collapsed && '@min-[1200px]:hidden',
@@ -347,7 +360,7 @@ export function RailStripFrame({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
-        'flex w-10 shrink-0 flex-col items-center border-l bg-card/40',
+        SIDE_PANEL_STRIP_CLASS,
         !arm.collapsed && '@min-[1200px]:hidden',
         '@max-[704px]:hidden',
       )}

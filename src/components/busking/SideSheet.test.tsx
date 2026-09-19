@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { LIVE_SHEET_TABS, getBuskSheet, resetBuskWindowStores, setBuskSheet } from '@/lib/buskWindow'
 import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { SIDE_PANEL_BODY_CLASS, SIDE_PANEL_STRIP_CLASS } from '@/components/sheet/sidePanel'
+import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
@@ -155,6 +157,41 @@ describe('docked, on the desk board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unfold the side sheet' }))
     expect(getBuskSheet()).toBe('colour')
     expect(screen.getByTestId('colour-sheet')).toBeInTheDocument()
+  })
+
+  it('wears the programmer rail’s chrome: the shared body, header and strip, and the enter animation', () => {
+    setBuskSheet('speed')
+    const { rerender } = render(<SideSheet {...props} />)
+    const panel = document.querySelector('[data-side-sheet="speed"]') as HTMLElement
+    // The body's fill and its one left edge come from the shared module, not from this file.
+    for (const cls of SIDE_PANEL_BODY_CLASS.split(' ')) expect(panel.className).toContain(cls)
+    expect(panel).toHaveAttribute('role', 'complementary')
+    // The header IS the 40px chrome row — `sheetFrame.ts`'s own, not a copy of it. Every class
+    // of it survives except `gap-2`, which the tab row deliberately tightens to `gap-0.5`; that
+    // one exception is asserted rather than skipped, so a second divergence cannot creep in.
+    const header = screen.getByRole('tablist')
+    for (const cls of CHROME_ROW_CLASS.split(' ')) {
+      if (cls === 'gap-2') continue
+      expect(header.className).toContain(cls)
+    }
+    expect(header.className).toContain('gap-0.5')
+    expect(header.className).not.toContain('gap-2')
+    // Already open on the first render is not "opening": no animation on arrival at the route.
+    expect(panel.className).not.toContain('animate-in')
+
+    // Folded, the strip is the rail's 40px one — not the phone handle's 44.
+    setBuskSheet('none')
+    rerender(<SideSheet {...props} />)
+    const strip = document.querySelector('[data-side-sheet="none"]') as HTMLElement
+    for (const cls of SIDE_PANEL_STRIP_CLASS.split(' ')) expect(strip.className).toContain(cls)
+    expect(strip.className).not.toContain('w-11')
+
+    // Unfolding is an opening, so this one animates.
+    fireEvent.click(screen.getByRole('button', { name: 'Unfold the side sheet' }))
+    rerender(<SideSheet {...props} />)
+    expect((document.querySelector('[data-side-sheet="speed"]') as HTMLElement).className).toContain(
+      'animate-in',
+    )
   })
 
   it('draws the fold for a fact naming a tab that has not landed — none today, so the gate is pinned on the list', () => {

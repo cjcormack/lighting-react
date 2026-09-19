@@ -1,18 +1,31 @@
 import { useMemo } from 'react'
-import { PanelRightOpen, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, type LucideIcon } from 'lucide-react'
 import { BeatIndicator } from '@/components/BeatIndicator'
 import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance'
+import {
+  SIDE_PANEL_STRIP_CELL_CLASS,
+  SIDE_PANEL_STRIP_CLASS,
+} from '@/components/sheet/sidePanel'
+import { Button } from '@/components/ui/button'
 import { formatBpm } from '@/hooks/useBpmDraft'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { setBuskSheet, toggleBuskSheet, type BuskSheetTab } from '@/lib/buskWindow'
+import { cn } from '@/lib/utils'
 import { usePatchListQuery } from '@/store/patches'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
 
 /**
- * The side sheet **folded** to 44px (busk-further plan D7; `Sheets.dc.html` §Folded): the two live
- * readouts a busking operator glances at — the beat and master 1's tempo — the tab glyphs, so a
- * folded rail is still one tap from any tab, the selection's colour as a dot, and its head count.
+ * The side sheet **folded** to the shared 40px strip (busk-further plan D7; `Sheets.dc.html`
+ * §Folded): the two live readouts a busking operator glances at — the beat and master 1's tempo —
+ * the tab glyphs, so a folded rail is still one tap from any tab, the selection's colour as a dot,
+ * and its head count.
+ *
+ * **It is the programmer rail's strip**, through `SIDE_PANEL_STRIP_CLASS` — same width, same fill,
+ * same chevron cell at the top. It was 44px and unfilled, which is the phone handle's measurement
+ * on a control that is only ever drawn on the desk board; `components/sheet/sidePanel.ts` states
+ * why 40 is this one's. `Sheets.dc.html` §Folded, cited above, still draws it at 44: the commit
+ * wins.
  *
  * A tap on a glyph unfolds onto that tab; the chevron unfolds onto whichever tab was last open —
  * through `toggleBuskSheet`, the one reader of that memory, so the chevron and a MIDI
@@ -38,45 +51,59 @@ export function SideSheetFold({
   const heads = selectedHeadCount([...selectedTargets.values()])
 
   return (
-    <div data-side-sheet="none" className="hidden w-11 shrink-0 flex-col items-center gap-3 border-l py-2 md:flex">
-      <button
-        type="button"
+    <div data-side-sheet="none" className={cn(SIDE_PANEL_STRIP_CLASS, 'hidden md:flex')}>
+      {/* The strip's own cell, as the rail's expand chevron is: a full-width 40px square with the
+          dividing line under it, so the two strips read as one control at the same height. */}
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={toggleBuskSheet}
         aria-label="Unfold the side sheet"
         title="Unfold the side sheet"
-        className="rounded p-1 text-muted-foreground hover:text-foreground"
+        className={SIDE_PANEL_STRIP_CELL_CLASS}
       >
-        <PanelRightOpen className="size-4" />
-      </button>
+        <ChevronLeft className="size-3.5" />
+      </Button>
 
-      <div className="flex flex-col items-center gap-1" title="Master 1">
-        <BeatIndicator master={master1 == null ? undefined : { uuid: master1.uuid, index: 1 }} className="size-2" />
-        <span data-fold-tempo className="text-[11px] font-semibold tabular-nums">
-          {master1 == null ? '—' : formatBpm(master1.bpm)}
+      {/* Everything below the cell shares the column's own padding: the cell is edge-to-edge and
+          its border has to run the full 40px, so the inset cannot be on the strip. */}
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-3 py-2">
+        <div className="flex flex-col items-center gap-1" title="Master 1">
+          <BeatIndicator
+            master={master1 == null ? undefined : { uuid: master1.uuid, index: 1 }}
+            className="size-2"
+          />
+          <span data-fold-tempo className="text-[11px] font-semibold tabular-nums">
+            {master1 == null ? '—' : formatBpm(master1.bpm)}
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setBuskSheet(tab.id)}
+              aria-label={`Open the ${tab.label} tab`}
+              title={tab.label}
+              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <tab.icon className="size-4" />
+            </button>
+          ))}
+        </div>
+
+        <span className="flex-1" />
+
+        <SelectionColourDot projectId={projectId} selectedTargets={selectedTargets} />
+        <span
+          data-fold-heads
+          className="text-[10px] tabular-nums text-muted-foreground"
+          title="Selected heads"
+        >
+          {heads}
         </span>
       </div>
-
-      <div className="flex flex-col items-center gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setBuskSheet(tab.id)}
-            aria-label={`Open the ${tab.label} tab`}
-            title={tab.label}
-            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <tab.icon className="size-4" />
-          </button>
-        ))}
-      </div>
-
-      <span className="flex-1" />
-
-      <SelectionColourDot projectId={projectId} selectedTargets={selectedTargets} />
-      <span data-fold-heads className="text-[10px] tabular-nums text-muted-foreground" title="Selected heads">
-        {heads}
-      </span>
     </div>
   )
 }

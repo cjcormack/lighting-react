@@ -11,6 +11,7 @@ import {
   RailStripFrame,
   useRailArm,
 } from './ProgrammerWorkspace'
+import { SIDE_PANEL_BODY_CLASS, usePanelEnter } from '@/components/sheet/sidePanel'
 
 /**
  * The rail's three arms and the state behind them, driven through a stand-in rail that reads
@@ -27,6 +28,13 @@ let railRenders = 0
 function TestRail() {
   const arm = useRailArm()
   railRenders += 1
+  // `ProgrammerRail` computes the enter flag here, above the conditional mount, for the reason
+  // the assertions below pin: a hook inside the frame sees every appearance as a first render.
+  // One latch per arm, as the real rail does — the overlay arm's body is mounted the whole time,
+  // so `!collapsed` alone can never see it open.
+  const expandEnter = usePanelEnter(!arm.collapsed)
+  const overlayEnter = usePanelEnter(arm.overlayOpen)
+  const enter = expandEnter || overlayEnter
   return (
     <>
       {/* The real rail's ternary: the sheet and the docked body are one body in two places. */}
@@ -36,7 +44,7 @@ function TestRail() {
         </div>
       ) : (
         (!arm.collapsed || arm.overlayOpen) && (
-          <RailBodyFrame>
+          <RailBodyFrame enter={enter}>
             <button onClick={arm.collapse}>collapse</button>
             <button onClick={arm.closeOverlay}>close</button>
           </RailBodyFrame>
@@ -249,6 +257,29 @@ describe('ProgrammerWorkspace', () => {
       false,
     )
     expect(window.localStorage.getItem('programmer.rail.width')).toBe(String(RAIL_DEFAULT_WIDTH))
+  })
+
+  it('shares the busk side sheet’s body chrome, and animates the body in only when it opens', () => {
+    draw()
+    // The fill and the left edge are the shared module's — `components/sheet/sidePanel.ts`.
+    for (const cls of SIDE_PANEL_BODY_CLASS.split(' ')) expect(body().className).toContain(cls)
+    // Expanded on the first render is the stored default, and is not an opening.
+    expect(body().className).not.toContain('animate-in')
+    fireEvent.click(screen.getByText('collapse'))
+    fireEvent.click(screen.getByText('expand'))
+    expect(body().className).toContain('animate-in')
+  })
+
+  it('animates the overlay arm too — its body is mounted throughout, so `!collapsed` cannot see it open', () => {
+    // The defect this pins: `collapsed` rests at false, so a single `!collapsed || overlayOpen`
+    // is already true on the first render and opening the overlay transitions nothing. jsdom
+    // draws no arms, but the flag is JavaScript and is the whole of what the arm animates on.
+    draw()
+    expect(body().className).not.toContain('animate-in')
+    fireEvent.click(screen.getByText('open'))
+    expect(body().className).toContain('animate-in')
+    fireEvent.click(screen.getByText('close'))
+    expect(body().className).not.toContain('animate-in')
   })
 
   it('renders the grid exactly once, and never inside the rail', () => {
