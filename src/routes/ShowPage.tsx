@@ -12,15 +12,12 @@ import { useEditLock } from '../hooks/useEditLock'
 import { useCueExpansion } from '../hooks/useCueExpansion'
 import { useTransportKeys } from '../hooks/useTransportKeys'
 import { useNarrowContainer } from '../hooks/useContainerBand'
-import { useProjectCueLocationsQuery, useProjectPromptBookQuery } from '../store/promptBooks'
-import { positionLabelFor } from '../lib/promptBook/geometry'
 import { StackTabStrip } from '../components/runner/StackTabStrip'
 import { OffPlayheadBanner } from '../components/runner/OffPlayheadBanner'
-import { RunMobile, type RunnerDisplayState } from '../components/runner/mobile/RunMobile'
+import { RunMobile } from '../components/runner/mobile/RunMobile'
+import { useCueLocationLabels, useRunnerDisplay } from '../hooks/useRunnerDisplay'
+import { useMakeStackLive } from '../hooks/useMakeStackLive'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
-import { useGoToStackMutation, useDeactivateCueStackMutation } from '../store/cueStacks'
-import { resetStack } from '../store/runnerSlice'
-import { useDispatch } from 'react-redux'
 import { ShowHeader } from '../components/ShowHeader'
 import { ShowBar } from '../components/ShowBar'
 import { ShowView } from '../components/runner/ShowView'
@@ -175,16 +172,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     onToggleLock: editLock.toggleLock,
   })
 
-  // Per-cue prompt-book reading position ("top of p. 9"). Empty when the project has no book, in
-  // which case the label simply doesn't render.
-  const { data: cueLocations } = useProjectCueLocationsQuery(projectIdNum)
-  const { data: promptBook } = useProjectPromptBookQuery(projectIdNum)
-  const coverPages = promptBook?.coverPages ?? 0
-  const locationByCue = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const l of cueLocations ?? []) m.set(l.cueId, positionLabelFor(l.page, l.y, coverPages))
-    return m
-  }, [cueLocations, coverPages])
+  // Per-cue prompt-book reading position ("top of p. 9"), shared with the busk view's Show tab.
+  const locationByCue = useCueLocationLabels(projectIdNum)
 
   /**
    * Arm a cue as the next GO.
@@ -197,30 +186,10 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   const { setStandby } = transport
   const handleSetStandby = useCallback((cueId: number) => setStandby(cueId), [setStandby])
 
-  // Only the phone branch below draws this, but it is built on every render of a component that
-  // re-renders per fade frame — so memoize rather than hand `RunMobile` a fresh object 60×/s.
-  const runnerDisplay: RunnerDisplayState = useMemo(
-    () => ({
-      activeCue,
-      standbyCue,
-      nextStack,
-      activeCueId: transport.activeCueId,
-      standbyCueId: transport.standbyCueId,
-      completedCueIds: transport.completedCueIds,
-    }),
-    [
-      activeCue,
-      standbyCue,
-      nextStack,
-      transport.activeCueId,
-      transport.standbyCueId,
-      transport.completedCueIds,
-    ],
-  )
-
-  const dispatch = useDispatch()
-  const [goToStack] = useGoToStackMutation()
-  const [deactivateCueStack] = useDeactivateCueStackMutation()
+  // Only the phone branch below draws this; the hook memoises it, since this component re-renders
+  // per fade frame. Shared with the busk view's Show tab, so the two cannot disagree about which
+  // cue is next.
+  const runnerDisplay = useRunnerDisplay({ transport, activeCue, standbyCue, nextStack })
 
   const handleSelectStack = useCallback(
     (target: CueStack) => {
@@ -230,45 +199,9 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     [navigate, projectIdNum],
   )
 
-  /**
-   * Move the playhead to the stack being read.
-   *
-   * Until session 2b this was what a tab click did silently, which meant one unconfirmed press took
-   * the live cue off stage and repositioned every other client. Three things to know:
-   *
-   *  - **No client-side deactivate of the stack being left.** `POST /show/go-to` already calls
-   *    `deactivateStack(previous)` server-side (`routes/projectShow.kt`).
-   *  - **`go-to` fires the target's first cue** (`activateAtFirstCue`), so the desk darkens it again
-   *    to arrive armed rather than playing — a real, brief blip, which is why `OffPlayheadBanner`
-   *    confirms first when something is live.
-   *  - **The runner is reset explicitly.** Between `go-to` resolving and the deactivate landing the
-   *    server reports the freshly-activated first cue, and a reset reading that would mark cue 1 as
-   *    already run.
-   */
-  const handleMakeLive = useCallback(
-    (target: CueStack) => {
-      if (target.type !== 'STACK' || target.id === activeStackId) return
-      transport.cancelAnimations()
-      goToStack({ projectId: projectIdNum, stackId: target.id })
-        .unwrap()
-        .then(() => {
-          deactivateCueStack({ projectId: projectIdNum, stackId: target.id })
-          dispatch(
-            resetStack({
-              stackId: target.id,
-              cues: target.cues,
-              serverActiveCueId: null,
-              serverNextCueId: null,
-              loop: target.loop,
-            }),
-          )
-        })
-        .catch(() => {
-          // Reported by errorToastMiddleware; caught here only to stop the unhandled rejection.
-        })
-    },
-    [activeStackId, projectIdNum, transport, goToStack, deactivateCueStack, dispatch],
-  )
+  // Move the playhead to the stack being read — `OffPlayheadBanner`'s *Make live*, shared with the
+  // busk view's Show tab; the hook's docblock has the three things to know about the sequence.
+  const handleMakeLive = useMakeStackLive(projectIdNum, activeStackId, transport)
 
   const [createCue] = useCreateProjectCueMutation()
 

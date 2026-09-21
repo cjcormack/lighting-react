@@ -71,8 +71,9 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * embodied still holds and is why nothing replaced it client-side: this tab never shows what it
  * thinks the desk *would* do, only what the desk did, and the rig shows that better.
  *
- * **There is no heading** (2026-09-21): the tab strip names the tab and the rig band's label row
- * already says what is selected and under which mask. **The verbs are a footer, static at the
+ * **There is no heading** (2026-09-21): the tab strip names the tab, the rig band's row carries the
+ * mask, and the lit tiles — or, in Pads, the summary in the row's gap — say what is selected.
+ * **The verbs are a footer, static at the
  * bottom of the tab** — *Save as Look…* first, then *Apply* — the Colour tab's footer's shape with
  * its own save first, so both tabs keep their save in one place; the body above them is the tab's
  * one scroller. The picker is `fluid`, so it takes the width the sheet is dragged to.

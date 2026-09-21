@@ -25,8 +25,8 @@ import { cn } from '@/lib/utils'
  * tiles visibly pushes the page down rather than doing nothing until an invisible threshold. The
  * arrow keys step it one line at a time and past both ends, for the keyboard.
  *
- * In **Pads** and **Rig** the way back is drawn where the drag handle would be — under the label
- * and controls rows in Pads, under the rows at the bottom of the band in Rig — as a **chevron
+ * In **Pads** and **Rig** the way back is drawn where the drag handle would be — under the band's
+ * one row in Pads, under the rows at the bottom of the band in Rig — as a **chevron
  * pill**, not the bar: the bar reads as something to drag, and this is a press, so it says so with
  * a glyph pointing the way the rows will come (down in Pads, up in Rig). It replaced the strip's
  * *Unfold the rig* chevron on the desk board: the way back to Split is in the place you left it.

@@ -8,7 +8,7 @@ import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { resetDeskFollowStores } from '@/lib/deskFollow'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
-import { snapRigRows } from './RigBand'
+import { FIRST_ROW_CLASS, FOCUS_WORD_CLASS, SECOND_ROW_CLASS, TWO_ROWS_CLASS, snapRigRows, verbWordClass } from './RigBand'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
@@ -24,7 +24,9 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  * step buttons one per step; *Spread…* opens the side sheet's tab; and below `md` the band is one
  * row with a row chip. Session 7's
  * block is the pips: a tap toggles a cell, a mouse drag across them is a run, a finger runs only
- * after a hold, and a tile with every cell selected reads `all`.
+ * after a hold, and a tile with every cell selected reads `all`. The busk-chrome plan's session A
+ * block is the one row (D13, D15): the summary only in Pads, the chip's DOM order the same in every
+ * shape, the Cells control reading its mode word when folded, and the floor as two rows by design.
  */
 
 let groups: GroupSummary[] = []
@@ -248,7 +250,10 @@ describe('the rig band', () => {
     const bar = screen.getByRole('button', { name: 'Bar L' })
     expect(bar).toHaveAttribute('aria-pressed', 'true')
     expect(within(bar).getByText('1 of 4')).toBeInTheDocument()
-    // A cell folds into its parent in the summary: the bar once, with the tile's own `1 of 4`.
+    // A cell folds into its parent in the summary: the bar once, with the tile's own `1 of 4`. The
+    // summary is drawn in Pads, where there are no tiles to say it.
+    cleanup()
+    draw([{ type: 'fixture', key: 'bar-1.pixel-1', fixture: barFixture, element: barCells[1] }], { focus: 'pads' })
     expect(screen.getByText('Bar L · 1 of 4 · 1 head')).toBeInTheDocument()
   })
 
@@ -375,7 +380,7 @@ describe('the rig band', () => {
         { type: 'fixture', key: 'bar-1.pixel-0', fixture: barFixture, element: barCells[0] as never },
         { type: 'fixture', key: 'bar-1.pixel-2', fixture: barFixture, element: barCells[2] as never },
       ],
-      { onClear },
+      { onClear, focus: 'pads' },
     )
     // Two selected cells of a four-cell bar read as the bar once, `2 of 4` — the tile's own badge —
     // not as `Bar L · Cell 1, Bar L · Cell 3`.
@@ -384,35 +389,71 @@ describe('the rig band', () => {
     expect(onClear).toHaveBeenCalledTimes(1)
   })
 
-  it('folds the verbs to their icons before it wraps: each verb is an icon button whose word hides below the band’s width', () => {
-    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }])
-    const row = document.querySelector('[data-rig-label-row]')!
-    expect(row.className).toContain('flex-wrap')
+  it('is one row: the label, Cells and its steps, the verbs, then the pill and the chip left-anchored, the gap, the host’s controls last (D13)', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls: <button type="button">Focus here</button> }, ['COLOUR'])
+    const row = document.querySelector('[data-rig-row="desk"]') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(document.querySelector('[data-rig-label-row]')).toBeNull()
+    expect(document.querySelector('[data-rig-controls-row]')).toBeNull()
     expect(row.parentElement!.className).toContain('@container')
-    expect(screen.getByText('PAR 1 · 1 head').className).toContain('min-w-[6rem]')
-    for (const name of ['Spread…', 'Locate', 'Highlight', 'Clear']) {
-      const button = screen.getByRole('button', { name })
-      expect(button.querySelector('svg')).not.toBeNull()
-      const word = [...button.querySelectorAll('span')].find((el) => el.textContent === name)!
-      expect(word.className).toContain('@[860px]:inline')
-    }
+    // The order, read off the DOM: verbs group then state group, the chip right after the pill.
+    const order = [...row.querySelectorAll('button, [data-rig-summary], [data-rig-family]')].map(
+      (el) => el.getAttribute('aria-label') ?? el.textContent,
+    )
+    expect(order.slice(0, 3)).toEqual(['Cells: All', 'Previous along the rig', 'Next along the rig'])
+    expect(order.slice(3, 7)).toEqual(['Spread…', 'Locate', 'Highlight', 'Clear'])
+    expect(order.at(-2)).toBe('Targets: Desk')
+    expect(order.at(-1)).toBe('Focus here')
+    const state = row.querySelector('[data-rig-row-state]') as HTMLElement
+    expect(within(state).getByText('Colour')).toBeInTheDocument()
+    expect(state.lastElementChild).toHaveTextContent('Focus here')
+    expect(state.className).toContain('flex-1')
+    // The chip is the one control that may give: `min-w-0 shrink`, both words, since the pill's
+    // own base is `shrink-0` and a bare `min-w-0` would leave it unshrinkable — so a long
+    // `· from <window>` suffix truncates before Focus or Edit layout is pushed off the row.
+    const chip = within(state).getByRole('button', { name: 'Targets: Desk' })
+    expect(chip.className).toMatch(/(^| )shrink( |$)/)
+    expect(chip.className).not.toMatch(/(^| )shrink-0( |$)/)
+    expect(chip.className).toContain('min-w-0')
+    // Above the floor the row does not wrap on its own: the folds decide, not `flex-wrap`.
+    expect(row.className).not.toMatch(/(^| )flex-wrap( |$)/)
   })
 
-  it('draws the common controls on a row of their own, ending with the host’s controls — the same row in every shape', () => {
-    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls: <button type="button">Focus here</button> })
-    const row = document.querySelector('[data-rig-controls-row]')!
-    expect(row).not.toBeNull()
-    expect(row.lastElementChild).toHaveTextContent('Focus here')
-    // The sub-selection and the verbs are on it, not on the label row.
-    expect(within(row as HTMLElement).getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
-    expect(within(row as HTMLElement).getByRole('button', { name: 'Clear' })).toBeInTheDocument()
-    expect(within(document.querySelector('[data-rig-label-row]') as HTMLElement).queryByRole('button', { name: 'Clear' })).toBeNull()
-
-    // Pads focus on the desk board: the band folded — label row, controls row, the grip — and no rows.
+  it('draws the selection summary only in Pads, in the gap, truncating with the whole text on its title (D13)', () => {
+    const selection = [{ type: 'fixture', key: 'par-1', fixture: parFixture }] as BuskingTarget[]
+    draw(selection)
+    expect(document.querySelector('[data-rig-summary]')).toBeNull()
+    expect(screen.queryByText('PAR 1 · 1 head')).toBeNull()
     cleanup()
+    draw(selection, { focus: 'rig' })
+    expect(document.querySelector('[data-rig-summary]')).toBeNull()
+    cleanup()
+    draw(selection, { focus: 'pads' })
+    const summary = document.querySelector('[data-rig-summary]') as HTMLElement
+    expect(summary).toHaveTextContent('PAR 1 · 1 head')
+    expect(summary).toHaveAttribute('title', 'PAR 1 · 1 head')
+    expect(summary.className).toContain('min-w-0')
+    expect(summary.className).toContain('truncate')
+    expect(summary.className).toContain('flex-1')
+  })
+
+  it('keeps the chip at the same DOM position in Split, Rig and Pads, ending with the host’s controls in every shape', () => {
     rigData = builtRig()
-    draw([], { focus: 'pads', controls: <button type="button">Focus here</button> })
-    expect(document.querySelector('[data-rig-controls-row]')!.lastElementChild).toHaveTextContent('Focus here')
+    const controls = <button type="button">Focus here</button>
+    const positions: Record<string, string[]> = {}
+    for (const focus of ['split', 'rig', 'pads'] as const) {
+      cleanup()
+      draw([], { focus, controls })
+      const row = document.querySelector('[data-rig-row="desk"]') as HTMLElement
+      positions[focus] = [...row.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '')
+      expect(row.querySelector('[data-rig-row-state]')!.lastElementChild).toHaveTextContent('Focus here')
+      expect(document.querySelector(`[data-rig-band="${focus}"]`)).toHaveAttribute('data-focus', focus)
+    }
+    expect(positions.rig).toEqual(positions.split)
+    expect(positions.pads).toEqual(positions.split)
+    expect(positions.split.indexOf('Targets: Desk')).toBe(positions.split.indexOf('Clear') + 1)
+
+    // Pads focus on the desk board: the one row and the grip — no rows.
     expect(document.querySelector('[data-rig-rows]')).toBeNull()
     expect(screen.queryByText('Wash')).not.toBeInTheDocument()
     // A press, drawn as one: a chevron pill pointing the way the rows will come, not the drag bar.
@@ -427,6 +468,84 @@ describe('the rig band', () => {
     expect(screen.queryByRole('separator', { name: 'Rig rows' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Show the page again: Split' }))
     expect(getBuskFocus()).toBe('split')
+  })
+
+  it('folds the verbs to their icons first, earlier in Pads than in Split or Rig, and the Cells prefix and Focus words after (D15)', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }])
+    for (const name of ['Spread…', 'Locate', 'Highlight', 'Clear']) {
+      const button = screen.getByRole('button', { name })
+      expect(button.querySelector('svg')).not.toBeNull()
+      const word = [...button.querySelectorAll('span')].find((el) => el.textContent === name)!
+      expect(word.className).toBe(verbWordClass('split'))
+    }
+    expect(verbWordClass('rig')).toBe(verbWordClass('split'))
+    // Pads gives up the words earlier: there the summary sits in the gap and matters more.
+    const [splitAt] = verbWordClass('split').match(/\d+/)!
+    const [padsAt] = verbWordClass('pads').match(/\d+/)!
+    expect(Number(padsAt)).toBeGreaterThan(Number(splitAt))
+    cleanup()
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { focus: 'pads' })
+    const word = [...screen.getByRole('button', { name: 'Clear' }).querySelectorAll('span')].find((el) => el.textContent === 'Clear')!
+    expect(word.className).toBe(verbWordClass('pads'))
+    // The Focus words fold with the Cells prefix, at one width in every shape — after the verbs.
+    const [focusAt] = FOCUS_WORD_CLASS.match(/\d+/)!
+    expect(Number(focusAt)).toBeLessThan(Number(splitAt))
+  })
+
+  it('reads its mode word when the Cells control folds — never a bare glyph (D15)', () => {
+    const onSubselect = vi.fn()
+    draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
+    const trigger = screen.getByRole('button', { name: 'Cells: All' })
+    // Three spans: the prefix and the full word fold together, the short word is drawn in their place.
+    const spans = [...trigger.querySelectorAll('span')]
+    const prefix = spans.find((el) => el.textContent === 'Cells: ')!
+    const full = spans.find((el) => el.textContent === 'All' && !el.hasAttribute('data-cells-mode'))!
+    const short = trigger.querySelector('[data-cells-mode]') as HTMLElement
+    expect(prefix.className).toContain('hidden')
+    expect(prefix.className).toContain('@[820px]:inline')
+    expect(full.className).toBe(prefix.className)
+    expect(short.className).toContain('@[820px]:hidden')
+    expect(short.className).not.toMatch(/(^| )hidden( |$)/)
+    // The short form of every filter: the mode in one word.
+    for (const [item, mode, word] of [
+      ['Odd', 'ODD', 'Odd'],
+      ['1st half', 'FIRST_HALF', '1st'],
+      ['2nd half', 'SECOND_HALF', '2nd'],
+      ['Masters only', 'MASTERS', 'Masters'],
+      ['Invert', 'INVERT', 'Invert'],
+    ] as const) {
+      fireEvent.pointerDown(screen.getByRole('button', { name: /^Cells:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitemradio', { name: item }))
+      expect(onSubselect).toHaveBeenLastCalledWith(mode)
+      expect(screen.getByRole('button', { name: `Cells: ${item}` }).querySelector('[data-cells-mode]')).toHaveTextContent(word)
+    }
+  })
+
+  it('becomes two rows by design at the floor — the verbs on the first, the pill, chip, summary and Focus on the second — not flex-wrap (D15)', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { focus: 'pads', controls: <button type="button">Focus here</button> })
+    const row = document.querySelector('[data-rig-row="desk"]') as HTMLElement
+    const verbs = row.querySelector('[data-rig-row-verbs]') as HTMLElement
+    const state = row.querySelector('[data-rig-row-state]') as HTMLElement
+    // The row wraps only below the floor, and the state group is what takes the second row whole.
+    expect(TWO_ROWS_CLASS).toMatch(/^@max-\[\d+px\]:flex-wrap$/)
+    expect(SECOND_ROW_CLASS).toMatch(/^@max-\[\d+px\]:basis-full$/)
+    expect(TWO_ROWS_CLASS.match(/\d+/)![0]).toBe(SECOND_ROW_CLASS.match(/\d+/)![0])
+    expect(row.className).toContain(TWO_ROWS_CLASS)
+    expect(state.className).toContain(SECOND_ROW_CLASS)
+    // Under the floor the verbs group may wrap within its own line — the last resort for a band
+    // narrower than the icons — and never above it.
+    expect(verbs.className).toContain(FIRST_ROW_CLASS)
+    expect(FIRST_ROW_CLASS.match(/\d+/)![0]).toBe(TWO_ROWS_CLASS.match(/\d+/)![0])
+    // The floor sits under the last fold: the Cells prefix and Focus words go before the row breaks.
+    expect(Number(TWO_ROWS_CLASS.match(/\d+/)![0])).toBeLessThan(Number(FOCUS_WORD_CLASS.match(/\d+/)![0]))
+    expect(verbs.className).toContain('shrink-0')
+    // What sits on each row.
+    expect(within(verbs).getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
+    expect(within(verbs).getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(within(state).getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
+    expect(within(state).getByText('PAR 1 · 1 head')).toBeInTheDocument()
+    expect(within(state).getByText('Focus here')).toBeInTheDocument()
+    expect(within(verbs).queryByText('Focus here')).toBeNull()
   })
 
   it('presses the Cells menu as one op per filter — all seven in one menu — and labels only the last press', () => {
@@ -677,7 +796,7 @@ describe('the rig band', () => {
     expect(bodies.every((body) => body.getAttribute('data-rig-row-body') === 'stacked')).toBe(true)
     expect(bodies[0].className).toContain('grid-cols-2')
     expect(bodies[0].className).not.toContain('overflow-x-auto')
-    // The rows are the scroller, vertically — not the band, whose label row carries the way back.
+    // The rows are the scroller, vertically — not the band, whose one row carries the way back.
     expect(document.querySelector('[data-rig-rows]')!.className).toContain('overflow-y-auto')
     expect(document.querySelector('[data-rig-band="rig"]')!.className).not.toContain('overflow-y-auto')
     cleanup()
@@ -890,7 +1009,7 @@ describe('the folded rig strip', () => {
     ])
     render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} controls={<span>Focus here</span>} />)
     expect(screen.getByText('Front wash · 6 heads')).toBeInTheDocument()
-    // The host's controls — the Focus control — sit at the strip's end, as on the band's label row.
+    // The host's controls — the Focus control — sit at the strip's end, as on the band's one row.
     expect(screen.getByText('Focus here')).toBeInTheDocument()
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()

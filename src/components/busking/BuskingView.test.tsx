@@ -22,7 +22,9 @@ vi.mock('./RigBand', async () => {
   const real = await import('./RigBand')
   return {
     FOCUS_WORD_CLASS: real.FOCUS_WORD_CLASS,
-    // The band draws the host's `controls` at its label row's end — the Focus control lives there.
+    COMPACT_FOCUS_WORD_CLASS: real.COMPACT_FOCUS_WORD_CLASS,
+    verbWordClass: real.verbWordClass,
+    // The band draws the host's `controls` at its one row's end — the Focus control lives there.
     RigBand: ({ selectedTargets, focus, compact, controls }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean; controls?: React.ReactNode }) => (
       <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'}>
         <span data-testid="target-band-selection">{[...selectedTargets.keys()].join(' ') || 'none'}</span>
@@ -57,6 +59,14 @@ vi.mock('./SideSheet', async () => {
   }
 })
 vi.mock('./LibraryPalette', () => ({ LibraryPalette: () => <div data-testid="palette" /> }))
+// The route's bar state, threaded to the (mocked) side sheet for its Show tab; nothing here reads it.
+const showStub = {
+  transport: { activeStack: undefined, serverActiveCueId: null, activeCueId: null, standbyCueId: null, completedCueIds: [] },
+  showBarProps: { dbo: false, onDbo: () => {} },
+  activeCue: null,
+  standbyCue: null,
+  nextStack: null,
+} as unknown as import('./ShowTab').ShowTabSource
 
 import { store } from '@/store'
 import { enterBuskEdit } from '@/store/buskEditSlice'
@@ -202,7 +212,7 @@ function draw(pages: BuskPage[], path = '/projects/1/busk') {
       <MemoryRouter initialEntries={[path]}>
         <DndContext>
           <PageProbe />
-          <BuskingView projectId={1} />
+          <BuskingView projectId={1} show={showStub} />
         </DndContext>
       </MemoryRouter>
     </Provider>,
@@ -481,8 +491,8 @@ describe('the busk view', () => {
       setBuskFocus('pads')
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
-      // The desk board's Pads is the band folded (`focus="pads"`), so the controls row is the same
-      // row in every shape; the 36px strip is the compact boards' fold.
+      // The desk board's Pads is the band folded (`focus="pads"`), so its one row is the same row
+      // in every shape; the 36px strip is the compact boards' fold.
       expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
       expect(screen.queryByTestId('rig-strip')).toBeNull()
       expect(screen.getByTestId('target-band').querySelector('[aria-label="Focus"]')).not.toBeNull()
@@ -505,7 +515,7 @@ describe('the busk view', () => {
       expect(strip).toHaveTextContent('1 bank')
       expect(within(strip as HTMLElement).queryByRole('button', { name: 'Ballads' })).toBeNull()
       expect(within(strip as HTMLElement).queryByRole('button', { name: /^Page:/ })).toBeNull()
-      // *Edit layout* and the Focus control are on the band's controls row, where they are in every
+      // *Edit layout* and the Focus control are on the band's one row, where they are in every
       // shape — so Rig focus has its way into edit mode, and the strip carries neither.
       expect(within(strip as HTMLElement).queryByRole('button', { name: 'Edit layout' })).toBeNull()
       expect(strip.querySelector('[aria-label="Focus"]')).toBeNull()

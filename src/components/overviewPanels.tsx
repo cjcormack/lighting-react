@@ -90,8 +90,9 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
  *
  * There was a different fourth once, Effects Overview: a beat dot, master 1's bpm, a TAP, a
  * running-effect count and a Kill All. The ShowBar carries the tempo half on the live views that
- * have a bar — Show, the Prompt Book and Busk, the whole speed-master bank with a beat dot and TAP
- * per tile — so the panel was a second, narrower answer to "what tempo is the desk at", and one
+ * have a bar — Show and the Prompt Book, the whole speed-master bank with a beat dot and TAP per
+ * tile; Busk has the same bank in its side sheet's Speed tab and the tempo chip on its Show tab's
+ * strip — so the panel was a second, narrower answer to "what tempo is the desk at", and one
  * that only ever spoke for master 1. It went, and the count and Kill All went with it rather than
  * moving: the programmer's FX band and the busk view's presence rings say what is running, and
  * each lists the effects individually so they can be removed by name. If a "stop everything"

@@ -42,7 +42,7 @@ import { BuskPageChip } from './BuskPageChip'
  * than mounted here — the *Sheet* button off the desk board, and on the short board's merged row
  * the Focus control and the edit toggle. On the desk board the strip carries **tabs and the page
  * chip only** (2026-09-21): the Focus control and *Edit layout* / *Done* both live on the rig
- * band's controls row, which is the same row in every shape, so nothing an operator presses moves
+ * band's one row, which is the same row in every shape, so nothing an operator presses moves
  * as the shape changes. [EditLayoutToggle] is exported from here so the button keeps its rules
  * (disabled with no pages; *Done* drawn on every board) wherever it is mounted.
  *
@@ -121,7 +121,7 @@ export interface BuskPageStripProps {
   /**
    * The short board's merged row (`Phones.dc.html`, landscape): a 32px row with the rig strip's
    * pieces in [leading], the page tabs and the controls after them — one row where the desk board
-   * has two, because there are 297px under the ShowBar and every row is a row of pads lost.
+   * has two, because there are ~350px under the ShowHeader and every row is a row of pads lost.
    */
   dense?: boolean
   /** Drawn before the tabs: the rig strip's pieces on the merged row. */
@@ -140,11 +140,19 @@ export function EditLayoutToggle({
   editable,
   hasPages,
   onToggle,
+  labelClass,
 }: {
   editing: boolean
   editable: boolean
   hasPages: boolean
   onToggle: () => void
+  /**
+   * The word's class — the host's fold. On the rig band's one row it folds with the verbs' words
+   * (busk-chrome plan D15, `Band.dc.html`'s 1100 rung draws it as the pencil alone), which is why
+   * the button carries its name as `aria-label` and `title` whatever the class hides. *Done* never
+   * folds: it is the way out, and short.
+   */
+  labelClass?: string
 }) {
   if (editing) {
     return (
@@ -155,8 +163,17 @@ export function EditLayoutToggle({
   }
   if (!editable) return null
   return (
-    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onToggle} disabled={!hasPages}>
-      <Pencil className="size-3.5" /> Edit layout
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-7 gap-1.5 px-2 text-xs"
+      onClick={onToggle}
+      disabled={!hasPages}
+      aria-label="Edit layout"
+      title={hasPages ? 'Edit layout: arrange the page and the rig' : 'Edit layout — create a page first'}
+    >
+      <Pencil className="size-3.5" />
+      <span className={labelClass}>Edit layout</span>
     </Button>
   )
 }

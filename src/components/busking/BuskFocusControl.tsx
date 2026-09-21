@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils'
  * handle are one setting: the handle dragged past the last row lands on *Rig* here, and to none on
  * *Pads*.
  *
- * **It sits at the end of the rig band's controls row in every shape** (2026-09-21) — Split, Rig
- * and, on the desk board, Pads, where the band is drawn folded to its two rows; off the desk board
+ * **It sits at the end of the rig band's one row in every shape** (2026-09-21) — Split, Rig
+ * and, on the desk board, Pads, where the band is drawn folded to that row; off the desk board
  * it is on the rig strip, or the short board's merged row. It used to be on the page strip — below
  * the band in Split and Pads, on the folded strip at the bottom in Rig — so it moved between the
  * middle and the bottom of the body as the operator pressed it, which read as confusing. The host

@@ -49,9 +49,10 @@ import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
-import { FOCUS_WORD_CLASS, RigBand } from './RigBand'
+import { COMPACT_FOCUS_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, verbWordClass } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
+import type { ShowTabSource } from './ShowTab'
 import { BuskFocusControl } from './BuskFocusControl'
 import { BuskEditProvider } from './BuskEditProvider'
 import { BuskPageBody } from './BuskPage'
@@ -79,10 +80,10 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **The view has three shapes, and which one is this window's fact** (busk-further plan D5–D7,
  * `lib/buskWindow.ts`): **Split** — the band showing `busk.rigRows` lines over the page, the
  * handle between; **Pads** — the page fills the body and the rig folds: on the desk board to the
- * band's own label and controls rows plus a chevron pill back to Split (`RigBand focus="pads"`),
+ * band's own one row plus a chevron pill back to Split (`RigBand focus="pads"`),
  * off it to `RigStrip`, whose chevron unfolds Split; **Rig** — the band fills the body with every
  * row and the page folds to its strip at the bottom, name and bank count only. **The band's
- * controls row is the same row in every shape** (2026-09-21), and the Focus control and *Edit
+ * row is the same row in every shape** (busk-chrome plan D13), and the Focus control and *Edit
  * layout* / *Done* end it — so neither moves as the shape changes; both used to be on the page
  * strip, below the band in Split and Pads and at the bottom of the body in Rig. Edit mode **forces Split** for its
  * duration, because a palette drag needs both regions on screen, and restores the window's focus
@@ -98,13 +99,13 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
  * a row chip, and Rig focus is the whole rig stacked. Below `md` the side sheet is a bottom sheet
  * or a right-hand overlay through `useCellEditorForm`, opened from the page strip's button onto
- * Colour, since that sheet carries no Speed tab (D7).
+ * Colour, since that sheet carries no Speed tab (D7) — Colour, Spread and Show.
  *
  * **Three boards, and short beats narrow** (`Phones.dc.html`, `Tablets.dc.html`). `md` says
  * whether this is the desk board or the narrow one; the short-viewport fold — `SHORT_VIEWPORT`,
  * this file's own copy of the 500px height query, by the convention `shortViewport.test.ts`
  * enforces — says whether a window wide enough for the desk board has the height for it. A
- * landscape phone is wider than `md` and has 297px under the ShowBar, so by width alone the rail
+ * landscape phone is wider than `md` and has ~350px under the ShowHeader, so by width alone the rail
  * would dock and the palette would be offered; on the **short board** instead the rig strip and
  * the page strip merge into one 32px row (`RigStripContent` in `BuskPageStrip`'s `leading` slot —
  * the same pieces, not a third strip), Split shows one row of 48px tiles with the row chip
@@ -114,8 +115,9 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * `md`, since a palette drag needs both regions on screen. The defaults — Pads focus, the sheet
  * folded — are already the ladder's in `lib/buskWindow.ts`; only which board is drawn changes here.
  *
- * The show chrome above it (`ShowHeader`, `ShowBar`) belongs to `routes/Busk.tsx`, like every other
- * live view.
+ * The show chrome above it — the `ShowHeader`, and no bar — belongs to `routes/Busk.tsx`, which
+ * also holds the one `useShowBarProps` call and hands its result down as [show] for the side
+ * sheet's Show tab and the fold's live cue number (busk-chrome plan D1, D4).
  *
  * **Every press goes through one route.** A pad is pressed by `POST /busk/pads/{id}/press`,
  * whatever it holds, because the pad is what knows its bank and the bank is what decides which
@@ -130,11 +132,12 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
  * nothing left to be per.
  *
- * **No transport.** The stack cards and the pinned-cue grid went with the layout; GO and BACK live
- * on the ShowBar, and a cue pad's green comes from `useActiveCueIds` — its stack has that cue on
- * stage, playhead or not, which is what makes a cue pad a toggle rather than a playhead move.
+ * **No transport of its own.** The stack cards and the pinned-cue grid went with the layout; GO and
+ * BACK live on the side sheet's Show tab, and a cue pad's green comes from `useActiveCueIds` — its
+ * stack has that cue on stage, playhead or not, which is what makes a cue pad a toggle rather than
+ * a playhead move.
  */
-export function BuskingView({ projectId }: { projectId: number }) {
+export function BuskingView({ projectId, show }: { projectId: number; show: ShowTabSource }) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const isShort = useMediaQuery(SHORT_VIEWPORT)
   // Short beats narrow: a window below `md` is the narrow board whatever its height, and the short
@@ -450,20 +453,27 @@ export function BuskingView({ projectId }: { projectId: number }) {
   // folded. In Split and Rig focus the band carries them itself, so the row holds only the page.
   const merged = board === 'short' && shape === 'pads'
 
-  const focusControl = <BuskFocusControl disabled={editing} labelClass={FOCUS_WORD_CLASS} />
+  // The Focus words fold by the row they sit on: the desk board's one row at its measured fold,
+  // the compact boards' strip at the fold that row was measured for (`COMPACT_FOCUS_WORD_CLASS`).
+  const focusControl = (
+    <BuskFocusControl disabled={editing} labelClass={docked ? FOCUS_WORD_CLASS : COMPACT_FOCUS_WORD_CLASS} />
+  )
+  // Its word folds with the band's verbs — by the shape's threshold, since the band's row is where
+  // it sits on the desk board (`verbWordClass`); the compact boards never draw it unfolded.
   const editToggle = (
     <EditLayoutToggle
       editing={editing}
       editable={docked}
       hasPages={(pages?.length ?? 0) > 0}
+      labelClass={verbWordClass(shape)}
       onToggle={() => {
         if (editing) dispatch(exitBuskEdit())
         else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
       }}
     />
   )
-  // The band's controls row (the label row, on the compact board) ends with these two, in every
-  // shape — the Focus control and *Edit layout* / *Done* — so neither moves as the shape changes.
+  // The band's one row (the compact board's too) ends with these two, in every shape — the Focus
+  // control and *Edit layout* / *Done* — so neither moves as the shape changes.
   const bandControls = (
     <>
       {focusControl}
@@ -515,7 +525,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
               disabled={overlayTabs.length === 0}
               title={
                 overlayTabs.length === 0
-                  ? 'Nothing to open here yet; Speed is the ShowBar’s chip'
+                  ? 'Nothing to open here yet'
                   : `Open the ${overlayTabs[0].label} tab`
               }
               onClick={() => {
@@ -535,10 +545,11 @@ export function BuskingView({ projectId }: { projectId: number }) {
   )
 
   return (
-    // `min-h-0 flex-1`, never `h-full`: the view is a flex item under the ShowHeader and ShowBar in
+    // `min-h-0 flex-1`, never `h-full`: the view is a flex item under the ShowHeader in
     // `routes/Busk.tsx`'s column, and a percentage height there is the whole column's — Chromium
     // shrinks the item back to fit, Safari does not, and the page body then overflowed `<main>` by
-    // exactly a header and a bar. Two scrollers: one hiding the breadcrumbs, one for the pads.
+    // exactly a header (and, while there was one, a bar). Two scrollers: one hiding the
+    // breadcrumbs, one for the pads.
     // `ProgrammerWorkspace` is the same pattern for the same reason.
     <div className="flex min-h-0 flex-1 flex-col">
       {/* `relative` is the side sheet's containing block in overlay mode — it is absolutely
@@ -554,8 +565,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
           {shape === 'pads' && !docked ? (
             // Off the desk board the fold is the 36px strip; on the short board its pieces lead the
             // merged page row instead (`merged`). On the desk board Pads is the band itself, folded
-            // to its label and controls rows and the grip — so the controls row is the same row in
-            // every shape.
+            // to its one row and the grip — so the row is the same row in every shape.
             !merged && (
               <RigStrip
                 selectedTargets={selectedTargets}
@@ -599,18 +609,18 @@ export function BuskingView({ projectId }: { projectId: number }) {
           )}
 
           {/* Rig focus: the page folded to its strip at the bottom — name and bank count; the Focus
-              control and Edit layout are on the band's controls row above, as in every shape. */}
+              control and Edit layout are on the band's row above, as in every shape. */}
           {shape === 'rig' && pageStrip(true)}
         </div>
 
         {editing ? (
           <LibraryPalette projectId={projectId} onPageKeys={onPageKeys} onRigKeys={onRigKeys} />
         ) : (
-          docked && <SideSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+          docked && <SideSheet projectId={projectId} selectedTargets={selectedTargets} families={families} show={show} />
         )}
       </div>
       {!docked && !editing && (
-        <SideSheetOverlay projectId={projectId} selectedTargets={selectedTargets} families={families} />
+        <SideSheetOverlay projectId={projectId} selectedTargets={selectedTargets} families={families} show={show} />
       )}
     </div>
   )

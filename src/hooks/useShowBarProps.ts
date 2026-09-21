@@ -11,13 +11,16 @@ import { ignoreReportedError } from '../store/errorToastMiddleware'
 /**
  * Everything `ShowBar` needs, derived from a project id.
  *
- * **All three live views mount the bar from here**, overriding only `showShortcuts` — which
- * advertises keys, so only the host that binds them can answer it. That uniformity is the point: the
- * bar takes a dozen props, half of them derived by the same three lines of cue lookup, and every
- * host that wired it by hand drifted. The Prompt Book's copy had no Blind tile and derived the stack
- * name its own way; Show suppressed the stack name beside the tab strip. The Prompt Book also called
- * `useShowTransport` directly, so adopting this hook there collapsed that page from two transport
- * instances to one.
+ * **Both live views that have a bar — Show and the Prompt Book — mount it from here**, overriding
+ * only `showShortcuts` — which advertises keys, so only the host that binds them can answer it.
+ * That uniformity is the point: the bar takes a dozen props, half of them derived by the same
+ * three lines of cue lookup, and every host that wired it by hand drifted. The Prompt Book's copy
+ * had no Blind tile and derived the stack name its own way; Show suppressed the stack name beside
+ * the tab strip. The Prompt Book also called `useShowTransport` directly, so adopting this hook
+ * there collapsed that page from two transport instances to one. The busk view was the third host
+ * until the busk-chrome plan's session A: it still calls this hook, for the transport and the
+ * `dbo` pair, and hands the result to its side sheet's Show tab (`components/busking/ShowTab.tsx`)
+ * instead of drawing a bar. The programmer never had one.
  *
  * `canOperate` and `onBeforeGo` are parameters for the two things that genuinely are per-host:
  * book-level permission, and re-locking on GO.
@@ -136,3 +139,6 @@ export function useShowBarProps(
     },
   }
 }
+
+/** What one call answers — the shape the busk view threads to its Show tab, and `useRunnerDisplay` reads. */
+export type ShowBarState = ReturnType<typeof useShowBarProps>

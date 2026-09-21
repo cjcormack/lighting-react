@@ -112,8 +112,10 @@ export function ShowHeader({
     // this is the row whose left edge they are all read against. Nothing is removed — the same
     // header, tighter, and it is shared, so Show, the Prompt Book and Busk take the 48px too.
     //
-    // Those three carry a `ShowBar` under it, which keeps its own `@[440px]:px-4` (see the note
-    // in `ShowBar.tsx` for why that class is the bar's business): on those views the header and
+    // Show and the Prompt Book carry a `ShowBar` under it (Busk did too, until the busk-chrome
+    // plan's session A moved its transport into the side sheet's Show tab), which keeps its own
+    // `@[440px]:px-4` (see the note in `ShowBar.tsx` for why that class is the bar's business):
+    // on those views the header and
     // the bar now differ by 4px of gutter. Deliberate — the bar's ladder was measured at 16 and
     // is left alone.
     <div

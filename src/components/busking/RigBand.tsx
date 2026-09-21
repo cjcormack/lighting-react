@@ -94,17 +94,20 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  *
  * **A press is a plain toggle**, as it was, and a **pip is a press of its own** (session 7): a
  * `PIPS` tile's cells toggle `{type: 'fixture', key: element.key}` through the same `onToggle`, and
- * a drag across them is a run (`RigTile`). **Two rows of chrome, then the rows** (`Main.dc.html`
- * as revised 2026-09-21): the **label row** — the selection summary, the family pill, the desk chip
- * — and under it a **controls row** — the **Cells menu** with its two step buttons, the verbs
- * (*Spread…*, Locate, Highlight, Clear, each an icon with a word beside it where the band is wide,
- * `VERB_WORD_CLASS`, and the icon alone where it is not) and, at its end, whatever the host hands in
- * as [controls]: the Focus control and *Edit layout* / *Done*. They were one row, and a desk width
- * with the sidebar open put twelve controls on it; the controls row is the same row in every shape
- * — Split, Rig **and Pads**, where the band is drawn without its rows — so nothing on it moves as
- * the shape changes, and the page strip below is tabs and the page chip and nothing else. Below `md`
- * the band is one row with a row chip and the verbs in a menu (the phone board), and there is no
- * editing: the palette is not drawn there either.
+ * a drag across them is a run (`RigTile`). **One row of chrome, then the rows** (busk-chrome plan
+ * D13, `Band.dc.html`): the `RIG` label, the **Cells menu** with its two step buttons, the verbs
+ * (*Spread…*, Locate, Highlight, Clear, each an icon with a word beside it where the band is wide
+ * and the icon alone where it is not — `verbWordClass`), then the family pill and the desk chip
+ * **left-anchored after the verbs**, the gap, and whatever the host hands in as [controls] —
+ * the Focus control and *Edit layout* / *Done* — right-anchored. **The same DOM order in every
+ * shape** — Split, Rig **and Pads**, where the band is drawn without its rows — so the chip sits
+ * at the same x whichever the operator is in, and only what follows it changes: the **selection
+ * summary is drawn only in Pads**, in the gap, because in Split and Rig the lit tiles say it. It
+ * was two rows until 2026-09-21 — a label row over a controls row — and before that one row that a
+ * desk width with the sidebar open wrapped; the merge cost 32px in every shape and the fold ladder
+ * below is what keeps it from wrapping again. The page strip below is tabs and the page chip and
+ * nothing else. Below `md` the band is one row with a row chip and the verbs in a menu (the phone
+ * board), and there is no editing: the palette is not drawn there either.
  *
  * **The Cells menu is one desk op** (busk-further plan D12): the seven *filters* — All · Odd ·
  * Even · 1st half · 2nd half · Invert · Masters only — in one menu whose label names the mode last
@@ -126,7 +129,7 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * simply takes the shape the release will give it; the arrow keys step it one line at a time for
  * the keyboard. It is drawn for **one line too** (D6: 1…N — a one-row rig still needs its way into
  * Rig and Pads from the band). In **Pads** and **Rig** a chevron pill is drawn where the drag would
- * be — under the controls row, or under the rows at the bottom — and a press on it is the way back
+ * be — under the row, or under the rows at the bottom — and a press on it is the way back
  * to Split. In **Rig focus** the
  * band takes `focus="rig"`: every row, the band filling the body and its rows scrolling. **Below `md` Rig
  * focus stacks every row two tiles across, scrolling vertically** (`Phones.dc.html` note 6): it is
@@ -161,12 +164,12 @@ export interface RigBandProps {
   stackRows?: boolean
   /**
    * Split shows `busk.rigRows` lines under the handle; Rig fills the body with every row; Pads
-   * draws the label and controls rows and the grip, and no rows — the desk board's fold, in place
-   * of `RigStrip`, so the controls row is the same row in every shape.
+   * draws the one row and the grip, and no rows — the desk board's fold, in place of `RigStrip`,
+   * so the row is the same row in every shape.
    */
   focus: 'split' | 'rig' | 'pads'
   /**
-   * Drawn at the right end of the controls row (the label row, on the compact board): the Focus
+   * Drawn at the right end of the one row (the compact board's too): the Focus
    * control and *Edit layout* / *Done*. Handed in rather than mounted here because the band knows
    * nothing about the window's shape or the page's edit mode.
    */
@@ -174,26 +177,90 @@ export interface RigBandProps {
 }
 
 /**
- * The verbs' words, drawn only where the controls row is wide enough for everything on it with
- * them. The band is its own `@container`; measured on the desk, the controls row with every word
- * — the Cells menu, the two steps, four verbs, the Focus control and *Edit layout* — is 847px with
- * its gaps and ~600 without the verbs' words, so below this the verbs are their icons and the row
- * stays one line.
- * The thresholds were 1150 / 1000 when the verbs shared the label row with the summary and the
- * chips; a dedicated row has the room, and folding at those widths dropped an 1122px window to
- * icons for nothing. Wrapping remains the last resort for a row narrower than the icons.
+ * **The folds** (busk-chrome plan D15; `Band.dc.html` §How the row folds). The band is its own
+ * `@container`, and the one row gives up its words in a fixed order as the band narrows, so that
+ * nothing lands mid-row before the floor:
+ *
+ * 1. **The verbs' words**, first — and **earlier in Pads than in Split or Rig**: there the summary
+ *    sits in the gap and matters more than the verbs' words, so the band's `data-focus` picks the
+ *    threshold ([verbWordClass]).
+ * 2. **The *Cells:* prefix and the Focus control's words**, at one width in every shape
+ *    ([CELLS_PREFIX_CLASS], [FOCUS_WORD_CLASS]). The Cells control keeps its **mode word** — All ·
+ *    Odd · Even · 1st · 2nd · Invert · Masters — and is never a bare glyph: *All* is the state an
+ *    operator most needs to be sure of, and *Odd* or *Masters* on a 28px button is what the menu was
+ *    for.
+ * 3. **The summary truncates** (Pads only; `min-w-0`, its full text on the title).
+ * 4. **Two rows, by design** (`TWO_ROWS_CLASS`, `SECOND_ROW_CLASS`): below the floor the row wraps
+ *    at exactly one point — the selection verbs on the first row, the pill, the chip, the summary
+ *    and the Focus control on the second. Not `flex-wrap`'s own choice of break: the row is
+ *    `flex-nowrap` above the floor, so a control never lands mid-row. Only under that floor does
+ *    the verbs group wrap within its own line (`FIRST_ROW_CLASS`), the last resort for a band
+ *    narrower than the icons.
+ *
+ * *Edit layout*'s word folds with the verbs' (the board's 1100 rung draws it as the pencil alone;
+ * `BuskingView` hands it this class), and the desk chip's *· from <window>* suffix truncates before
+ * anything else moves — `DeskChip` is given `min-w-0 shrink` here, both words, because the pill's
+ * base class is `shrink-0` and a bare `min-w-0` leaves it unshrinkable — since a window name has
+ * no ceiling. Under the floor the verbs group itself may wrap (`FIRST_ROW_CLASS`): the desk board
+ * can be narrowed to a band below the ~330px the iconic verbs need (a ~900px window, the sidebar
+ * open and the sheet at its 480 ceiling), and a size-contained `@container` clips nothing, so
+ * without that last resort the verbs painted over the sheet. That wrap is under the designed
+ * break, never instead of it: above the floor the row is `flex-nowrap`.
+ *
+ * **The numbers are the app's, measured in the browser on 2026-09-21** at the desk's control
+ * sizes, with a family pill drawn (the row has to hold when a mask is set) and the chip bare:
+ * worded, the row is 1067px — the verbs group 573 (`RIG` 19, Cells 107, the steps 58, the four
+ * verbs 93 · 81 · 94 · 72, six 8px gaps), the state group 486 (pill ~60, chip 108, Focus 183,
+ * *Edit layout* 103, gaps) — so the verbs' words go at **1100** in Split and Rig, and Pads, which
+ * wants ~150 for the summary, at **1260**; iconic, the row is 804, so the *Cells:* prefix (32) and
+ * the Focus words (85) go at **820**; and with those gone it is 687, so the floor is **700**. They
+ * were 860 / 680 while the summary had a row of its own, and the board's 1020 / 1180 / 820 / 600
+ * were measured on its own mock, whose controls are narrower than the desk's.
  */
-export const VERB_WORD_CLASS = 'hidden @[860px]:inline'
+export function verbWordClass(focus: 'split' | 'rig' | 'pads'): string {
+  return focus === 'pads' ? 'hidden @[1260px]:inline' : 'hidden @[1100px]:inline'
+}
 
 export { snapRigRows } from './RigHandle'
 
-/** The Cells menu's label folds to its glyph a step later than the verbs' words do: it names a state. */
-const CELLS_WORD_CLASS = 'hidden @[680px]:inline'
+/** The *Cells:* prefix, which goes a step after the verbs' words; the mode word beside it never does. */
+const CELLS_PREFIX_CLASS = 'hidden @[820px]:inline'
+/** The mode word's *short* form, drawn while the prefix is folded — `1st`, not `1st half`. */
+const CELLS_SHORT_CLASS = 'inline @[820px]:hidden'
+/** The mode word's full form, drawn beside the prefix. */
+const CELLS_FULL_CLASS = 'hidden @[820px]:inline'
 
-/** The Focus control's labels, by the same measure as the Cells label — glyphs alone below it. */
-export const FOCUS_WORD_CLASS = 'hidden @[680px]:inline'
+/** The Focus control's labels, by the same measure as the Cells prefix — glyphs alone below it. */
+export const FOCUS_WORD_CLASS = 'hidden @[820px]:inline'
 
-/** One verb on the controls row: a 28px outline button with its icon, its word folding away first (`VERB_WORD_CLASS`). */
+/** The floor: below it the row wraps once, at the state group, into two rows by design. */
+export const TWO_ROWS_CLASS = '@max-[699px]:flex-wrap'
+export const SECOND_ROW_CLASS = '@max-[699px]:basis-full'
+/** Under the floor the verbs group takes its whole line and may wrap within it — the last resort under ~330px. */
+export const FIRST_ROW_CLASS = '@max-[699px]:w-full @max-[699px]:flex-wrap'
+
+/**
+ * The Focus control's labels on the **compact** boards — `RigStrip` and the short board's merged
+ * row, each its own `@container` — where the row is `RIG`, the summary, the pill, the chip, the
+ * verbs menu and the Focus control and nothing else; measured for that row, not this one, and left
+ * where it was when the desk row's fold moved to 820.
+ */
+export const COMPACT_FOCUS_WORD_CLASS = 'hidden @[680px]:inline'
+
+/** The Cells control's face while its prefix is folded: the mode in one word. */
+const CELLS_SHORT_LABELS: Record<SubselectMode, string> = {
+  ALL: 'All',
+  ODD: 'Odd',
+  EVEN: 'Even',
+  NEXT: 'Next',
+  PREV: 'Prev',
+  FIRST_HALF: '1st',
+  SECOND_HALF: '2nd',
+  INVERT: 'Invert',
+  MASTERS: 'Masters',
+}
+
+/** One verb on the row: a 28px outline button with its icon, its word folding away first (`verbWordClass`). */
 const VERB_CLASS = 'h-7 gap-1.5 px-2 text-xs'
 
 export function RigBand(props: RigBandProps) {
@@ -332,7 +399,7 @@ function RigBandBody({
     [onToggle, selectedTargets, selectedCells],
   )
 
-  // ── The label row's verbs ──
+  // ── The row's verbs ──
   const selected = [...selectedTargets.values()]
   const summary = summariseSelection(selected)
   const locateTargets = useMemo<LocateTarget[]>(
@@ -411,10 +478,14 @@ function RigBandBody({
   )
 
   const locateTitle = allLocated ? 'Release locate on the selection' : 'Locate the selection: white beam at centre'
+  const verbWord = verbWordClass(focus)
 
   return (
     <div
       data-rig-band={focus}
+      // `data-focus`, beside the older `data-rig-band`: the fold thresholds are the shape's
+      // (`verbWordClass`), and the attribute says which shape this row is folding for.
+      data-focus={focus}
       className={cn(
         // Its own container, so the verbs' words and the Focus labels fold on the band's width —
         // what the rail or the sheet has taken is the band's business, not the viewport's.
@@ -424,128 +495,142 @@ function RigBandBody({
         // row carries the Focus control, the way back to Split and Pads, and a scroller that took it
         // along would put the only way back off-screen on any rig taller than the body.
         focus === 'rig' && !editing && 'flex min-h-0 flex-1 flex-col',
-        // Pads: the band folds to its two rows and the grip; the page takes the body.
+        // Pads: the band folds to its one row and the grip; the page takes the body.
         folded && 'pb-1',
       )}
     >
-      {/* ── Label row ── */}
-      {/* The label row: the summary, the pill and the desk chip; `flex-wrap` as the last resort. */}
-      <div data-rig-label-row className={cn('flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1', compact ? 'mb-2' : 'mb-1.5')}>
-        <BuskLabel>Rig</BuskLabel>
-        {compact && !everyRow && effective.rows.length > 1 && (
-          <RowChip rows={effective.rows} index={compactIndex} onSelect={setCompactRow} />
-        )}
-        {editing ? (
-          <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground">
-            Editing · drag targets from the palette, rows reorder by their grip
-          </span>
-        ) : (
-          <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground" title={summary}>
-            {summary}
-          </span>
-        )}
-        {families != null && families.length > 0 && (
-          <Badge
-            variant="outline"
-            className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-          >
-            {formatFamilyList(families, ' · ')}
-          </Badge>
-        )}
-        {/* `showSubject`: the page strip below carries the same pill for the page, and two bare
-            *Desk* chips a row apart would be worse than either alone. */}
-        {!editing && <DeskChip showSubject />}
-        {/* The compact board has one row: its verbs menu, the edit-mode reset and the host's
-            controls sit here, for `Done`'s reason — a desk window narrowed mid-edit keeps editing. */}
-        {compact && !editing && (
-          <CompactVerbs
-            onSubselect={onSubselect}
-            onClear={onClear}
-            canClear={selected.length > 0}
-            locateLabel={allLocated ? 'Release locate' : 'Locate'}
-            canLocate={locateTargets.length > 0}
-            onLocate={locateSelection}
-          />
-        )}
-        {compact && editing && resetButton}
-        {compact && controls}
-      </div>
-
-      {/* ── Controls row ── */}
-      {/* The common controls, on a row of their own in every shape (2026-09-21): the sub-selection,
-          the verbs, then the host's Focus control and Edit layout / Done. One row on the desk board
-          where the label row used to carry all of it and wrapped; the compact board keeps its one. */}
-      {!compact && (
-        <div data-rig-controls-row className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
-          {!editing && (
-            <>
-              <CellsMenu onSubselect={onSubselect} />
-              <StepButtons onSubselect={onSubselect} />
-            </>
+      {/* ── The row ── */}
+      {compact ? (
+        // The compact boards keep the one row they had: the label, the row chip, the summary, the
+        // pill, the desk chip, the verbs menu (or edit mode's reset) and the host's controls;
+        // `flex-wrap` as the last resort there, since the row chip and the summary are what give.
+        <div data-rig-row="compact" className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
+          <BuskLabel>Rig</BuskLabel>
+          {!everyRow && effective.rows.length > 1 && (
+            <RowChip rows={effective.rows} index={compactIndex} onSelect={setCompactRow} />
           )}
           {editing ? (
-            resetButton
+            <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground">
+              Editing · drag targets from the palette, rows reorder by their grip
+            </span>
           ) : (
-          <>
-            {/* *Spread…* is a selection verb beside Locate and Highlight: it opens the Spread tab,
-                which reads the selection, and writes nothing but the sheet fact — below `md` the
-                overlay carries the tab, so the same write opens it there. Each verb is the desk's
-                ordinary outline button with its icon (the programmer's toolbar draws Locate and
-                Highlight with these two glyphs), the word folding away first. */}
-            <Button
-              variant="outline"
-              size="sm"
-              className={VERB_CLASS}
-              onClick={() => setBuskSheet('spread')}
-              aria-label="Spread…"
-              title="Spread a value across the selection"
-            >
-              <Waves className="size-3.5" />
-              <span className={VERB_WORD_CLASS}>Spread…</span>
-            </Button>
-            <Button
-              variant={allLocated ? 'default' : 'outline'}
-              size="sm"
-              className={cn(VERB_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
-              onClick={locateSelection}
-              disabled={locateTargets.length === 0}
-              aria-label="Locate"
-              title={locateTitle}
-            >
-              <Crosshair className="size-3.5" />
-              <span className={VERB_WORD_CLASS}>Locate</span>
-            </Button>
-            <Button
-              variant={highlight.isActive ? 'default' : 'outline'}
-              size="sm"
-              className={VERB_CLASS}
-              disabled={selected.length === 0}
-              onPointerDown={highlight.press}
-              onPointerUp={highlight.release}
-              onPointerCancel={highlight.release}
-              onPointerLeave={highlight.release}
-              aria-label="Highlight"
-              title="Hold: every selected dimmer to full"
-            >
-              <Flashlight className="size-3.5" />
-              <span className={VERB_WORD_CLASS}>Highlight</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={VERB_CLASS}
-              onClick={onClear}
-              disabled={selected.length === 0}
-              aria-label="Clear"
-              title="Clear the selection"
-            >
-              <X className="size-3.5" />
-              <span className={VERB_WORD_CLASS}>Clear</span>
-            </Button>
-          </>
-        )}
-          <span className="flex-1" />
+            <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground" title={summary}>
+              {summary}
+            </span>
+          )}
+          <FamilyPill families={families} />
+          {!editing && <DeskChip showSubject />}
+          {!editing && (
+            <CompactVerbs
+              onSubselect={onSubselect}
+              onClear={onClear}
+              canClear={selected.length > 0}
+              locateLabel={allLocated ? 'Release locate' : 'Locate'}
+              canLocate={locateTargets.length > 0}
+              onLocate={locateSelection}
+            />
+          )}
+          {editing && resetButton}
           {controls}
+        </div>
+      ) : (
+        // **One row, the same order in every shape** (busk-chrome plan D13): the label, the Cells
+        // menu and its steps, the four verbs; then the family pill and the desk chip *left-anchored
+        // after the verbs*; the gap; the Focus control and *Edit layout* / *Done* right-anchored.
+        // The chip sits at the same x in Split, Rig and Pads, and only what follows it changes:
+        // the summary is drawn **only in Pads**, in the gap — in Split and Rig the lit tiles say it.
+        // Two groups rather than one flat list, so the floor can break the row at exactly one place.
+        <div data-rig-row="desk" className={cn('mb-2 flex min-h-7 items-center gap-x-2 gap-y-1', TWO_ROWS_CLASS)}>
+          <div data-rig-row-verbs className={cn('flex shrink-0 items-center gap-2', FIRST_ROW_CLASS)}>
+            <BuskLabel>Rig</BuskLabel>
+            {!editing && (
+              <>
+                <CellsMenu onSubselect={onSubselect} />
+                <StepButtons onSubselect={onSubselect} />
+              </>
+            )}
+            {editing ? (
+              resetButton
+            ) : (
+              <>
+                {/* *Spread…* is a selection verb beside Locate and Highlight: it opens the Spread
+                    tab, which reads the selection, and writes nothing but the sheet fact — below
+                    `md` the overlay carries the tab, so the same write opens it there. Each verb
+                    is the desk's ordinary outline button with its icon (the programmer's toolbar
+                    draws Locate and Highlight with these two glyphs), the word folding away first. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={VERB_CLASS}
+                  onClick={() => setBuskSheet('spread')}
+                  aria-label="Spread…"
+                  title="Spread a value across the selection"
+                >
+                  <Waves className="size-3.5" />
+                  <span className={verbWord}>Spread…</span>
+                </Button>
+                <Button
+                  variant={allLocated ? 'default' : 'outline'}
+                  size="sm"
+                  className={cn(VERB_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+                  onClick={locateSelection}
+                  disabled={locateTargets.length === 0}
+                  aria-label="Locate"
+                  title={locateTitle}
+                >
+                  <Crosshair className="size-3.5" />
+                  <span className={verbWord}>Locate</span>
+                </Button>
+                <Button
+                  variant={highlight.isActive ? 'default' : 'outline'}
+                  size="sm"
+                  className={VERB_CLASS}
+                  disabled={selected.length === 0}
+                  onPointerDown={highlight.press}
+                  onPointerUp={highlight.release}
+                  onPointerCancel={highlight.release}
+                  onPointerLeave={highlight.release}
+                  aria-label="Highlight"
+                  title="Hold: every selected dimmer to full"
+                >
+                  <Flashlight className="size-3.5" />
+                  <span className={verbWord}>Highlight</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={VERB_CLASS}
+                  onClick={onClear}
+                  disabled={selected.length === 0}
+                  aria-label="Clear"
+                  title="Clear the selection"
+                >
+                  <X className="size-3.5" />
+                  <span className={verbWord}>Clear</span>
+                </Button>
+              </>
+            )}
+          </div>
+          <div data-rig-row-state className={cn('flex min-w-0 flex-1 items-center gap-2', SECOND_ROW_CLASS)}>
+            <FamilyPill families={families} />
+            {/* `showSubject`: the page strip below carries the same pill for the page, and two bare
+                *Desk* chips a row apart would be worse than either alone. */}
+            {!editing && <DeskChip showSubject className="min-w-0 shrink" />}
+            {folded ? (
+              // Pads: no tiles to say what is selected, so the summary sits in the gap — the first
+              // thing to give when the row is short, its whole text on the title.
+              <span data-rig-summary className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={summary}>
+                {summary}
+              </span>
+            ) : editing ? (
+              <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                Editing · drag targets from the palette, rows reorder by their grip
+              </span>
+            ) : (
+              <span className="flex-1" />
+            )}
+            {controls}
+          </div>
         </div>
       )}
 
@@ -610,7 +695,7 @@ function RigBandBody({
 
       {/* ── The handle ── */}
       {/* One grip in three shapes, on the desk board: the drag in Split; the press back to Split
-          under the controls row in Pads and under the rows in Rig. Not in edit mode, which forces
+          under the row in Pads and under the rows in Rig. Not in edit mode, which forces
           Split for its duration, and not on the compact board, where the segmented control is the
           route. */}
       {!editing && !compact && (focus !== 'split' || lines.length > 0) && (
@@ -665,6 +750,20 @@ function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   return null
 }
 
+/** The selection's attribute mask, drawn only while one is set (D14): absent for a plain selection. */
+function FamilyPill({ families }: { families: AttributeFamily[] | null }) {
+  if (families == null || families.length === 0) return null
+  return (
+    <Badge
+      variant="outline"
+      data-rig-family
+      className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
+    >
+      {formatFamilyList(families, ' · ')}
+    </Badge>
+  )
+}
+
 // ─── The Cells menu and the steps ────────────────────────────────────────
 
 /**
@@ -690,7 +789,11 @@ function CellsMenu({ onSubselect }: { onSubselect: (mode: SubselectMode) => void
           className={cn(VERB_CLASS, 'gap-1')}
         >
           <Grid2x2 className="size-3.5" />
-          <span className={CELLS_WORD_CLASS}>Cells: {SUBSELECT_MODE_LABELS[last]}</span>
+          {/* Never a bare glyph: the prefix folds, the mode word stays — in its short form once
+              the prefix has gone (`1st`, `Masters`), its full form beside it (`1st half`). */}
+          <span className={CELLS_PREFIX_CLASS}>Cells: </span>
+          <span className={CELLS_FULL_CLASS}>{SUBSELECT_MODE_LABELS[last]}</span>
+          <span data-cells-mode className={CELLS_SHORT_CLASS}>{CELLS_SHORT_LABELS[last]}</span>
           <ChevronDown className="size-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
@@ -748,8 +851,8 @@ const CELLS_MODE_TITLES: Partial<Record<SubselectMode, string>> = {
 }
 
 /**
- * Below `md` the label row has no room for a second control: the filters, the steps and the verbs
- * sit in one menu. **Module-level, not a closure inside the band**: a component declared during a
+ * Below `md` the compact row has no room for a second control: the filters, the steps and the
+ * verbs sit in one menu. **Module-level, not a closure inside the band**: a component declared during a
  * render is a new element type per render, so React remounted it — and closed its open menu —
  * on every `selection.state` frame, locate push or rig refetch while the operator had it open.
  */
@@ -776,7 +879,7 @@ function CompactVerbs({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {/* Below `md` the menu's filters and the two steps sit here: the label row has no
+              {/* Below `md` the menu's filters and the two steps sit here: the compact row has no
                   room for a second control. */}
               <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
               {SUBSELECT_FILTER_MODES.map((mode) => (

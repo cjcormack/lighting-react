@@ -180,10 +180,26 @@ describe('the sheet is one fact', () => {
     expect(getBuskSheet()).toBe('spread')
   })
 
-  it('still gates the memory on the live list, so a fourth tab could land hidden the way the third did', () => {
-    expect(isLiveSheetTab('spread')).toBe(true)
+  it('still gates the memory on the live list, so a fifth tab could land hidden the way the third and fourth did', () => {
+    expect(isLiveSheetTab('show')).toBe(true)
     expect(isLiveSheetTab('cheese')).toBe(false)
-    expect(LIVE_SHEET_TABS).toEqual(['speed', 'colour', 'spread'])
+    expect(LIVE_SHEET_TABS).toEqual(['speed', 'colour', 'spread', 'show'])
+  })
+
+  it('remembers Show once it has been open, and ?sheet=show arrives as an ordinary open (busk-chrome session A)', () => {
+    applyBuskArrival({ focus: null, sheet: 'show' })
+    expect(getBuskSheet()).toBe('show')
+    toggleBuskSheet()
+    expect(getBuskSheet()).toBe('none')
+    toggleBuskSheet()
+    expect(getBuskSheet()).toBe('show')
+    // The overlay's memory of Show is Show — only a memory of Speed is redirected there.
+    resetBuskWindowStores()
+    surface({ short: true })
+    setBuskSheet('show')
+    setBuskSheet('none')
+    toggleBuskSheet()
+    expect(getBuskSheet()).toBe('show')
   })
 
   it('remembers Colour once it has been open, so the toggle unfolds back onto it', () => {
@@ -195,8 +211,8 @@ describe('the sheet is one fact', () => {
   })
 
   it('unfolds onto Colour where the sheet is an overlay, since no overlay form offers Speed', () => {
-    // A MIDI BuskSheetToggle on the short board: Speed is the ShowBar's chip there, so a memory
-    // of Speed would open a sheet with no tab — fold to fold.
+    // A MIDI BuskSheetToggle on the short board: the overlay offers no Speed tab (the tempo chip is
+    // the Show tab's strip's there), so a memory of Speed would open a sheet with no tab — fold to fold.
     surface({ short: true })
     expect(getBuskSheet()).toBe('none')
     act(() => toggleBuskSheet())

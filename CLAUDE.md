@@ -532,7 +532,7 @@ press taking its layer siblings off wholesale, because a cue has no targets to n
 press releases nothing, and a stacking bank has no siblings at all. The request carries the
 selection's **`families`** beside its targets — the desk's pair while this tab follows the desk,
 the tab's own when unlinked — and the response answers `skippedFamilies`; see §The desk selection
-has a mask for what lands under it and why a press is never pre-refused here. The band's label row
+has a mask for what lands under it and why a press is never pre-refused here. The band's one row
 carries the family pill and the desk chip for the same pair.
 
 **`src/lib/buskLayout.ts` is the document model**: no React, no store, every gesture a plain call a
@@ -739,7 +739,7 @@ falls back on its own.
 
 **Two flags, two chips, and neither may drive the other.** A single flag cannot express the flow:
 following would pin both screens to one page, and unlinking to get two pages would take the shared
-selection with it, so the operator would select twice. `DeskChip` in the band's label row governs the
+selection with it, so the operator would select twice. `DeskChip` on the band's one row governs the
 selection, `BuskPageChip` beside the page tabs governs the page — the same pill, the same link /
 unlink glyph, and on this view both name their subject (*Targets:* / *Page:*) so neither reads as
 governing the whole view. On the programmer's row C the selection chip is alone and stays bare; there
@@ -798,7 +798,7 @@ exists: two screens at one desk showing two shapes of one view, pressed onto one
 **Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
 folds the rig to `RigStrip` (the summary, the family pill, the desk chip — what a press needs to
 be honest about — and a chevron that unfolds Split) **off the desk board**, and on it to the band's own
-label and controls rows plus a chevron pill back to Split, and the page fills the body; **Rig** fills the
+one row plus a chevron pill back to Split, and the page fills the body; **Rig** fills the
 body with every row and folds the page to `BuskPageStrip`'s **40px folded arm** at the bottom —
 the page's name and its bank count, **not the tab strip drawn folded**
 (`Phones.dc.html` note 8, busk-further plan §11): Rig focus exists to give the band the height,
@@ -806,20 +806,23 @@ the full tab strip wraps on a phone and takes it back, and a page is chosen in S
 menu is not on the folded rig strip** — the compact boards' fold — by decision (session 8): `Focus`
 and `Phones` draw the strip without it and `Cells` draws it with, and the strip carries what a press
 must be *honest* about, where the menu is a *write*. On the desk board the fold is the band's own
-controls row, which carries it in every shape by the 2026-09-21 decision that no control moves. **Below `md` Rig focus stacks every row two tiles across, scrolling
+row, which carries it in every shape by the 2026-09-21 decision that no control moves. **Below `md` Rig focus stacks every row two tiles across, scrolling
 vertically with the band** (`Phones` note 6, `RigBand`'s `stackRows`, which `BuskingView` sets
 for the **narrow board only** — the short board is compact too but wider than `md`, and keeps its
 sideways rows): it is D15's replacement for the narrow-width target sheet, and a sideways scroll
 per row on a phone defeats the point of a list; Split there keeps the one sideways row with the
-row chip. **The band's controls row is the same row in every shape, and the Focus control and
-*Edit layout* / *Done* end it** (2026-09-21): on the desk board the band draws a label row (summary,
-family pill, desk chip) and under it a controls row (the Cells menu and its steps, the verbs, then
-the host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by `BuskingView`) in
-Split, Rig **and Pads**, where the band is `focus="pads"`: its two rows and the grip, no rows, in
-place of `RigStrip`, which is the compact boards' fold. The page strip below is tabs and the page
-chip and nothing else. The Focus control was on the page strip and moved with the fold — below the
-band in Split and Pads, at the bottom of the body in Rig — and then briefly on the band's one
-label row, which a desk width with the sidebar open filled to wrapping. **The handle is `RigHandle`,
+row chip. **The band's chrome is one row, the same row in every shape, and the Focus control and
+*Edit layout* / *Done* end it** (busk-chrome plan D13, 2026-09-21): on the desk board the band draws
+the `RIG` label, the Cells menu and its steps, the verbs, then the family pill and the desk chip
+**left-anchored after the verbs**, the gap, and the host's `controls` — `BuskFocusControl` and
+`EditLayoutToggle`, filled by `BuskingView` — right-anchored, in Split, Rig **and Pads**, where the
+band is `focus="pads"`: the one row and the grip, no rows, in place of `RigStrip`, which is the
+compact boards' fold. The **selection summary is drawn only in Pads**, in the gap; in Split and Rig
+the lit tiles say it (§The rig). The page strip below is tabs and the page chip and nothing else.
+The row was two — a label row over a controls row — from the morning of 2026-09-21 to the evening,
+and the merge cost 32px in every shape; before that the Focus control was on the page strip and
+moved with the fold, and then briefly on the band's one label row, which a desk width with the
+sidebar open filled to wrapping. **The handle is `RigHandle`,
 one grip in three shapes**: in Split a drag (a focusable `role="separator"`) that snaps to whole
 lines on release — every line is drawn while it is held and **the clip is the snap**: dragged into
 the Pads region the rows clip to nothing, into the Rig region the clip lifts and the rows stretch to
@@ -874,8 +877,9 @@ both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fo
 inside the sheet — filling the width the sheet is dragged to since 2026-09-21, where it was a fixed
 288px column, and drawing no heading or caption (the usage badge's sentence is on the badge's own
 title) — **Colour is `ColourSheet`** and **Spread is `SpreadSheet`** (both below). **None of the three
-draws a heading**: the tab strip names the tab and the rig band's label row already says what is
-selected and under which mask. **Colour and Spread keep their verbs in a static footer** under the
+draws a heading**: the tab strip names the tab, the rig band's row carries the mask (the family
+pill and the desk chip), and what is selected is the lit tiles — or, in Pads, the summary in the
+row's gap. **Colour and Spread keep their verbs in a static footer** under the
 tab's one scroller, the save first on both (*Save as template…* / *Save as Look…*), so the two tabs
 put their save in one place; the Colour footer is its own `@container` and *Pick* and *Spread…* fold
 to icons below `SHEET_FOOTER_WORDS` (340px), since at the sheet's 320px default the worded three
@@ -883,15 +887,49 @@ wrapped. The Spread footer also carries **Live** beside **Apply** — with its w
 since *Save as Look… · Live · Apply* fits the floor — and while Live is on Apply reads *Send again*
 and stays pressable, the un-deduped resend. Their pickers are `fluid` (`ColourPickerBody`), taking the sheet's
 width, and their picker rows are padded to the knob's half-width — a tab body scrolls, a scroller
-clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All three have landed, and `LIVE_SHEET_TABS` stays the one list rather than
-collapsing into the sheet vocabulary: a fourth tab would land the way Colour and Spread did,
-**hidden** there until its session — adding a tab to that list lights it in the strip, the fold's
-glyph row, the Screens sheet's Sheet segment and the toggle's memory at once — because a tab with
-an empty state is a promise the desk cannot keep, and a fact naming a hidden tab draws the fold.
+clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All four have landed, and `LIVE_SHEET_TABS` stays the one list rather than
+collapsing into the sheet vocabulary: Show landed exactly the way Colour and Spread did, and a
+fifth tab would too — **hidden** there until its session — adding a tab to that list lights it in
+the strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory at once
+— because a tab with an empty state is a promise the desk cannot keep, and a fact naming a hidden
+tab draws the fold.
+
+**Show is the fourth tab, and it is why the busk view has no `ShowBar`** (busk-chrome plan D1–D6,
+`ShowTab.dc.html`; `components/busking/ShowTab.tsx`). It mounts **`RunMobile`** — the phone runner
+Show swaps to below 600px, one component and not a copy — over the transport `routes/Busk.tsx`
+already holds through `useShowBarProps`, whose whole result the route threads down as `show`
+(through `BuskingView` to both sheet forms) so the tab, a pad press and the fold act on one
+transport. Its display state is `hooks/useRunnerDisplay.ts`, lifted out of `ShowPage` so the tab
+and the phone cannot disagree about which cue is next; *Make live* is `useMakeStackLive`, lifted
+beside it for the same reason, because the tab's picker **browses** as the phone's does and
+`OffPlayheadBanner` says so, with requeue inert there. `RunMobile` gained two props for it: a
+`strip` slot, where the tab puts `ProgrammerIndicator` (the blind report and value count the bar
+carried), and `defaultExpansion`, `null` from the tab — **the cards open collapsed here** (D2),
+because the rig band is the stage on this view and two mini-stages a column apart would read as
+two answers; the phone still opens Current in Stage. BACK · GO is the tab's static footer, the way
+Colour and Spread keep their verbs, and DBO is still inert (`FU-FE-DBO-INERT`). **No transport
+keys on the busk view** (D5): Space on a focused pad presses the pad, and a key that also fired GO
+would be two effects from one press on a live rig — GO is the footer, a MIDI `go` binding, or the
+Show view one pill away; `Busk.test.tsx` and `ShowTab.test.tsx` both pin that `useTransportKeys`
+is never called. **The tab strip folds its words to glyphs below 400px of sheet** (D3): the
+strip's **unpadded wrapper** is the `@container` — `SheetPage.Header`'s convention, since a size
+query measures the content box and the row's own `px-3` would fire the fold 24px early — every
+tab keeps its glyph, and below 400 only the *open* tab keeps its word (`tabWordClass`), so the
+320 floor holds with four tabs, the mode toggle and the chevron on one row. The overlay strip
+takes the same rule and the same wrapper: three worded tabs are ~291px, which overran the
+right-hand form while it was 288 and ran under the sheet primitive's close cross. **That form is
+320 now**, the sheet's own floor: the Show tab's strip — name, list, programmer chip, tempo chip,
+DBO — fits at 320 with the stack name shrunk to its minimum (`RunMobile` makes the name the one
+item that gives) and clipped DBO at 288. **The fold shows the live cue number under the Show glyph** (D4) — green, an
+em-dash with nothing on stage — from the **server** cursor (`transport.serverActiveCueId`, which
+holds on the outgoing cue mid-fade), derived in `SideSheet` and handed in as `liveCue`; the strip
+subscribes to nothing.
 Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upright phone, a
 right-hand sheet where the viewport is short, through `useCellEditorForm`'s forms — opened from
-the page strip's *Sheet* button onto Colour, carrying **Colour and Spread** and **no Speed tab**
-(Speed is the ShowBar's chip there). The palette still replaces the whole region while editing.
+the page strip's *Sheet* button onto Colour, carrying **Colour · Spread · Show** and **still no
+Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the Show
+tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. The
+palette still replaces the whole region while editing.
 
 **Its chrome is the programmer rail's, and both live in `components/sheet/sidePanel.ts`.** The two
 are one instrument in two views — a column against the right edge of a live view, folded to a strip
@@ -929,8 +967,10 @@ written in) that a panel may raise for itself, each with its own key and default
 **`localStorage`** — `programmer.rail.width` at 300, `busk.sheet.width` at 320.
 
 **A panel's floor is set by its header, and the sheet's is 320.** Three labelled tabs, the mode
-toggle and the fold chevron inside the chrome row's 12px gutters measure 304px, so at the shared
-260 that row overflowed by 38 and put *both buttons outside the panel* — reported from an iPad.
+toggle and the fold chevron inside the chrome row's 12px gutters measured 304px when the floor was
+set, so at the shared 260 that row overflowed by 38 and put *both buttons outside the panel* —
+reported from an iPad. The strip holds four tabs now, and 320 still holds only because of the D3
+fold: below 400px of sheet every tab but the open one is its glyph (§Focus and the side sheet).
 The rail's header is two short labels with badges and fits at 240, which is why the floor is
 per-panel rather than one number raised for everyone. 320 and not 304 because a minimum sitting on
 the exact fit clips again the moment anything joins the row, which is how this broke: the row
@@ -1117,7 +1157,7 @@ template does. The band's *Spread…* verb and its compact menu item open the ta
 **Short beats narrow.** `BuskingView` draws one of three boards: `md` says desk or narrow, and its
 own copy of the 500px height query (`shortViewport.test.ts` pins the spelling) says whether a
 window wide enough for the desk board has the height for it. A landscape phone is wider than `md`
-with 297px under the ShowBar, so on the **short board** the rig strip and the page strip merge into
+with ~350px under the ShowHeader, so on the **short board** the rig strip and the page strip merge into
 **one 32px row** — `RigStripContent`'s pieces in `BuskPageStrip`'s `leading` slot while the rig is
 folded, the same pieces and not a third strip — Split shows one row of 48px tiles with the row chip
 (`RigBand compact`), the side sheet **overlays** rather than docks (neither the fold nor the docked
@@ -1283,13 +1323,30 @@ they differ from the defaults, since the desk's Json refuses a key it does not k
 mid-upgrade must keep accepting a rig nobody has re-laid-out. The drag handle (D6, §Focus and the
 side sheet) reads and writes the window's `busk.rigRows`, snaps past both ends, is drawn for a
 one-line rig and hidden off the desk board (below `md` and on the short board alike, `!compact`);
-edit mode shows every row, since a hidden one cannot take a drop. **The controls row folds to icons
-before it wraps** (2026-09-21): the band is its own `@container`, every verb is the desk's outline
-button with its icon and the words hide below `@[860px]` (`VERB_WORD_CLASS`, from a measured 847px
-worded row), the Cells label and the Focus labels below `@[680px]`; `flex-wrap` stays as the last
-resort for a row narrower than the icons. They were 1150 and 1000 while the verbs shared the label
-row, and at those an 1122px window fell to icons for nothing. It was one row with the label row's summary and chips, fixed ~330px word buttons
-included, which took a second line at a tablet width and twelve controls at a desk width. **A
+edit mode shows every row, since a hidden one cannot take a drop. **The one row folds in a fixed
+order, and its floor is two rows by design** (busk-chrome plan D15, `Band.dc.html`; the thresholds
+are re-measured in the app and are `RigBand.tsx`'s to move): the band is its own `@container` and
+carries `data-focus`, and the row gives up its words in this order — the **verbs' words first**
+(`verbWordClass(focus)`: every verb is the desk's outline button with its icon, and the words go
+**earlier in Pads** than in Split or Rig, because there the summary sits in the gap and matters
+more than the verbs' words); then the ***Cells:* prefix and the Focus words** at one width in
+every shape (`CELLS_PREFIX_CLASS`, `FOCUS_WORD_CLASS`) — **the Cells control keeps its mode word**
+in its short form, All · Odd · Even · 1st · 2nd · Invert · Masters (`CELLS_SHORT_LABELS`), and is
+never a bare glyph, since *All* is the state an operator most needs to be sure of; then the
+**summary truncates** (Pads only, `min-w-0`, its whole text on the title); and **below the floor
+the row wraps at exactly one place** — the verbs group on the first row, the state group (pill,
+chip, summary, Focus, Edit layout) taking the second whole — through `TWO_ROWS_CLASS` /
+`SECOND_ROW_CLASS`, **not `flex-wrap`'s own choice of break**: above the floor the row is
+`flex-nowrap`, so a control never lands mid-row; only under it may the verbs group wrap within its
+own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the ~330px the iconic verbs
+need, which the desk board reaches with the sidebar open and the sheet at its 480 ceiling, and
+which a size-contained `@container` would otherwise paint over the sheet. The desk chip is given
+`min-w-0 shrink` on this row — both words, because `FollowPill`'s base is `shrink-0` — so a long
+*· from <window>* suffix truncates before any control moves. They were 860 / 680 while the summary
+had a row of its own, and 1150 / 1000 before that, when the verbs shared the label row with the
+summary and the chips. The compact boards keep their one `flex-wrap` row — the row chip, the
+summary, the verbs menu — and their Focus words fold at that row's own measure
+(`COMPACT_FOCUS_WORD_CLASS`, 680), not the desk row's. **A
 tile's cross and menu sit inside its top-right corner**: hanging 7px off the corners they were
 clipped by a `SCROLL` row's body and overlapped the next tile's at the 8px gap. **A selected pip is
 the accent, solid** (`Cells.dc.html`'s `pip.on`), and **a dark head draws no live bar** — the bar
@@ -2386,7 +2443,7 @@ the copy in `deskFollow.ts`, read through `useSelectionPair`. **The desk chip**
 selection or this window did, `Desk · from <name>` for another window, `Desk · from the desk` for
 a control surface, dashed `This window` when local; a click flips it. It sits on the programmer's
 row C between the family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only
-with a `projectId`) and in the busk band's label row beside the family pill, and nowhere else —
+with a `projectId`) and on the busk band's one row beside the family pill, and nowhere else —
 the plain lists never bridge (D1), so a chip there would name a link that does not exist. **On the
 busk band it takes `showSubject` and reads `Targets: Desk`**, because there it has a sibling — the
 page chip (§The busk layout) — and two bare `Desk` chips a row apart would be worse than either
@@ -3016,12 +3073,17 @@ Six things about it are load-bearing:
   depending on the view. It carries the Prompt Book's extra case: where the backend will not accept
   edits, the control is shown but **inert**, because it is the only thing saying why.
 
-**One `ShowBar`, identical on the three live views that have one.** Every host spreads
-`showBarProps` from `useShowBarProps` and overrides exactly one prop — `showShortcuts`, which
-advertises keys and so can only be answered by the host that binds them. Everything else comes from
-the hook, which is what stops the bar drifting into three near-copies: it previously had no Blind on
-the Prompt Book, a different stack-name rule on Show, and a hand-wired transport on the Prompt Book
-that gave that page two transport instances.
+**One `ShowBar`, identical on the two live views that have one — Show and the Prompt Book.** Every
+host spreads `showBarProps` from `useShowBarProps` and overrides exactly one prop —
+`showShortcuts`, which advertises keys and so can only be answered by the host that binds them.
+Everything else comes from the hook, which is what stops the bar drifting into near-copies: it
+previously had no Blind on the Prompt Book, a different stack-name rule on Show, and a hand-wired
+transport on the Prompt Book that gave that page two transport instances. **The busk view was the
+third host until the busk-chrome plan's session A** and draws no bar on any board: it still calls
+the hook — for the transport and the `dbo` pair — and hands the result to its side sheet's Show
+tab, which mounts the phone runner in the bar's place (§Focus and the side sheet). It is the
+second view without a bar and for the opposite reason to the programmer's: not too much chrome for
+the job, but the wrong shape of it.
 
 **The programmer is the exception, and draws no bar at all.** It keeps `ShowHeader` — the breadcrumb,
 the save pill, the view switcher, Start/Stop and the live dot — and nothing below it until row A.
@@ -3381,8 +3443,10 @@ path may quietly change where it lands.
   `?cue=` deep links are how the Prompt Book's "Edit cue" reaches a cue.
 
   **Busk is `/projects/:id/busk`** (`routes/Busk.tsx` → `components/busking/BuskingView`):
-  the rig band, the page the operator built and the side sheet, under the same `ShowHeader` and
-  `ShowBar` as the other three, from the same `useShowBarProps`. The page itself is §The busk
+  the rig band, the page the operator built and the side sheet, under the same `ShowHeader` as
+  the other three and — since the busk-chrome plan's session A — **no `ShowBar`**: the route still
+  calls `useShowBarProps` and hands the transport to the sheet's Show tab (§Focus and the side
+  sheet). The page itself is §The busk
   layout; this section is the route and the surface around it. It was `/fx`, which named
   the machinery rather than the job and sat one hyphen from `/fx-library` — the collision
   `lib/navMatch.ts` exists for. `LegacyFxRedirect` keeps both spellings of the old path
@@ -3517,9 +3581,11 @@ path may quietly change where it lands.
     the playhead*, exactly as a cue slot behaves, and pressing it again stops it. `useActiveCueIds`
     is what lights it, for the same reason. `GoToStackRequest.cueId` lost its only caller and is
     gone: `/show/go-to` names a stack and lands on its first cue.
-  - **GO and BACK are the ShowBar's, and only the ShowBar's.** The stack cards' GO was two requests
-    behind one gesture — `transport.go()` on the live stack, `goToStack` on any other — and a busk
-    page has no room for a transport that means different things depending on which card it is on.
+  - **GO and BACK are the transport's, in one place** — the ShowBar's until the busk-chrome plan's
+    session A, the side sheet's Show tab's footer since (§Focus and the side sheet). The stack
+    cards' GO was two requests behind one gesture — `transport.go()` on the live stack,
+    `goToStack` on any other — and a busk page has no room for a transport that means different
+    things depending on which card it is on.
   - **`pinnedToBusk` is gone entirely** — the column, the *Pin to Busk* toggle in `CuePropsPane`,
     and the `buildCueInput` round-trip. A cue that wants a pad is placed in a bank.
   - **The transport is not a prop any more either.** `routes/Busk.tsx` still holds the one
@@ -3556,8 +3622,8 @@ path may quietly change where it lands.
 
   **Its visibility persists per panel and app-wide, which is a feature and a cost, and both are
   accepted.** Opened once it stays open on every view and across reloads: on the programmer that is
-  a tempo band on screen, and on Show, the Prompt Book and Busk it is the bank drawn twice until
-  dismissed. Neither is a defect and neither is session 5's band returning — the difference is a
+  a tempo band on screen, and on Show and the Prompt Book — and on Busk while its sheet's Speed
+  tab is open — it is the bank drawn twice until dismissed. Neither is a defect and neither is session 5's band returning — the difference is a
   door the operator opened and can close. Do not "fix" it by making visibility per-view; that puts
   one surface in two states again.
 

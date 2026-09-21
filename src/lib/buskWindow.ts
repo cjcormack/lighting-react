@@ -45,21 +45,22 @@ import { unlinkBuskPage, useBuskPageFollow, useLocalBuskPage } from './buskPageF
  */
 
 export type BuskFocus = 'split' | 'pads' | 'rig'
-export type BuskSheet = 'none' | 'speed' | 'colour' | 'spread'
+export type BuskSheet = 'none' | 'speed' | 'colour' | 'spread' | 'show'
 /** A tab the sheet can open onto — every sheet value but the fold. */
 export type BuskSheetTab = Exclude<BuskSheet, 'none'>
 
 export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
-export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread']
+export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'spread', 'show']
 
 /**
- * The tabs that have landed — all three, since session 6 lit Spread. The list stays the one
- * gate rather than collapsing into [BUSK_SHEETS]: a fourth tab would land the way Colour and
- * Spread did, hidden until its session, because a tab with an empty state is a promise the desk
- * cannot keep, and a fact naming a hidden tab draws the fold. Adding a tab here lights it in the
- * sheet's strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
+ * The tabs that have landed — all four, since the busk-chrome plan's session A lit Show, the
+ * phone runner in the sheet. The list stays the one gate rather than collapsing into
+ * [BUSK_SHEETS]: Show landed exactly the way Colour and Spread did, and a fifth tab would too —
+ * hidden here until its session, because a tab with an empty state is a promise the desk cannot
+ * keep, and a fact naming a hidden tab draws the fold. Adding a tab here lights it in the sheet's
+ * strip, the fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread', 'show']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_ROWS_KEY = 'busk.rigRows'
@@ -82,10 +83,10 @@ const SHEET_DOCKS = '(min-width: 1024px)'
 const RAIL_DRAWN = '(min-width: 768px)'
 
 /**
- * The tab an overlay unfolds onto when nothing but Speed has been open: Speed is the ShowBar's chip
- * wherever the sheet is an overlay (D7), so the overlay's tab list strips it, and a toggle that
- * remembered only Speed would open a sheet that finds no tab — fold to fold, the dead door the
- * memory exists to prevent.
+ * The tab an overlay unfolds onto when nothing but Speed has been open: the overlay's tab list
+ * strips Speed (D7 — it was the ShowBar's chip there, and since the busk-chrome plan's session A it
+ * is the Show tab's strip's, `SpeedMastersChip`), so a toggle that remembered only Speed would open
+ * a sheet that finds no tab — fold to fold, the dead door the memory exists to prevent.
  */
 const OVERLAY_SHEET_TAB: BuskSheetTab = 'colour'
 

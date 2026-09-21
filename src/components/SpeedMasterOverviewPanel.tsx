@@ -35,8 +35,9 @@ interface SpeedMasterOverviewPanelProps {
  * **Visibility persists, per panel and app-wide — a feature and a cost, and both are accepted.**
  * Opened once, this panel stays open on every view and across reloads. On the programmer that is a
  * tempo band back on screen; it is not session 5's band returning, because it is behind a door the
- * operator opened and can close, and no view draws it unasked. On Show, the Prompt Book and Busk
- * — the three views with a `ShowBar` — it means the bank is drawn twice until dismissed. Neither
+ * operator opened and can close, and no view draws it unasked. On Show and the Prompt Book — the
+ * two views with a `ShowBar` — it means the bank is drawn twice until dismissed, and on Busk twice
+ * while the side sheet's Speed tab is open. Neither
  * is a defect. Both are written down here so nobody later reads the panel as a regression and
  * "fixes" it by making it per-view, which would put one surface in two states again.
  *

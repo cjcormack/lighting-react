@@ -139,8 +139,9 @@ export function ProgrammerPage() {
             The reasoning is the plan's own D1, applied to a band rather than to a row: everything
             above the grid earns its place by the line, and 60px of blackout, tempo, cue numbers
             and a transport is the largest thing on this page that is not about editing values. It
-            is not lost, it is one pill away — the switcher in the header above reaches Show, the
-            Prompt Book and Busk, all three of which carry the full bar.
+            is not lost, it is one pill away — the switcher in the header above reaches Show and
+            the Prompt Book, which carry the full bar, and Busk, whose side sheet's Show tab is the
+            same transport in the phone runner's shape.
 
             What genuinely goes with it, so nobody rediscovers it as a bug:
 

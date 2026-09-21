@@ -51,9 +51,9 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Recent
  * chip is a *press*, and goes through `useTemplatePress` under the mask like any other.
  *
- * **There is no heading** (2026-09-21): the tab strip names the tab, the rig band's label row
- * already says what is selected and under which mask, and *Colour of 14 heads · writes to Local*
- * repeated both. What the heading also carried — the swatch, the hex read-out and the *mixed*
+ * **There is no heading** (2026-09-21): the tab strip names the tab, the rig band's row carries
+ * the family pill and the desk chip — the mask — and what is selected is the lit tiles (or, in
+ * Pads, the summary in the row's gap), so *Colour of 14 heads · writes to Local* repeated both. What the heading also carried — the swatch, the hex read-out and the *mixed*
  * marker Pick sets — sits under the picker now, beside the emitter count. The hex stays a read-out
  * and not a field (session 8's call): the typed route is R/G/B.
  *

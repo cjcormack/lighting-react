@@ -32,7 +32,7 @@ import { FollowPill } from './FollowPill'
  * accepts that as cosmetic; `FU-WINDOWS-OWN-ROW-ID` in lighting7 is the exact fix.
  *
  * It is the last **mover**, not a lock, and a press never touches it — so *from Screen 1* an hour
- * later is still true. Sitting on the programmer's row C and in the busk band's label row and
+ * later is still true. Sitting on the programmer's row C and on the busk band's one row and
  * nowhere else: the plain lists never bridge to the desk (D1), so they have nothing to say.
  *
  * **`showSubject` names the fact this chip governs**, and it is off by default. On the busk view it
@@ -78,8 +78,13 @@ export function DeskChip({ showSubject, className }: { showSubject?: boolean; cl
           {/* The space is the accessible name's, not the layout's: a whitespace-only text node
               makes no flex item, so the gap still governs, while the name reads `Desk · from …`. */}
           Desk{reading?.from != null && ' '}
+          {/* `min-w-0 truncate`: on a row that cannot wrap (the rig band's one row) a long window
+              name gives here, as an ellipsis, before any control is pushed off the row. It only
+              works where the host hands the pill `min-w-0 shrink` — `FollowPill`'s base class is
+              `shrink-0`, and `twMerge` keeps `shrink-0` beside a bare `min-w-0`, so a chip that is
+              only `min-w-0` never shrinks and this span never ellipsises. */}
           {reading?.from != null && (
-            <span className="text-muted-foreground">· from {reading.from}</span>
+            <span className="min-w-0 truncate text-muted-foreground">· from {reading.from}</span>
           )}
         </>
       ) : (

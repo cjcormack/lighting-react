@@ -50,7 +50,8 @@ interface ShowBarProps {
  * Universal "show bar" (Row 3) shared across the live-show views:
  * BLACKOUT · speed masters · programmer · active → Next · BACK · GO.
  * GO is the largest, most prominent affordance. It reflects show state, not mode state, so it
- * renders identically in Show, Busk and the Prompt Book.
+ * renders identically in Show and the Prompt Book — the two hosts since the busk-chrome plan's
+ * session A took the bar off the busk view for its side sheet's Show tab (`useShowBarProps`).
  *
  * **There is no Blind tile, and there must not be one for any host.** From session 2b to
  * `PD-BLIND-ON-PROGRAMMER` a BLIND tile sat beside blackout, drawn under `{onBlind && …}` with

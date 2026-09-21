@@ -17,8 +17,8 @@ import { useCurrentProjectQuery } from '../store/projects'
  *
  * **This badge is the reporter, everywhere, and it is not the toggle.** Blind is a programmer fact:
  * the one control that flips it is in the programmer's action bar (`PD-BLIND-ON-PROGRAMMER`), and
- * every other view learns the state from this badge — the app header's mount on every page, and
- * the `ShowBar`'s on Show, Busk and the Prompt Book. Do not make it the toggle: it is also the link
+ * every other view learns the state from this badge — the app header's mount on every page, the
+ * `ShowBar`'s on Show and the Prompt Book, and the busk view's Show tab's strip. Do not make it the toggle: it is also the link
  * to the programmer, and one control cannot be both without one of the two jobs becoming a
  * surprise.
  *

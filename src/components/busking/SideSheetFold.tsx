@@ -36,15 +36,23 @@ import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
  * does: the first selected fixture's, or the first member of the first selected group, so a fold
  * beside a lit selection shows what the rig is doing and not what the picker last said. A
  * selection with no head draws a dim ring.
+ *
+ * **The live cue number sits under the Show glyph** (busk-chrome plan D4): green, an em-dash with
+ * nothing on stage, read from the **server cursor** — `transport.serverActiveCueId`, the cue on
+ * stage, which holds on the outgoing cue mid-fade — not the animating one, so the fold says what
+ * the rig is doing. `SideSheet` derives it and hands in [liveCue]; the strip subscribes to nothing.
  */
 export function SideSheetFold({
   projectId,
   selectedTargets,
   tabs,
+  liveCue,
 }: {
   projectId: number
   selectedTargets: Map<string, BuskingTarget>
   tabs: readonly { id: BuskSheetTab; label: string; icon: LucideIcon }[]
+  /** The cue on stage — its number, or its name where it has none — or null with nothing on stage. */
+  liveCue: string | null
 }) {
   const { data: live } = useSpeedMasterLiveQuery()
   const master1 = live?.find((master) => master.index === 1) ?? null
@@ -80,16 +88,29 @@ export function SideSheetFold({
 
         <div className="flex flex-col items-center gap-1">
           {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setBuskSheet(tab.id)}
-              aria-label={`Open the ${tab.label} tab`}
-              title={tab.label}
-              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <tab.icon className="size-4" />
-            </button>
+            <div key={tab.id} className="flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => setBuskSheet(tab.id)}
+                aria-label={`Open the ${tab.label} tab`}
+                title={tab.label}
+                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <tab.icon className="size-4" />
+              </button>
+              {tab.id === 'show' && (
+                <span
+                  data-fold-cue
+                  className={cn(
+                    'max-w-full truncate text-[10px] font-semibold tabular-nums',
+                    liveCue == null ? 'text-muted-foreground' : 'text-green-500',
+                  )}
+                  title={liveCue == null ? 'Nothing on stage' : `On stage: ${liveCue}`}
+                >
+                  {liveCue ?? '—'}
+                </span>
+              )}
+            </div>
           ))}
         </div>
 

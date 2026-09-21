@@ -8,10 +8,11 @@ import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
- * The side sheet (busk-further plan D7): three live tabs — Speed, Colour (session 5) and Spread
- * (session 6) — and the fold; the fold keeps the beat, master 1's tempo, the tab glyphs and the
- * selection's colour; off the desk board the sheet is an overlay carrying Colour and Spread and no
- * Speed tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
+ * The side sheet (busk-further plan D7): four live tabs — Speed, Colour (session 5), Spread
+ * (session 6) and Show (the busk-chrome plan's session A) — and the fold; the fold keeps the beat,
+ * master 1's tempo, the tab glyphs, the live cue number under the Show glyph and the selection's
+ * colour; off the desk board the sheet is an overlay carrying Colour, Spread and Show and no Speed
+ * tab. The sheet is one fact — `busk.sheet`, `none` for the fold — and the Colour tab's
  * *Spread to a second colour…* button opens Spread with *From* set through the host's seed.
  */
 
@@ -28,6 +29,11 @@ vi.mock('./SpreadSheet', () => ({
     <div data-testid="spread-sheet" data-compact={compact ? 'true' : 'false'} data-seed={seed == null ? '' : JSON.stringify(seed.from)}>
       <button type="button" onClick={() => onSeedConsumed?.()}>consume</button>
     </div>
+  ),
+}))
+vi.mock('./ShowTab', () => ({
+  ShowTab: ({ show }: { show: { transport: { serverActiveCueId: number | null } } }) => (
+    <div data-testid="show-tab" data-live={String(show.transport.serverActiveCueId)} />
   ),
 }))
 vi.mock('@/components/BeatIndicator', () => ({
@@ -48,7 +54,8 @@ vi.mock('@/components/fixtures/fixtureAppearance', () => ({
     children({ color: '#ff0000', intensity: 1 }),
 }))
 
-import { SIDE_SHEET_TABS, SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
+import { SIDE_SHEET_TABS, SideSheet, SideSheetOverlay, sideSheetTabs, tabWordClass } from './SideSheet'
+import type { ShowTabSource } from './ShowTab'
 
 function surface({ narrow = false, short = false } = {}) {
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -67,7 +74,33 @@ const selection = new Map<string, BuskingTarget>([
   ['group:Front wash', { type: 'group', name: 'Front wash', group: { name: 'Front wash', memberCount: 6 } } as BuskingTarget],
   ['fixture:par-1', { type: 'fixture', key: 'par-1', fixture: par } as unknown as BuskingTarget],
 ])
-const props = { projectId: 1, selectedTargets: selection, families: null }
+/** The route's bar state, as `routes/Busk.tsx` hands it down: cue 12 on stage, cue 13 armed. */
+function showSource(overrides: Partial<ShowTabSource['transport']> = {}): ShowTabSource {
+  const cues = [
+    { id: 12, cueNumber: '12', name: 'Verse 2' },
+    { id: 13, cueNumber: null, name: 'Chorus' },
+  ]
+  const activeStack = { id: 1, name: 'Main Show', type: 'STACK', cues, activeCueId: 12 }
+  return {
+    transport: {
+      activeStack,
+      serverActiveCueId: 12,
+      activeCueId: 12,
+      standbyCueId: 13,
+      completedCueIds: [],
+      go: vi.fn(),
+      back: vi.fn(),
+      setStandby: vi.fn(),
+      cancelAnimations: vi.fn(),
+      ...overrides,
+    },
+    showBarProps: { dbo: false, onDbo: vi.fn() },
+    activeCue: cues[0],
+    standbyCue: cues[1],
+    nextStack: null,
+  } as unknown as ShowTabSource
+}
+const props = { projectId: 1, selectedTargets: selection, families: null, show: showSource() }
 
 beforeEach(() => surface())
 
@@ -80,14 +113,45 @@ afterEach(() => {
 })
 
 describe('docked, on the desk board', () => {
-  it('offers Speed, Colour and Spread', () => {
+  it('offers Speed, Colour, Spread and Show', () => {
     setBuskSheet('speed')
     render(<SideSheet {...props} />)
     const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour', 'Spread'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Speed', 'Colour', 'Spread', 'Show'])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('speed-rail')).toBeInTheDocument()
-    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour', 'spread'])
+    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['speed', 'colour', 'spread', 'show'])
+  })
+
+  it('mounts the Show tab — the phone runner over the route’s transport — when the fact names it (busk-chrome D1)', () => {
+    setBuskSheet('show')
+    render(<SideSheet {...props} />)
+    expect(screen.getByRole('tab', { name: 'Show' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('show-tab')).toHaveAttribute('data-live', '12')
+    expect(screen.queryByTestId('speed-rail')).toBeNull()
+  })
+
+  it('folds the tab words to glyphs below 400px of sheet, keeping only the open tab’s word — the strip is the container (D3)', () => {
+    setBuskSheet('colour')
+    render(<SideSheet {...props} />)
+    const strip = screen.getByRole('tablist', { name: 'Side sheet' })
+    // The container is the strip's unpadded wrapper, never the `px-3` row: a size query measures
+    // the content box, and on the row the fold would fire 24px early.
+    expect(strip.className).not.toContain('@container')
+    expect(strip.parentElement!.className).toContain('@container')
+    expect(strip.parentElement!.className).not.toMatch(/\bp[xlr]?-\d/)
+    for (const tab of within(strip).getAllByRole('tab')) {
+      expect(tab.querySelector('svg')).not.toBeNull()
+      const word = [...tab.querySelectorAll('span')].find((el) => el.textContent === tab.textContent)!
+      if (tab.getAttribute('aria-selected') === 'true') {
+        expect(word.className).not.toContain('hidden')
+      } else {
+        expect(word.className).toContain('hidden')
+        expect(word.className).toContain('@[400px]:inline')
+      }
+    }
+    expect(tabWordClass(true)).not.toContain('hidden')
+    expect(tabWordClass(false)).toBe('hidden @[400px]:inline')
   })
 
   it('mounts the Spread tab in the panel when the fact names it', () => {
@@ -139,8 +203,31 @@ describe('docked, on the desk board', () => {
     expect((document.querySelector('[data-fold-colour]') as HTMLElement).style.background).toBe('rgb(255, 0, 0)')
     // One glyph per live tab; a tap unfolds onto it.
     expect(screen.getByRole('button', { name: 'Open the Spread tab' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open the Show tab' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Open the Colour tab' }))
     expect(getBuskSheet()).toBe('colour')
+  })
+
+  it('draws the live cue number under the Show glyph from the server cursor, green; an em-dash with nothing on stage (D4)', () => {
+    setBuskSheet('none')
+    const { rerender } = render(<SideSheet {...props} />)
+    const cue = document.querySelector('[data-fold-cue]') as HTMLElement
+    expect(cue).toHaveTextContent('12')
+    expect(cue.className).toContain('text-green-500')
+    // It sits under the Show glyph, not under any other.
+    expect(cue.parentElement!.querySelector('button')).toHaveAttribute('aria-label', 'Open the Show tab')
+
+    // The *server* cursor, not the animating one: mid-fade the fold holds the outgoing cue.
+    rerender(<SideSheet {...props} show={showSource({ serverActiveCueId: 12, activeCueId: 13 })} />)
+    expect(document.querySelector('[data-fold-cue]')).toHaveTextContent('12')
+    // A cue with no number is named.
+    rerender(<SideSheet {...props} show={showSource({ serverActiveCueId: 13 })} />)
+    expect(document.querySelector('[data-fold-cue]')).toHaveTextContent('Chorus')
+    // Nothing on stage.
+    rerender(<SideSheet {...props} show={showSource({ serverActiveCueId: null })} />)
+    const dark = document.querySelector('[data-fold-cue]') as HTMLElement
+    expect(dark).toHaveTextContent('—')
+    expect(dark.className).not.toContain('text-green-500')
   })
 
   it('unfolds onto a tab from the chevron', () => {
@@ -223,7 +310,7 @@ describe('docked, on the desk board', () => {
   })
 
   it('draws the fold for a fact naming a tab that has not landed — none today, so the gate is pinned on the list', () => {
-    // Every tab has landed; what remains is the mechanism a fourth tab would land through. The
+    // Every tab has landed; what remains is the mechanism a fifth tab would land through. The
     // strip draws exactly the live list, and nothing outside `LIVE_SHEET_TABS` reaches it.
     expect(sideSheetTabs('docked').every((tab) => LIVE_SHEET_TABS.includes(tab.id))).toBe(true)
     expect(SIDE_SHEET_TABS.map((t) => t.id)).toEqual([...LIVE_SHEET_TABS])
@@ -231,12 +318,42 @@ describe('docked, on the desk board', () => {
 })
 
 describe('the overlay, off the desk board', () => {
-  it('carries Colour and Spread and no Speed tab in any overlay form — Speed is the ShowBar’s chip there (D7)', () => {
-    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour', 'spread'])
-    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour', 'spread'])
+  it('carries Colour, Spread and Show and no Speed tab in any overlay form — the Show strip has the tempo chip (D6, D7)', () => {
+    expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
+    expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
     // `popover` is what a 640–767px window answers, where the rail is still not drawn: an overlay
     // with a Speed tab there would open onto nothing.
-    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread'])
+    expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
+  })
+
+  it('opens onto Show as a bottom sheet below md, over the route’s transport', () => {
+    surface({ narrow: true })
+    setBuskSheet('show')
+    render(<SideSheetOverlay {...props} />)
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Colour', 'Spread', 'Show'])
+    expect(within(dialog).getByRole('tab', { name: 'Show' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(dialog).getByTestId('show-tab')).toHaveAttribute('data-live', '12')
+  })
+
+  it('folds the overlay strip’s words like the docked one, on an unpadded container, clear of the close cross', () => {
+    // Three worded tabs are ~291px, which overran the right-hand form while it was 288 and ran
+    // under the sheet primitive's close cross: the strip takes D3's fold, its wrapper is the
+    // container, and the tab group clips its own end rather than pushing anything out.
+    surface({ short: true })
+    setBuskSheet('show')
+    render(<SideSheetOverlay {...props} />)
+    const strip = within(screen.getByRole('dialog')).getByRole('tablist', { name: 'Side sheet' })
+    expect(strip.parentElement!.className).toContain('@container')
+    expect(strip.className).toContain('pr-12')
+    const group = strip.firstElementChild as HTMLElement
+    expect(group.className).toContain('overflow-hidden')
+    expect(group.className).toContain('min-w-0')
+    for (const tab of within(strip).getAllByRole('tab')) {
+      expect(tab.className).toContain('shrink-0')
+      const word = [...tab.querySelectorAll('span')].find((el) => el.textContent === tab.textContent)!
+      expect(word.className).toBe(tabWordClass(tab.getAttribute('aria-selected') === 'true'))
+    }
   })
 
   it('opens onto Spread as a right-hand sheet on the short board, compact, and Second colour crosses over to it', () => {
