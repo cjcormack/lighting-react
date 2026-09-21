@@ -22,6 +22,19 @@ interface BreadcrumbsProps {
   collapsedLabel?: string
 }
 
+/**
+ * The trail is **one line, and the project name is what gives**. It was `flex-wrap`, which on a
+ * header that grew with its content merely made the row taller for a band of widths — which is
+ * how it went unnoticed. The `ShowHeader` is a fixed 40px chrome row since the busk-chrome plan's
+ * session B, and an immersive window (no sidebar) puts that header at the full window width, so
+ * the band above the `@[640px]` collapse where the full trail and the controls do not both fit is
+ * reached on an ordinary narrow window; a second line there overflowed the row onto the band
+ * below. So: `flex-nowrap`, the trail `min-w-0 overflow-hidden`, and the one segment of
+ * unbounded length — the project name — truncates, the way the collapsed label already did. The
+ * `overflow-hidden` would clip the segments' focus outlines, which the UA paints outside the box,
+ * so each button draws its outline inset (`focus-visible:outline-offset-[-2px]`).
+ */
+
 export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurrentPageClick, collapsedLabel }: BreadcrumbsProps) {
   const navigate = useNavigate()
   const { projectId } = useParams()
@@ -35,13 +48,13 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
       )}
       <nav
         className={cn(
-          'items-center gap-1 text-sm flex-wrap',
+          'items-center gap-1 text-sm flex-nowrap min-w-0 overflow-hidden whitespace-nowrap',
           collapsedLabel ? 'hidden @[640px]:flex' : 'flex',
         )}
       >
       <button
         onClick={() => navigate('/projects')}
-        className="text-muted-foreground hover:text-foreground transition-colors"
+        className="text-muted-foreground hover:text-foreground transition-colors shrink-0 focus-visible:outline-offset-[-2px]"
       >
         Projects
       </button>
@@ -49,8 +62,8 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
 
       {/* Project name - final segment if no currentPage */}
       {!currentPage ? (
-        <span className="font-medium flex items-center gap-2">
-          {projectName}
+        <span className="font-medium flex items-center gap-2 min-w-0">
+          <span className="truncate">{projectName}</span>
           <Badge variant={isActive ? "default" : "outline"} className="text-xs">
             {isActive ? "active" : "inactive"}
           </Badge>
@@ -59,9 +72,9 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
         <>
           <button
             onClick={() => navigate(`/projects/${projectId}`)}
-            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2 min-w-0 focus-visible:outline-offset-[-2px]"
           >
-            {projectName}
+            <span className="truncate">{projectName}</span>
             <Badge variant={isActive ? "default" : "outline"} className="text-xs">
               {isActive ? "active" : "inactive"}
             </Badge>
@@ -71,12 +84,12 @@ export function Breadcrumbs({ projectName, isActive = true, currentPage, onCurre
           {onCurrentPageClick ? (
             <button
               onClick={onCurrentPageClick}
-              className="font-medium hover:text-muted-foreground transition-colors"
+              className="font-medium hover:text-muted-foreground transition-colors shrink-0 focus-visible:outline-offset-[-2px]"
             >
               {currentPage}
             </button>
           ) : (
-            <span className="font-medium">{currentPage}</span>
+            <span className="font-medium shrink-0">{currentPage}</span>
           )}
         </>
       )}

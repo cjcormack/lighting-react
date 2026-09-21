@@ -31,7 +31,7 @@ import {
   Unlink2,
   Rows2,
   Lightbulb,
-} from "lucide-react"
+ Moon, Sun } from "lucide-react"
 import { useLocation } from "react-router"
 import type { LucideIcon } from "lucide-react"
 import { useAuthStatusQuery } from "./store/auth"
@@ -41,6 +41,9 @@ import type { DeskWindow } from "./api/windowsApi"
 import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from "./lib/windowViews"
 import { BUSK_FOCUSES, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
+import { VIEW_OPTION_IMMERSIVE, setImmersive, useImmersive } from "./lib/immersive"
+import { toggleTheme, useTheme, type Theme } from "./lib/theme"
+import { isLiveViewPath } from "./lib/liveViews"
 import { relinkToDesk, unlinkFromDesk, useDeskFollow } from "./lib/deskFollow"
 import { setWindowViewOptions, showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
 import { lightingApi } from "./api/lightingApi"
@@ -478,9 +481,21 @@ export interface WindowCommandInputs {
   following: boolean
   /** This window's busk focus while it is on the busk view; null elsewhere, and no focus items. */
   buskFocus: BuskFocus | null
+  /**
+   * Whether this window is immersive, while it is on one of the four live views; null elsewhere,
+   * and no item (busk-chrome plan D7) — the fact only shows on a live view, so setting it from a
+   * library would be a silent write for a later visit.
+   */
+  immersive: boolean | null
+  /** The browser's theme — light or dark — for the label of the toggle. */
+  theme: Theme
   actions: {
     enterFullscreen: () => void
     exitFullscreen: () => void
+    /** This window's immersive fact (busk-chrome plan D7). */
+    setImmersive: (on: boolean) => void
+    /** The theme, one store for the user menu and this (`lib/theme.ts`). */
+    toggleTheme: () => void
     openScreens: () => void
     show: (targetId: string, view: string) => void
     openOnDisplay: (view: string) => void
@@ -500,10 +515,19 @@ const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus p
  * fixed order — so a test can pin the shapes without a store (`Screens.dc.html` §3):
  *
  * - *Go full screen* / *Exit full screen* (⇧F), only where the API exists;
+ * - *Expand over the app* / *Show the app* — this window's immersive fact, flipping with the state
+ *   like the pair above, only while it is on a live view (busk-chrome plan D7, D8: not full screen,
+ *   and the two compose);
  * - *Screens…*;
+ * - *Switch to dark mode* / *Switch to light mode* — the user menu's theme row as a command, so an
+ *   immersive window, which draws no user menu, still has it (busk-chrome plan D10: "theme, full
+ *   screen and Screens… are ⌘K's"); the label names the theme it will switch *to*, as the menu
+ *   row does;
  * - *Show <view> on <window>* for every **other** window × the six views — this window has the
  *   Navigation group already, and a row whose view names no project is skipped rather than sent
  *   somewhere half-addressed;
+ * - … and a *· Immersive* arm on every live view, the same two frames with `{immersive: 'on'}`
+ *   (busk-chrome plan D9);
  * - *Open <view> on another display* per view, Chrome only (the display itself is chosen in the
  *   prompt the gesture opens, since `getScreenDetails` needs one);
  * - *Follow the desk selection in this window*, with its state as the detail.
@@ -519,6 +543,16 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
         : { id: "window-fullscreen", label: "Go full screen", icon: Maximize2, keywords: ["fullscreen", "window", "screen", "kiosk"], detail: "⇧F", run: actions.enterFullscreen },
     )
   }
+  // Immersive is not full screen and the two compose (D8), so this is a second pair beside the
+  // first rather than an arm of it; the label flips with the state for the same reason the
+  // full-screen pair's does.
+  if (inputs.immersive != null) {
+    commands.push(
+      inputs.immersive
+        ? { id: "window-immersive-off", label: "Show the app", icon: Minimize2, keywords: ["immersive", "app", "sidebar", "header", "chrome", "window", "screen"], detail: "this window", run: () => actions.setImmersive(false) }
+        : { id: "window-immersive", label: "Expand over the app", icon: Maximize2, keywords: ["immersive", "expand", "app", "sidebar", "header", "chrome", "window", "screen"], detail: "this window", run: () => actions.setImmersive(true) },
+    )
+  }
   commands.push({
     id: "window-screens",
     label: "Screens…",
@@ -526,6 +560,15 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
     keywords: ["windows", "screens", "display", "monitor", "ipad"],
     detail: `${inputs.windows.length} ${inputs.windows.length === 1 ? "window" : "windows"}`,
     run: actions.openScreens,
+  })
+
+  commands.push({
+    id: "window-theme",
+    label: inputs.theme === "light" ? "Switch to dark mode" : "Switch to light mode",
+    icon: inputs.theme === "light" ? Moon : Sun,
+    keywords: ["theme", "dark", "light", "mode", "appearance", "colour scheme"],
+    detail: "this browser",
+    run: actions.toggleTheme,
   })
 
   // This window's busk focus — Split · Focus pads · Focus rig — only while it is on the busk view:
@@ -574,6 +617,21 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
           })
         }
       }
+      // The immersive arm, on every live view (busk-chrome plan D9): the same two frames, the
+      // second carrying the window's fact rather than a view's.
+      if (view.options?.some((option) => option.key === VIEW_OPTION_IMMERSIVE)) {
+        commands.push({
+          id: `window-show-${row.id}-${view.id}-immersive`,
+          label: `Show ${view.label} on ${row.name} · Immersive`,
+          icon: MonitorSmartphone,
+          keywords: ["show", "window", "screen", "immersive", "expand", view.label, row.name],
+          detail: "switches that window and expands it over the app",
+          run: () => {
+            actions.show(row.id, path)
+            actions.setViewOptions(row.id, path, { [VIEW_OPTION_IMMERSIVE]: "on" })
+          },
+        })
+      }
     }
   }
 
@@ -616,8 +674,12 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
   const following = useDeskFollow()
   const thisRowId = thisWindowRow(windows)?.id ?? null
   const focus = useBuskFocus()
-  const onBusk = windowViewOf(useLocation().pathname)?.id === "busk"
+  const { pathname } = useLocation()
+  const onBusk = windowViewOf(pathname)?.id === "busk"
   const buskFocus = onBusk ? focus : null
+  const immersiveOn = useImmersive()
+  const immersive = isLiveViewPath(pathname) ? immersiveOn : null
+  const theme = useTheme()
 
   return useMemo(
     () =>
@@ -630,9 +692,13 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
         canOpenOnDisplay: canChooseDisplay(),
         following,
         buskFocus,
+        immersive,
+        theme,
         actions: {
           enterFullscreen: () => void enterFullscreen(),
           exitFullscreen: () => void exitFullscreen(),
+          setImmersive,
+          toggleTheme,
           openScreens: openScreensSheet,
           show: showOnWindow,
           openOnDisplay: (view) => void openOnAnotherDisplay(view, windows.map((w) => w.name)),
@@ -648,7 +714,7 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
           },
         },
       }),
-    [windows, thisRowId, projectId, fullscreen, following, buskFocus],
+    [windows, thisRowId, projectId, fullscreen, following, buskFocus, immersive, theme],
   )
 }
 

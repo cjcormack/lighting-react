@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { InternalEventType } from './internalApi'
 import { fakeWsConnection } from '../test/fakeWsConnection'
 import { announceFrame, createWindowsWsApi, parseDeskWindow, type WindowAnnounce } from './windowsApi'
+import { WINDOW_VIEWS, announcedViewOptions, windowViewOf } from '../lib/windowViews'
 
 /**
  * The `windows.*` wire as this side speaks it (multi-screen plan §3.4, lighting7 d774fd9) — pinned
@@ -33,8 +34,28 @@ describe('the announce', () => {
     expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
     expect(frame.viewOptions).toEqual(options)
     expect(frame.viewOptions).not.toBe(options)
-    // Absent stays absent: a window on the Prompt Book sends the five-key frame it always did.
+    // Absent stays absent: a window on a library sends the five-key frame it always did (every live
+    // view carries `immersive` since busk-chrome D9 — the next case).
     expect(Object.keys(announceFrame({ ...ME, viewOptions: undefined }))).toHaveLength(6)
+  })
+
+  it('carries viewOptions.immersive under every live view and no viewOptions on a library — the key set otherwise unchanged (busk-chrome D9)', () => {
+    const busk = { focus: 'pads', sheet: 'none', rigRows: '2', pageFollows: 'true' }
+    for (const view of WINDOW_VIEWS) {
+      const path = `/projects/1${view.segment}`
+      const frame = announceFrame({ ...ME, view: path, viewOptions: announcedViewOptions(windowViewOf(path), busk, 'on') })
+      if (view.id === 'looks' || view.id === 'templates') {
+        expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows'])
+        continue
+      }
+      // Six keys and never a seventh: immersive rides inside viewOptions, not beside it.
+      expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
+      expect((frame.viewOptions as Record<string, string>).immersive, view.id).toBe('on')
+    }
+    // The busk facts still ride with it on the busk view, and only there.
+    expect(announcedViewOptions(windowViewOf('/projects/1/busk'), busk, 'off')).toEqual({ ...busk, immersive: 'off' })
+    expect(announcedViewOptions(windowViewOf('/projects/1/show'), busk, 'off')).toEqual({ immersive: 'off' })
+    expect(announcedViewOptions(windowViewOf('/projects/1/fixtures'), busk, 'on')).toBeUndefined()
   })
 
   it('is sent at once while the socket is open, as the frame the desk declares', () => {

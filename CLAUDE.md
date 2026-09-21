@@ -581,8 +581,9 @@ the plan's session 3 needs. The overlay and the busk page coexist by
 id, and the slot handler returns for any `over` that is not a slot. It is **not** ignorance of
 *sources* — a drop onto a slot is resolved in the provider whatever lifted it, today a sibling slot
 or a `busk-palette` row from the library palette, because the provider owns the slot droppables
-(mounted on every route), `projectId` and both slot mutations, while the panel body unmounts with
-the overlay. The source→assignment mapping is pure in `components/dnd/slotDrop.ts`, imported
+(mounted on every route the app is drawn on — an immersive window takes the cue-slot overlay with
+the other three panels, §Windows, full screen and the hand, so there a palette row has no slot to land on), `projectId` and
+both slot mutations, while the panel body unmounts with the overlay. The source→assignment mapping is pure in `components/dnd/slotDrop.ts`, imported
 type-only, so the shell still reaches no busk runtime code. Three things about that provider are
 load-bearing:
 
@@ -2052,7 +2053,8 @@ Three surface rules, each pinned by its test:
   **The route is full height, not a `Card` in a scrolling page** (`routes/ChannelsTable.tsx`): as a
   card the page scrolled *and* the table scrolled inside a `calc(100vh - 14rem)` cap, two bars for
   one list, and a 393px-tall landscape phone got 169px of grid. Its breadcrumb header is 48px like
-  `ShowHeader`'s and `StackDetail`'s — a header, not one of the 40px chrome rows.
+  `StackDetail`'s — a header, not one of the 40px chrome rows (the `ShowHeader` was 48 too until
+  the busk-chrome plan's session B made it a 40px chrome row; this one and `StackDetail`'s stay).
 - **Cue sheet** (`CueSheet.test.tsx`): `/projects/:id/show/stacks/:stackId/table`, sticky key
   `show.view`, the switcher on the `StackDetail` header. Name · Fade · Curve · Follow · Notes are
   cells, and the cue number is a `TextCell` on the Cue column (`firstColumnCellProps`) **opened by a
@@ -2589,7 +2591,9 @@ from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row 
 C (`SelectionBar`), the rail header and the strip's chevrons, all level. Three control tiers by
 nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
 a control (`h-7`: Update and Revert in the source box, a template chip, `New`), 24 for a toggle
-item, 20 for a pill. The header is 48px (`px-3 py-2`) at every height, not only under 500. 8px
+item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
+under 500 — it was 48 (`py-2`) until the busk-chrome plan's session B made it the shell's chrome row
+too (D12). 8px
 between controls on a row (`gap-2`), 6px inside a control. Row B's filter is a field from 360px of
 row B up, says `Filter…` (`FIXTURE_FILTER_PLACEHOLDER_SHORT` — a placeholder cannot switch by
 container query, and the two plain list routes keep the long form) with the whole hint on its
@@ -2891,16 +2895,18 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
   announces no page, because the desk's showing page is the desk's to say and the Screens sheet
   reads it for every following row alike. It rides back on `windows.state`, which is what the
   Screens sheet draws a row's Focus · Sheet · Page controls from — generically, off the `options`
-  descriptor on the row's *current* entry in `lib/windowViews.ts`, so a Prompt Book row draws none
-  and the sheet never learns the word busk. The fourth command, **`windows.viewOptions {targetId,
-  view, options}`**, is rebroadcast like the other three; the named window applies it **for that
-  view only** — a busk frame arriving at a window on the Prompt Book is ignored rather than stored
-  for a later visit — through `applyBuskViewOptions`, and re-announces. `{sheet: 'toggle'}` flips
+  descriptor on the row's *current* entry in `lib/windowViews.ts`, so a Prompt Book row draws only
+  its Chrome segment (§Windows, full screen and the hand) and the sheet never learns the word busk. The fourth command,
+  **`windows.viewOptions {targetId, view, options}`**, is rebroadcast like the other three; the
+  named window applies it **for that view only** — a busk frame arriving at a window on the Prompt
+  Book is ignored rather than stored for a later visit — through `applyImmersiveViewOption` and,
+  on the busk view, `applyBuskViewOptions`, and re-announces. `{sheet: 'toggle'}` flips
   the fold and the last open tab (a MIDI `BuskSheetToggle`'s spelling); `{page: n}` **unlinks**
   that window onto the page exactly as arriving with `?page=` does. The current view is read at
   command time through a ref, because a ⌘K *Show Busk on X · Focus pads* is two frames in a row
   and the second must see the route the first moved the window to. *Copy link for <name>* on a row
-  mints `?window=…&page=…&focus=…&sheet=…` (`windowSetupUrl`): the row's whole setup, which a
+  mints `?window=…&page=…&focus=…&sheet=…&immersive=on` (`windowSetupUrl`; the last only while it
+  is on): the row's whole setup, which a
   fresh window latches on arrival — the page only while the row holds one of its own, since a
   following row's null desk page is not "the first page" and writing it would unlink the new
   window where this one follows. **A following row's link carries no page even with the desk on
@@ -2957,6 +2963,72 @@ view. **Safari on the Mac is a first-class desk browser (D13)**: every Chrome-on
 Lock, `getScreenDetails`, the *Open a window on… Display N* row and the *Open <view> on another
 display* commands — is feature-detected and its absence is *quiet*: no item, no gutter, no disabled
 control saying "use Chrome".
+
+**Immersive is a per-window fact for all four live views, and it is not full screen** (busk-chrome
+plan D7–D10; `Immersive.dc.html` is the layout authority). `desk.immersive` (`off` | `on`, default
+`off` on every surface) lives in `lib/immersive.ts` on `createSyncStore` over `sessionStorageArea` —
+per tab, beside the follow flag and the full-screen flag, **never `localStorage` and never the
+desk's**, because the flow it exists for is a busk window with no app around it beside a programmer
+window with the app drawn. `Layout` reads one boolean, `useImmersive() && isLiveViewPath(pathname)`,
+and while it holds skips the `<aside>` sidebar (**hidden, not collapsed**), the app `<header>`, the
+four overview panels and the sidebar's `marginLeft`; the panels' stored visibility is untouched, so
+they return on exit. On every other route the app is drawn whatever the fact says — the fixtures
+list is navigated *from* the sidebar — and a window that leaves a live view for it gets the app back
+and finds immersive waiting when it returns. Banners, `HandChip`, the AI panel and `DeskDndProvider`
+are untouched. Full screen and immersive **compose** (D8): neither flips the other, and a windowed
+browser can be immersive while a full-screen one shows the app.
+
+**The `ShowHeader` is the row immersive leaves standing, and it carries the way back** (D11, D12).
+It is a 40px chrome row on all four live views now — it takes `CHROME_ROW_CLASS` itself, `h-10
+px-3` with its 1px border inside the 40, the shell's 32px controls; it was 48, and the programmer
+chrome doc's "48 at every height" is revised by this. The plan spelled the change `px-3 py-1`, which
+measured **41** on the box in the browser because the border sits outside the padding; the class
+every other chrome row uses is the height, so the header takes the class rather than restating the
+number — with the
+expand glyph (`ImmersiveToggle`) drawn by the header itself **after the host's `actions` and before
+the switcher**, so every host gets it with no per-host wiring: outward arrows with the app drawn,
+inward arrows lit while immersive, one control both ways. Folding the header too was declined
+because it would take the switcher, Stop, the live dot and the way out, and the way back would be a
+floating button over a live view, which the full-screen work already refused. Chrome above the busk
+band went 152 → 88 → 40. What the app header took with it comes back **where it is read** (D10): a
+red *Offline* chip on the `ShowHeader`, drawn only while immersive *and* the socket is down
+(`useIsDeskConnected`) — a pill reading *Connected* all night is what immersive exists to remove;
+below `md` the mobile drawer's **button** at the header's left edge while immersive, since the
+hamburger in the app header was the only navigation there (the drawer and its open state stay
+`Layout`'s, and `components/mobileDrawerContext.ts` lends the opener); the blind report and value
+count on the busk Show tab's strip; theme, full screen and Screens… through ⌘K — the theme had no
+command until this, so `lib/theme.ts` became a module-level store (bare string, not `syncStore`'s
+JSON — `getInitialTheme` reads it before React exists) that the user menu's row and the new
+*Switch to dark mode* / *Switch to light mode* command both read. The four overview panels' ⌘K
+toggles are withheld with the panels, since a row reading *On* for a panel that is not on screen
+is a control reporting a state it is not in. **Every live route's loading and not-found arms
+draw `ImmersiveEscape`** — the header's own glyph on a chrome row, or bare inside
+`SheetPage.Header` — because those arms render no `ShowHeader`, and an immersive window on a
+missing project would otherwise show an error card with no control at all: ⌘K still worked, which
+is why it survived a desk with a keyboard, but on a touch screen there was no way back and the
+fact is per-tab and not in the URL. Not a floating button: the header's row, minus the header, so
+D11 holds.
+
+**Nothing new on the wire** (D9): `immersive` rides `viewOptions` under every live view — the
+Programmer, Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `options` descriptor
+(`IMMERSIVE_OPTION`) and Busk carries it fourth — because the desk's Json is bare and a sixth
+top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
+`announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
+which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
+applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving
+on the Prompt Book is still ignored, on purpose: the frame is a statement about the view the sender
+was looking at. The Screens sheet draws a **Chrome** segment (*App · Immersive*, the descriptor's
+`valueLabels` over `off` | `on`) on every live-view row from the descriptor, generically, and never
+learns the word; `windowSetupUrl` carries `immersive=` beside `page`, `focus` and `sheet` **only
+while it is `on`**, since `off` is what every window boots with. `?immersive=on` is consumed once at
+boot through the same memoised `consumeLaunchParam` read `?window=` uses (`launchImmersive`) and
+stripped in the same `replaceState` — one read, because whichever ran first would rewrite the URL
+for the other — and it is **not** mirrored into the address the way the busk view mirrors `?focus=`,
+because it is a window's fact and not a view's; a plain `?immersive=on` arrival is not a `?window=`
+boot and mints no fresh `windowId`. ⌘K offers *Expand over the app* / *Show the app* for this window
+only while it is on a live view, the label flipping with the state like the full-screen pair, and a
+*Show <view> on <window> · Immersive* arm on every live view beside the busk focus arms. A MIDI
+`ImmersiveSet` target is `FU-SURFACE-IMMERSIVE-SET`, not built.
 
 **The one rule underneath all of it is the secure context** (`lighting7/docs/desk-screens.md`):
 installation, Keyboard Lock and Window Management exist only on a potentially-trustworthy origin,

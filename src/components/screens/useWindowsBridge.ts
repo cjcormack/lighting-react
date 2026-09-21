@@ -11,8 +11,9 @@ import {
 } from '@/lib/fullscreen'
 import { hasUnsavedSheets } from '@/lib/unsavedSheets'
 import { renameWindow, useWindowName } from '@/lib/windowIdentity'
-import { windowViewLabel, windowViewOf } from '@/lib/windowViews'
+import { WINDOW_VIEWS, announcedViewOptions, windowViewLabel, windowViewOf } from '@/lib/windowViews'
 import { applyBuskViewOptions, useBuskViewOptions } from '@/lib/buskWindow'
+import { applyImmersiveViewOption, useImmersive } from '@/lib/immersive'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
 import { isEditableTarget } from '@/lib/domUtils'
@@ -29,10 +30,13 @@ import { isEditableTarget } from '@/lib/domUtils'
  * The `view` is the pathname alone: the search is a window's private business (`?cue=`,
  * `?select=`), and the facts the busk view mirrors into its search (`?page=`, `?focus=`, `?sheet=`)
  * ride the announce as `viewOptions` instead — **only while this window is on a view that
- * contributes any** (`lib/windowViews.ts`), so a window on the Prompt Book sends the five-key
- * frame it always did. The busk facts are subscribed on every route, because the hooks that read
- * them are the only way to re-announce when they move; they are three `sessionStorage` stores and
- * cost nothing while the view is elsewhere.
+ * contributes any** (`lib/windowViews.ts`), so a window on a library sends the five-key frame it
+ * always did. Every live view contributes since the busk-chrome plan's session B: `immersive`
+ * rides `viewOptions` under all four (D9), because the desk's Json is bare and a sixth top-level
+ * key would drop the frame. The busk facts are subscribed on every route, because the hooks that
+ * read them are the only way to re-announce when they move; they are three `sessionStorage`
+ * stores and cost nothing while the view is elsewhere. `announcedViewOptions` is the one place
+ * that says which keys go out under which view.
  *
  * **Every socket receives every command, the sender included** (D11), so each handler's first
  * act is comparing `targetId` to this window's row id — read at command time from the last
@@ -53,7 +57,10 @@ import { isEditableTarget } from '@/lib/domUtils'
  * busk frame arriving on the Prompt Book — ignores it rather than storing a fact for a view it is
  * not showing. The view is read at command time through a ref, because a *Show Busk on X · Pads*
  * from ⌘K is two frames in a row and the second must see the route the first moved this window
- * to. Applying is `lib/buskWindow.ts`'s, and the announce effect re-announces whatever moved.
+ * to. Applying is `lib/buskWindow.ts`'s for the busk keys and `lib/immersive.ts`'s for
+ * `immersive`, which any of the four live views takes; the announce effect re-announces whatever
+ * moved. Immersive is a window's fact rather than a view's, and the per-view gate still applies
+ * to it on purpose: the frame is a statement about the view the sender was looking at.
  *
  * A `windows.rename` is **not applied server-side**: the target renames itself here and the
  * effect above re-announces, which is what makes the new name survive that tab's reload.
@@ -68,10 +75,11 @@ export function useWindowsBridge(): void {
   const { active: fullscreen } = useFullscreenState()
   const view = location.pathname
   const buskOptions = useBuskViewOptions()
-  const contributes = windowViewOf(view)?.options != null
+  const immersive = useImmersive()
+  const announced = announcedViewOptions(windowViewOf(view), buskOptions, immersive ? 'on' : 'off')
   // A string key rather than the object: the hook mints a fresh map per render, and the effect
   // must re-run only when a value moves.
-  const optionsKey = contributes ? JSON.stringify(buskOptions) : null
+  const optionsKey = announced == null ? null : JSON.stringify(announced)
 
   useEffect(() => {
     announceThisWindow({
@@ -120,10 +128,16 @@ export interface WindowCommandContext {
   applyViewOptions?: (viewId: string, options: Readonly<Record<string, string>>) => boolean
 }
 
-/** The one view that contributes options today; a second entry here is a second applier. */
+/**
+ * Apply a frame's options for [viewId]: `immersive` on any view that contributes options (every
+ * live view), the busk facts on the busk view. False for a view that contributes none, so a frame
+ * aimed at a library is ignored rather than half-applied.
+ */
 function applyViewOptionsFor(viewId: string, options: Readonly<Record<string, string>>): boolean {
-  if (viewId !== 'busk') return false
-  applyBuskViewOptions(options)
+  const view = WINDOW_VIEWS.find((v) => v.id === viewId)
+  if (view?.options == null) return false
+  applyImmersiveViewOption(options)
+  if (viewId === 'busk') applyBuskViewOptions(options)
   return true
 }
 

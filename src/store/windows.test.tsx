@@ -16,6 +16,7 @@ vi.mock('@/lib/windowIdentity', async () => {
   const { useSyncExternalStore } = await import('react')
   return {
     windowId: () => 'w-1',
+    launchImmersive: () => null,
     windowName: () => identity.name,
     useWindowName: () => useSyncExternalStore(identity.subscribe, () => identity.name),
     renameWindow: (next: string) => {
@@ -48,6 +49,7 @@ import { getFullscreenState, resetFullscreenState } from '@/lib/fullscreen'
 import { resetUnsavedSheets, setSheetUnsaved } from '@/lib/unsavedSheets'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
 import { resetBuskPageFollowStores } from '@/lib/buskPageFollow'
+import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { store } from './index'
 import { restApi } from './restApi'
 import { thisWindowRow, useDeskWindows, useThisWindow } from './windows'
@@ -91,6 +93,7 @@ afterEach(() => {
   resetBuskWindowStores()
   vi.unstubAllGlobals()
   resetBuskPageFollowStores()
+  resetImmersiveStore()
 })
 
 describe('the cache entry', () => {
@@ -140,31 +143,43 @@ function mountBridge(initialPath = '/projects/1/programmer') {
 }
 
 describe('the announce', () => {
-  it('goes out on mount with exactly the five keys, and again on a route change', async () => {
+  it('goes out on mount with the five keys plus viewOptions on a live view, and again on a route change', async () => {
     const view = mountBridge()
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    // On the programmer the sixth key carries `immersive` alone (busk-chrome plan D9).
     expect(windowsWs.announced[0]).toEqual({
       windowId: 'w-1',
       name: 'Screen 1',
       view: '/projects/1/programmer',
       fullscreen: false,
       follows: true,
+      viewOptions: { immersive: 'off' },
     })
-    expect(Object.keys(windowsWs.announced[0] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'windowId'])
+    expect(Object.keys(windowsWs.announced[0] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
 
     act(() => {
       view.getByText('go busk').click()
     })
     await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
     expect(windowsWs.announced[1]).toMatchObject({ view: '/projects/1/busk' })
-    // On the busk view the frame gains its one optional key, carrying the busk facts.
+    // On the busk view the same key carries the busk facts beside it.
     expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({
       focus: 'split',
       rigRows: '2',
       sheet: 'none',
       pageFollows: 'true',
+      immersive: 'off',
     })
+  })
+
+  it('re-announces when immersive flips, under whichever live view the window is on', async () => {
+    mountBridge('/projects/1/prompt-book')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ immersive: 'off' })
+    act(() => setImmersive(true))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ immersive: 'on' })
   })
 
   it('re-announces when a busk fact moves, and not when one moves on another view', async () => {
@@ -175,12 +190,21 @@ describe('the announce', () => {
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ focus: 'pads' })
   })
 
-  it('keeps the five-key frame on a view that contributes no options', async () => {
-    mountBridge('/projects/1/prompt-book')
+  it('keeps the five-key frame on a view that contributes no options — a library', async () => {
+    mountBridge('/projects/1/looks')
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
     expect(Object.keys(windowsWs.announced[0] as object)).not.toContain('viewOptions')
     act(() => setBuskFocus('pads'))
+    act(() => setImmersive(true))
     // A fact the announce does not carry cannot re-announce it.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(windowsWs.announced).toHaveLength(1)
+  })
+
+  it('does not re-announce a busk fact from another live view', async () => {
+    mountBridge('/projects/1/prompt-book')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    act(() => setBuskFocus('pads'))
     await new Promise((r) => setTimeout(r, 20))
     expect(windowsWs.announced).toHaveLength(1)
   })
@@ -265,7 +289,25 @@ describe('handleWindowCommand', () => {
     expect(handleWindowCommand(busk, ctx('/projects/1/busk'))).toBe('applied')
     expect(getBuskFocus()).toBe('rig')
     // A view that contributes nothing applies nothing, even addressed correctly.
-    expect(handleWindowCommand({ ...busk, view: '/projects/1/prompt-book' }, ctx('/projects/1/prompt-book'))).toBe('ignored')
+    expect(handleWindowCommand({ ...busk, view: '/projects/1/looks' }, ctx('/projects/1/looks'))).toBe('ignored')
+  })
+
+  it('applies immersive on any of the four live views, and a busk key on none but busk (busk-chrome D9)', () => {
+    const frame = (view: string, options: Record<string, string>) => ({ type: 'viewOptions' as const, targetId: 's-1', view, options })
+    expect(handleWindowCommand(frame('/projects/1/prompt-book', { immersive: 'on' }), ctx('/projects/1/prompt-book'))).toBe('applied')
+    expect(isImmersive()).toBe(true)
+    expect(handleWindowCommand(frame('/projects/1/show', { immersive: 'off' }), ctx('/projects/1/show'))).toBe('applied')
+    expect(isImmersive()).toBe(false)
+    // The per-view gate still holds for it: a Show frame arriving on the Prompt Book is ignored.
+    expect(handleWindowCommand(frame('/projects/1/show', { immersive: 'on' }), ctx('/projects/1/prompt-book'))).toBe('ignored')
+    expect(isImmersive()).toBe(false)
+    // A busk key on the Prompt Book: the frame is taken (the view contributes) but the key is not.
+    expect(handleWindowCommand(frame('/projects/1/prompt-book', { focus: 'rig' }), ctx('/projects/1/prompt-book'))).toBe('applied')
+    expect(getBuskFocus()).toBe('split')
+    // Both at once on busk.
+    expect(handleWindowCommand(frame('/projects/1/busk', { focus: 'rig', immersive: 'on' }), ctx('/projects/1/busk'))).toBe('applied')
+    expect(getBuskFocus()).toBe('rig')
+    expect(isImmersive()).toBe(true)
   })
 })
 

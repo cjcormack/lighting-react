@@ -71,16 +71,18 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  *
  * **A row also draws its view's options, generically** (busk-further plan D13). Each entry in
  * `lib/windowViews.ts` may carry an `options` descriptor, and the row renders whatever its
- * *current* view contributes — a busk row's Focus and Sheet segments and its Page picker, a Prompt
- * Book row nothing — from the values the window announced (`row.viewOptions`), so the sheet never
- * learns the word busk. The write is one command, `windows.viewOptions {targetId, view, options}`,
+ * *current* view contributes — a busk row's Focus and Sheet segments and its Page picker, every
+ * live view's Chrome segment (*App · Immersive*, busk-chrome plan D9), a Looks row nothing — from
+ * the values the window announced (`row.viewOptions`), so the sheet never learns the word busk or
+ * the word immersive. The write is one command, `windows.viewOptions {targetId, view, options}`,
  * and the target applies it to its own tab facts and re-announces, so the row is drawn from the
  * registry and never from a guess. **Page is settable**, and a remote set unlinks that window
  * onto the page exactly as arriving with `?page=` does; a following row shows the desk's page and
  * says *follows the desk*, an unlinked one its own and *own page* (the wording of the row's *own
  * selection* line above it). What is *not* on the row is anything a remote set could lose for the operator at that
  * window — selection follow, the split's rows, the documents themselves. *Copy link for <name>*
- * mints the row's whole setup, `?window=…&page=…&focus=…&sheet=…`.
+ * mints the row's whole setup, `?window=…&page=…&focus=…&sheet=…&immersive=on` (the last only
+ * while it is on — `lib/screens.ts`).
  *
  * Below the rows, the two ways to make a new window:
  *
@@ -243,15 +245,18 @@ function WindowRow({
 }
 
 /**
- * The row's view options, one control per descriptor entry, and the link that carries them. Only
- * mounted for a view that contributes any, so the page query below never runs for a Prompt Book
- * row.
+ * The row's view options, one control per descriptor entry, and the link that carries them.
+ * Mounted for any view that contributes options — every live view since the Chrome segment
+ * (busk-chrome plan D9) — so the two page queries are **skipped unless the descriptor carries a
+ * page control**: a Programmer row draws no page picker and must not subscribe to the busk pages
+ * for one.
  */
 function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: WindowView; projectId: number | null }) {
   const options = row.viewOptions ?? {}
   const [copied, setCopied] = useState(false)
-  const { data: deskPageId } = useBuskShowingPageQuery()
-  const { data: pages } = useBuskPagesQuery(projectId ?? 0, { skip: projectId == null })
+  const wantsPages = view.options?.some((option) => option.kind === 'page') ?? false
+  const { data: deskPageId } = useBuskShowingPageQuery(undefined, { skip: !wantsPages })
+  const { data: pages } = useBuskPagesQuery(projectId ?? 0, { skip: !wantsPages || projectId == null })
   const set = (key: string, value: string) => setWindowViewOptions(row.id, row.view, { [key]: value })
 
   // A following row's page is the desk's, which the announce does not carry (it is the desk's to
@@ -314,7 +319,7 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
         size="sm"
         className="h-7 px-2 text-xs"
         onClick={() => void copy()}
-        title="A link that opens a window on another device with this one's view, page, focus and sheet"
+        title="A link that opens a window on another device with this one's view, page, focus, sheet and chrome"
       >
         {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
         {copied ? 'Copied' : `Copy link for ${row.name}`}
@@ -345,11 +350,16 @@ function EnumOption({
         aria-label={`${option.label} on ${rowName}`}
         className="h-7 gap-0.5 p-0.5"
       >
-        {option.values.map((v) => (
-          <ToggleGroupItem key={v} value={v} aria-label={v} className="h-6 px-2 text-xs capitalize">
-            {v}
-          </ToggleGroupItem>
-        ))}
+        {option.values.map((v) => {
+          // The wire's spelling unless the descriptor says otherwise — the Chrome segment says
+          // *App · Immersive* over `off` | `on` (busk-chrome plan D9).
+          const label = option.valueLabels?.[v] ?? v
+          return (
+            <ToggleGroupItem key={v} value={v} aria-label={label} className="h-6 px-2 text-xs capitalize">
+              {label}
+            </ToggleGroupItem>
+          )
+        })}
       </ToggleGroup>
     </div>
   )

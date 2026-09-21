@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canChooseDisplay, isLoopbackHost, listDisplays, newWindowUrl, nextScreenName, openWindowOn } from './screens'
+import { canChooseDisplay, isLoopbackHost, listDisplays, newWindowUrl, nextScreenName, openWindowOn, windowSetupUrl } from './screens'
 
 /**
  * Opening a new desk window (multi-screen plan D10, D13): the `?window=` URL with `%20` for the
@@ -23,6 +23,25 @@ describe('newWindowUrl', () => {
   it('carries a view path when one is given, and trims the name', () => {
     expect(newWindowUrl(' Screen 2 ', '/projects/1/busk', 'http://localhost:8413')).toBe(
       'http://localhost:8413/projects/1/busk?window=Screen%202',
+    )
+  })
+})
+
+describe('windowSetupUrl', () => {
+  it('carries page, focus and sheet in that order, each only when the row has it', () => {
+    expect(windowSetupUrl('Screen 2', '/projects/1/busk', { sheet: 'show', focus: 'pads', page: '3' }, 'http://desk')).toBe(
+      'http://desk/projects/1/busk?window=Screen%202&page=3&focus=pads&sheet=show',
+    )
+    expect(windowSetupUrl('Screen 2', '/projects/1/show', null, 'http://desk')).toBe('http://desk/projects/1/show?window=Screen%202')
+  })
+
+  it('carries immersive only while it is on — off is what every window boots with (busk-chrome D9)', () => {
+    expect(windowSetupUrl('Screen 2', '/projects/1/show', { immersive: 'on' }, 'http://desk')).toBe(
+      'http://desk/projects/1/show?window=Screen%202&immersive=on',
+    )
+    expect(windowSetupUrl('Screen 2', '/projects/1/show', { immersive: 'off' }, 'http://desk')).toBe('http://desk/projects/1/show?window=Screen%202')
+    expect(windowSetupUrl('Screen 2', '/projects/1/busk', { focus: 'rig', immersive: 'on' }, 'http://desk')).toBe(
+      'http://desk/projects/1/busk?window=Screen%202&focus=rig&immersive=on',
     )
   })
 })

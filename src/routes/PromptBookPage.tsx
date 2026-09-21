@@ -45,6 +45,7 @@ import { useScriptDocument } from '../lib/promptBook/useScriptDocument'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
+import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
@@ -359,11 +360,16 @@ export function PromptBookViewerPage() {
 
   // ── Guards ──
 
+  // Every guard arm draws the immersive glyph over its card: with no header there would otherwise
+  // be no way back on a touch screen (`ImmersiveEscape`).
   if (bookLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <>
+        <ImmersiveEscape />
+        <Card className="m-4 p-4 flex items-center justify-center">
+          <Loader2 className="size-6 animate-spin" />
+        </Card>
+      </>
     )
   }
 
@@ -375,7 +381,9 @@ export function PromptBookViewerPage() {
     const noBook = bookError != null && 'status' in bookError && bookError.status === 404
     if (!noBook && bookError != null) {
       return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+        <>
+          <ImmersiveEscape />
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <p className="font-medium">Couldn&rsquo;t load the prompt book</p>
           <p className="max-w-md text-sm text-muted-foreground">
             The backend may be restarting or the connection blipped. Your prompt book is untouched.
@@ -383,13 +391,16 @@ export function PromptBookViewerPage() {
           <Button variant="outline" onClick={() => refetchBook()}>
             Retry
           </Button>
-        </div>
+          </div>
+        </>
       )
     }
     // No book yet → offer the import. Importing sets the show's one book and this
     // same route re-renders as the reader.
     return (
-      <div className="mx-auto mt-8 w-full max-w-md p-4">
+      <>
+        <ImmersiveEscape />
+        <div className="mx-auto mt-8 w-full max-w-md p-4">
         <ScriptUploadCard
           title="Import a script PDF"
           description="The PDF becomes the spatial backbone of the show's prompt book — cue anchors pin cues to it. Identity is the file's content, so re-importing the same PDF re-attaches cleanly."
@@ -397,7 +408,8 @@ export function PromptBookViewerPage() {
           error={doc.importError}
           onUpload={doc.importBook}
         />
-      </div>
+        </div>
+      </>
     )
   }
 

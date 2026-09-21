@@ -100,9 +100,10 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
    */
   return (
     <SheetPage>
-      {/* The breadcrumb header — 48px, like `ShowHeader` and `StackDetail`'s, **not** one of the
-          40px chrome rows (CLAUDE.md §the programmer's chrome): this row carries the page's
-          identity, which is the job those two do at 48. */}
+      {/* The breadcrumb header — 48px, like `StackDetail`'s, **not** one of the 40px chrome rows
+          (CLAUDE.md §the programmer's chrome): this row carries the page's identity. The
+          `ShowHeader` did the same job at 48 until the busk-chrome plan's session B made it a 40px
+          chrome row (D12); this one and `StackDetail`'s stay at 48. */}
       <SheetPage.Header>
         <ChannelsBreadcrumbs projectName={projectName} />
         <div className="flex-1" />

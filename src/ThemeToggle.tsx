@@ -1,38 +1,24 @@
-import { useEffect, useState } from "react"
 import { Moon, Sun } from "lucide-react"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import { applyThemeClass, getInitialTheme, type Theme } from "@/lib/theme"
+import { toggleTheme, useTheme } from "@/lib/theme"
 
 /**
- * The light/dark choice, applied to the document and persisted.
+ * The light/dark choice, read from `lib/theme.ts`'s one store and applied and persisted there.
  *
- * **Exactly one instance of this may be mounted**, and `UserMenu` is what guarantees it: the one
- * consumer, `ThemeMenuItem`, is rendered once there on every branch — a standalone header button
- * was the second consumer until the menu opened on a bootstrap-open desk too. The reason is the one
- * `usePersistentState`'s docblock gives for its own key rule — this is a `useState` seeded once
- * from storage with no listener, so two mounted copies would hold two snapshots and the one you
- * did not press would go on claiming the old theme. It is deliberately *not* built on
- * `lib/syncStore.ts`, which would otherwise be the fix: that JSON-encodes, and `theme` is stored
- * as the bare string `dark`, which `getInitialTheme` reads at module scope in `main.tsx` before
- * React exists. Re-encoding it would black out the pre-mount paint on every existing desk.
+ * It was a `useState` seeded once from storage inside this file, which is why **exactly one
+ * instance** of the control was allowed: two mount-time snapshots drift, and the one you did not
+ * press goes on claiming the old theme. The busk-chrome plan's session B gave the theme a second
+ * door — a ⌘K command, because an immersive window has no user menu (D10) — so the fact moved
+ * into a subscribable and both controls read it. The reason it is not `lib/syncStore.ts` is
+ * recorded on the store: that JSON-encodes, and `theme` is the bare string `dark` that
+ * `getInitialTheme` reads before React exists.
  */
 function useThemeChoice() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
-
-  useEffect(() => {
-    applyThemeClass(theme)
-    try {
-      localStorage.setItem("theme", theme)
-    } catch {
-      // Quota exhausted or storage unavailable. The class is already on the document, so the
-      // theme holds for this session; it just won't survive a reload.
-    }
-  }, [theme])
-
+  const theme = useTheme()
   return {
     theme,
     next: theme === "light" ? ("dark" as const) : ("light" as const),
-    toggle: () => setTheme(prev => (prev === "light" ? "dark" : "light")),
+    toggle: toggleTheme,
   }
 }
 

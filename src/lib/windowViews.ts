@@ -1,5 +1,6 @@
 import { pathHasSegment } from './navMatch'
 import { BUSK_FOCUSES, LIVE_SHEET_TABS } from './buskWindow'
+import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
@@ -21,31 +22,54 @@ export interface WindowView {
   segment: string
   /**
    * The per-view options a window on this view announces and the Screens sheet can set
-   * (busk-further plan D13). Absent for a view that contributes none — which is every view but
-   * Busk today — so the sheet renders whatever a row's *current* view contributes and never learns
-   * the word busk. The write is one generic command, `windows.viewOptions {targetId, view,
-   * options}`, and the values ride the announce as a free string map.
+   * (busk-further plan D13). Absent for a view that contributes none — the two libraries — so the
+   * sheet renders whatever a row's *current* view contributes and never learns the word busk. The
+   * write is one generic command, `windows.viewOptions {targetId, view, options}`, and the values
+   * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
+   * (busk-chrome plan D9): immersive is a window's fact, but it rides *here* because a top-level
+   * announce key would drop the frame, and it is drawn on the row as the view's Chrome segment.
    */
   options?: readonly WindowViewOption[]
 }
 
 /**
- * One row control. An `enum` draws a segmented control over `values`; a `page` draws a picker over
- * the target project's busk pages, resolved against the fetched list. Both are things a remote set
- * cannot lose anything by (D13's test): what the operator at that window *built* is never on the
- * row, only how the window shows it.
+ * One row control. An `enum` draws a segmented control over `values` — labelled by `valueLabels`
+ * where a value is not its own label — and a `page` draws a picker over the target project's busk
+ * pages, resolved against the fetched list. Both are things a remote set cannot lose anything by
+ * (D13's test): what the operator at that window *built* is never on the row, only how the window
+ * shows it.
  */
 export type WindowViewOption =
-  | { key: string; label: string; kind: 'enum'; values: readonly string[] }
+  | {
+      key: string
+      label: string
+      kind: 'enum'
+      values: readonly string[]
+      /** A label per value, for an enum whose wire spelling is not what the row should say. */
+      valueLabels?: Readonly<Record<string, string>>
+    }
   | { key: string; label: string; kind: 'page' }
 
 /** Sheet as one enum with `none` (D7), offering only the tabs that have landed. */
 const BUSK_SHEET_VALUES: readonly string[] = ['none', ...LIVE_SHEET_TABS]
 
+/**
+ * The Chrome segment, *App · Immersive*, on every live view (busk-chrome plan D9): the wire says
+ * `off` | `on`, the row says what the window looks like. One object, shared by the four entries,
+ * so the segment cannot read differently on a Show row and a Busk row.
+ */
+export const IMMERSIVE_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_IMMERSIVE,
+  label: 'Chrome',
+  kind: 'enum',
+  values: IMMERSIVE_VALUES,
+  valueLabels: { off: 'App', on: 'Immersive' },
+}
+
 export const WINDOW_VIEWS: readonly WindowView[] = [
-  { id: 'programmer', label: 'Programmer', segment: '/programmer' },
-  { id: 'show', label: 'Show', segment: '/show' },
-  { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book' },
+  { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION] },
+  { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION] },
+  { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book', options: [IMMERSIVE_OPTION] },
   {
     id: 'busk',
     label: 'Busk',
@@ -54,11 +78,30 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
       { key: 'focus', label: 'Focus', kind: 'enum', values: BUSK_FOCUSES },
       { key: 'sheet', label: 'Sheet', kind: 'enum', values: BUSK_SHEET_VALUES },
       { key: 'page', label: 'Page', kind: 'page' },
+      IMMERSIVE_OPTION,
     ],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'templates', label: 'Templates', segment: '/templates' },
 ]
+
+/**
+ * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
+ * on the busk view, and `immersive` under every live view; nothing at all — the key absent, not
+ * an empty map — for a view that contributes none, so a window on a library still sends the
+ * five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which views carry the key
+ * without a router.
+ */
+export function announcedViewOptions(
+  view: WindowView | null,
+  buskOptions: Readonly<Record<string, string>>,
+  immersive: Immersive,
+): Record<string, string> | undefined {
+  if (view?.options == null) return undefined
+  const options: Record<string, string> = view.id === 'busk' ? { ...buskOptions } : {}
+  if (view.options.some((option) => option.key === VIEW_OPTION_IMMERSIVE)) options[VIEW_OPTION_IMMERSIVE] = immersive
+  return options
+}
 
 /** The route for [view] in [projectId]. */
 export function windowViewPath(view: WindowView, projectId: number): string {

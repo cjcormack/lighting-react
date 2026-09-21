@@ -19,6 +19,7 @@ import { useCueLocationLabels, useRunnerDisplay } from '../hooks/useRunnerDispla
 import { useMakeStackLive } from '../hooks/useMakeStackLive'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
 import { ShowHeader } from '../components/ShowHeader'
+import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { ShowBar } from '../components/ShowBar'
 import { ShowView } from '../components/runner/ShowView'
 import { RecordSheet } from '../components/programmer/RecordSheet'
@@ -423,7 +424,9 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   if (projectLoading || currentLoading || stacksLoading) {
     return (
       <SheetPage>
-        <SheetPage.Header />
+        <SheetPage.Header>
+          <ImmersiveEscape bare />
+        </SheetPage.Header>
         <SheetPage.Empty loading />
       </SheetPage>
     )
@@ -432,7 +435,9 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   if (!project) {
     return (
       <SheetPage>
-        <SheetPage.Header />
+        <SheetPage.Header>
+          <ImmersiveEscape bare />
+        </SheetPage.Header>
         <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
       </SheetPage>
     )

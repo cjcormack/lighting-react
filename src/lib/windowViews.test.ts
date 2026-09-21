@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WINDOW_VIEWS, projectIdOfPath, windowViewLabel, windowViewOf, windowViewPath } from './windowViews'
+import { IMMERSIVE_OPTION, WINDOW_VIEWS, projectIdOfPath, windowViewLabel, windowViewOf, windowViewPath } from './windowViews'
 
 /**
  * The six views one window can put on another: the four live views in `ViewSwitcher` order, then
@@ -13,6 +13,18 @@ describe('WINDOW_VIEWS', () => {
 
   it('mints a project route per view', () => {
     expect(windowViewPath(WINDOW_VIEWS[3]!, 7)).toBe('/projects/7/busk')
+  })
+
+  it('gives every live view the one Chrome option, App · Immersive over off | on, and the libraries none (busk-chrome D9)', () => {
+    for (const view of WINDOW_VIEWS.slice(0, 4)) {
+      const chrome = view.options?.find((o) => o.key === 'immersive')
+      expect(chrome, view.id).toBe(IMMERSIVE_OPTION)
+    }
+    expect(IMMERSIVE_OPTION).toMatchObject({ label: 'Chrome', kind: 'enum', values: ['off', 'on'], valueLabels: { off: 'App', on: 'Immersive' } })
+    // Busk keeps its three and takes the fourth last, so the segment sits at the row's end everywhere.
+    expect(WINDOW_VIEWS[3]!.options!.map((o) => o.key)).toEqual(['focus', 'sheet', 'page', 'immersive'])
+    expect(WINDOW_VIEWS[4]!.options).toBeUndefined()
+    expect(WINDOW_VIEWS[5]!.options).toBeUndefined()
   })
 })
 

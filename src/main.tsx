@@ -10,6 +10,7 @@ import { startLooksBridge } from "./store/looks"
 import { startTemplatesBridge } from "./store/templates"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
 import { windowName } from "./lib/windowIdentity"
+import { applyImmersiveLaunch } from "./lib/immersive"
 
 // Apply the stored (or system-preferred) theme before React mounts. The boot
 // loading overlay renders before the user menu's ThemeMenuItem effect runs, so without
@@ -38,6 +39,9 @@ startProgrammerErrorBridge()
 // does not re-mint the name on the next tab. The announce that carries it to the desk's windows
 // registry is `useWindowsBridge`, inside the router. See lib/windowIdentity.ts.
 windowName()
+// `?immersive=on` rides the same read and is stripped with it (busk-chrome plan D9): applied here
+// so a live view's first paint is already the shape the link asked for. See lib/immersive.ts.
+applyImmersiveLaunch()
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

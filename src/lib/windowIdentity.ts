@@ -51,11 +51,21 @@ import { useSyncExternalStore } from 'react'
  * by the time anything asks for the id the URL has long been rewritten. Memoising it in one place
  * is what makes the two functions order-independent: whichever is called first consumes the
  * parameter, and the other reads the same answer.
+ *
+ * **`?immersive=` rides the same read** (busk-chrome plan D9). It is a launch parameter of the
+ * same kind — a statement about *this* window, made once by whoever minted the link — so it is
+ * consumed and stripped in the one `replaceState` with `?window=`, and `lib/immersive.ts` asks
+ * [launchImmersive] for what it said. One read rather than two because the URL is rewritten by
+ * whichever read runs first: a second module doing its own `searchParams.get` after this one had
+ * already replaced the URL would find nothing, and in which order the two ran would depend on
+ * import order. It is not part of the identity and is not remembered past the boot read.
  */
 
 export const WINDOW_ID_KEY = 'desk.windowId'
 export const WINDOW_NAME_KEY = 'desk.windowName'
 export const WINDOW_NAME_PARAM = 'window'
+/** `?immersive=on` — consumed here beside `?window=`, applied by `lib/immersive.ts`. */
+export const IMMERSIVE_PARAM = 'immersive'
 
 /**
  * Every boot-time value this module memoises, in **one object reset by a single reassignment** —
@@ -82,7 +92,11 @@ interface LaunchParam {
   present: boolean
   /** Its trimmed value, or null for a blank one. */
   name: string | null
+  /** `?immersive=`'s raw value, or null when absent. Read and stripped in the same pass. */
+  immersive: string | null
 }
+
+const NO_LAUNCH: LaunchParam = { present: false, name: null, immersive: null }
 
 /**
  * The tab's client-minted identity: a fresh uuid when this boot carried `?window=`, else the
@@ -137,6 +151,16 @@ export function useWindowName(): string {
 }
 
 /**
+ * What `?immersive=` said on the launch URL, raw and untrimmed-of-meaning: `lib/immersive.ts`
+ * decides what counts as a value. Consuming it here strips it with `?window=`, so a reload — of
+ * the rewritten URL — answers null, which is what makes the boot read a one-time arrival rather
+ * than a fact the address restates on every refresh.
+ */
+export function launchImmersive(): string | null {
+  return consumeLaunchParam().immersive
+}
+
+/**
  * Test seam: forget every cached value — the id, the name and the consumed launch parameter — so
  * each test starts from storage and the URL, which is also how a reload is simulated.
  */
@@ -174,20 +198,26 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** `?window=Screen%202`, consumed: read, then stripped from the URL with `replaceState`. */
+/**
+ * `?window=Screen%202` and `?immersive=on`, consumed: read, then stripped from the URL with one
+ * `replaceState`. Either may be present without the other — a plain `/busk?immersive=on` is a
+ * legal arrival and is not a `?window=` boot, so it mints no fresh id.
+ */
 function readLaunchParam(): LaunchParam {
-  if (typeof window === 'undefined') return { present: false, name: null }
+  if (typeof window === 'undefined') return NO_LAUNCH
   try {
     const url = new URL(window.location.href)
     const raw = url.searchParams.get(WINDOW_NAME_PARAM)
-    if (raw == null) return { present: false, name: null }
+    const immersive = url.searchParams.get(IMMERSIVE_PARAM)
+    if (raw == null && immersive == null) return NO_LAUNCH
     url.searchParams.delete(WINDOW_NAME_PARAM)
+    url.searchParams.delete(IMMERSIVE_PARAM)
     window.history.replaceState(window.history.state, '', url)
-    const name = raw.trim()
-    return { present: true, name: name === '' ? null : name }
+    const name = raw?.trim() ?? ''
+    return { present: raw != null, name: name === '' ? null : name, immersive }
   } catch {
     // An unreadable URL is not a launch: keep the stored id rather than churning a registry row.
-    return { present: false, name: null }
+    return NO_LAUNCH
   }
 }
 

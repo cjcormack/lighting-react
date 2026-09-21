@@ -37,8 +37,9 @@ import { useEdgeDragReceiver, useEdgeDragSource } from './useEdgeDrag'
  *
  * The ignorance is of **ids and foreign targets, not of sources**. A drop onto a cue slot is
  * resolved here whatever lifted it — a sibling slot, or a `busk-palette` row from the busk view's
- * library — because this provider owns the slot droppables (which are mounted on every route),
- * `projectId`, and both slot mutations. The alternative was a monitor inside the cue-slot panel,
+ * library — because this provider owns the slot droppables (mounted on every route the app is
+ * drawn on: an immersive window takes the cue-slot overlay with the other three panels, busk-chrome
+ * plan D7, so there a palette row has no slot to land on), `projectId`, and both slot mutations. The alternative was a monitor inside the cue-slot panel,
  * and that panel's body unmounts when the overlay hides: the one place a slot mutation must not
  * live. `slotDrop.ts` holds the source→assignment mapping as pure functions, imported type-only
  * from the busk feature, so the shell still reaches no busk runtime code.

@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Navigate, useParams } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { ShowHeader } from '@/components/ShowHeader'
+import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
@@ -101,7 +102,9 @@ export function ProgrammerPage() {
   if (currentLoading || projectLoading) {
     return (
       <SheetPage>
-        <SheetPage.Header />
+        <SheetPage.Header>
+          <ImmersiveEscape bare />
+        </SheetPage.Header>
         <SheetPage.Empty loading />
       </SheetPage>
     )
@@ -116,7 +119,9 @@ export function ProgrammerPage() {
   if (!project) {
     return (
       <SheetPage>
-        <SheetPage.Header />
+        <SheetPage.Header>
+          <ImmersiveEscape bare />
+        </SheetPage.Header>
         <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
       </SheetPage>
     )

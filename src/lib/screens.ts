@@ -24,9 +24,12 @@ export function newWindowUrl(name: string, view: string = '/', origin: string = 
  * A window's **whole setup** as a link (busk-further plan D13, `Screens.dc.html`'s *Copy link for
  * Screen 2*): [newWindowUrl] for its name and view, then the view's options as the query the busk
  * view latches on arrival — `page`, `focus`, `sheet`, in that order, each only when the row has
- * it. Opened on another device it arrives as drawn: `?window=` names it (fresh id, this name),
- * `?page=` unlinks it onto that page, `?focus=` / `?sheet=` set its shape. A view whose options
- * carry none of the three copies the plain link.
+ * it — and `immersive` (busk-chrome plan D9), **only when it is `on`**: `off` is what every
+ * window boots with, so a link saying so would say nothing, and `lib/immersive.ts` consumes the
+ * parameter at boot rather than on the view. Opened on another device it arrives as drawn:
+ * `?window=` names it (fresh id, this name), `?page=` unlinks it onto that page, `?focus=` /
+ * `?sheet=` set its shape, `?immersive=on` hides the app around it. A view whose options carry
+ * none of the four copies the plain link.
  */
 export function windowSetupUrl(
   name: string,
@@ -35,9 +38,11 @@ export function windowSetupUrl(
   origin: string = window.location.origin,
 ): string {
   let url = newWindowUrl(name, view, origin)
-  for (const key of ['page', 'focus', 'sheet']) {
+  for (const key of ['page', 'focus', 'sheet', 'immersive']) {
     const value = options?.[key]
-    if (value != null && value !== '') url += `&${key}=${encodeURIComponent(value)}`
+    if (value == null || value === '') continue
+    if (key === 'immersive' && value !== 'on') continue
+    url += `&${key}=${encodeURIComponent(value)}`
   }
   return url
 }

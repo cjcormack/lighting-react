@@ -24,7 +24,7 @@ vi.mock('@/store/busk', () => ({
   useBuskPagesQuery: (_id: number, opts?: { skip?: boolean }) => ({ data: opts?.skip ? undefined : busk.pages }),
   useBuskShowingPageQuery: () => ({ data: busk.deskPageId }),
 }))
-vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1' }))
+vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1', launchImmersive: () => null }))
 vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => ({ id: 1, name: 'Show', isCurrent: true }) }))
 
 const fullscreen = { active: false, enter: vi.fn(), exit: vi.fn() }
@@ -263,7 +263,7 @@ describe('ScreensSheet', () => {
   })
 
   describe('a row’s view options (busk-further plan D13)', () => {
-    it('draws Focus, Sheet and Page on a busk row from what it announced, and nothing on a Prompt Book row', () => {
+    it('draws Focus, Sheet and Page on a busk row from what it announced, and none of the three on a Prompt Book row', () => {
       registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/prompt-book' })
       render(<ScreensSheet />)
       const busk2 = rowFor('Screen 2')
@@ -277,9 +277,18 @@ describe('ScreensSheet', () => {
       expect(within(busk2).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('3')
       expect(busk2).toHaveTextContent('own page')
 
-      expect(within(rowFor('Chris’s iPad')).queryByRole('radiogroup')).toBeNull()
+      // The busk facts are the busk view's: a Prompt Book row and a programmer row draw neither
+      // segment nor the picker (their one segment is Chrome — the next block).
+      expect(within(rowFor('Chris’s iPad')).queryByRole('radiogroup', { name: /Focus|Sheet/ })).toBeNull()
       expect(within(rowFor('Chris’s iPad')).queryByRole('combobox', { name: /Page on/ })).toBeNull()
-      expect(within(rowFor('Screen 1')).queryByRole('radiogroup')).toBeNull()
+      expect(within(rowFor('Screen 1')).queryByRole('radiogroup', { name: /Focus|Sheet/ })).toBeNull()
+    })
+
+    it('draws nothing at all on a library row', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/looks' })
+      render(<ScreensSheet />)
+      expect(within(rowFor('Chris’s iPad')).queryByRole('radiogroup')).toBeNull()
+      expect(within(rowFor('Chris’s iPad')).queryByRole('button', { name: /Copy link for/ })).toBeNull()
     })
 
     it('shows a following row on the desk’s page, and says it follows', () => {
@@ -324,6 +333,45 @@ describe('ScreensSheet', () => {
         `${window.location.origin}/projects/1/busk?window=Screen%202&page=3&focus=pads&sheet=none`,
       )
       expect(await within(rowFor('Screen 2')).findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+    })
+  })
+
+  describe('the Chrome segment (busk-chrome plan D9)', () => {
+    it('draws App · Immersive on a Programmer row and a Show row from the descriptor, reading what the window announced', () => {
+      registry.windows[0] = row('s-1', 'w-1', 'Screen 1', { viewOptions: { immersive: 'off' } })
+      registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/show', viewOptions: { immersive: 'on' } })
+      render(<ScreensSheet />)
+      const programmer = within(rowFor('Screen 1')).getByRole('radiogroup', { name: 'Chrome on Screen 1' })
+      expect(within(programmer).getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['App', 'Immersive'])
+      expect(within(programmer).getByRole('radio', { name: 'App' })).toHaveAttribute('aria-checked', 'true')
+      const show = within(rowFor('Chris’s iPad')).getByRole('radiogroup', { name: 'Chrome on Chris’s iPad' })
+      expect(within(show).getByRole('radio', { name: 'Immersive' })).toHaveAttribute('aria-checked', 'true')
+      // And on the busk row too, last, after Focus · Sheet · Page.
+      const busk2 = rowFor('Screen 2')
+      expect(within(busk2).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Focus on Screen 2', 'Sheet on Screen 2', 'Chrome on Screen 2'])
+    })
+
+    it('sets it by the one keyed command carrying the row’s view, on the wire’s spelling', () => {
+      registry.windows[0] = row('s-1', 'w-1', 'Screen 1', { viewOptions: { immersive: 'off' } })
+      render(<ScreensSheet />)
+      fireEvent.click(within(rowFor('Screen 1')).getByRole('radio', { name: 'Immersive' }))
+      fireEvent.click(within(rowFor('Screen 2')).getByRole('radio', { name: 'App' }))
+      expect(sent).toEqual([
+        { type: 'viewOptions', targetId: 's-1', view: '/projects/1/programmer', options: { immersive: 'on' } },
+        { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { immersive: 'off' } },
+      ])
+    })
+
+    it('puts immersive= on Copy link only while it is on', async () => {
+      const writeText = vi.fn(async () => {})
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+      registry.windows[0] = row('s-1', 'w-1', 'Screen 1', { viewOptions: { immersive: 'off' } })
+      registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/show', viewOptions: { immersive: 'on' } })
+      render(<ScreensSheet />)
+      fireEvent.click(within(rowFor('Screen 1')).getByRole('button', { name: 'Copy link for Screen 1' }))
+      expect(writeText).toHaveBeenLastCalledWith(`${window.location.origin}/projects/1/programmer?window=Screen%201`)
+      fireEvent.click(within(rowFor('Chris’s iPad')).getByRole('button', { name: 'Copy link for Chris’s iPad' }))
+      expect(writeText).toHaveBeenLastCalledWith(`${window.location.origin}/projects/1/show?window=Chris%E2%80%99s%20iPad&immersive=on`)
     })
   })
 

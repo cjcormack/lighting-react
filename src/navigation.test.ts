@@ -224,6 +224,8 @@ describe("window commands", () => {
   const actions = () => ({
     enterFullscreen: vi.fn(),
     exitFullscreen: vi.fn(),
+    setImmersive: vi.fn(),
+    toggleTheme: vi.fn(),
     openScreens: vi.fn(),
     show: vi.fn(),
     openOnDisplay: vi.fn(),
@@ -251,6 +253,8 @@ describe("window commands", () => {
     canOpenOnDisplay: false,
     following: true,
     buskFocus: null,
+    immersive: null,
+    theme: "light",
     actions: actions(),
     ...over,
   })
@@ -261,8 +265,8 @@ describe("window commands", () => {
     expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
     expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
     // Six views × two other windows (the iPad on an install route takes the viewed project),
-    // plus the focus arm on each Busk show.
-    const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id))
+    // plus the focus arm on each Busk show and the immersive arm on each live-view show.
+    const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id) && !/-immersive$/.test(c.id))
     expect(shows).toHaveLength(12)
     expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
     expect(shows.map((c) => c.label)).toContain("Show Prompt Book on iPad")
@@ -333,7 +337,8 @@ describe("window commands", () => {
     const focus = commands.filter((c) => c.id.startsWith("window-focus-"))
     expect(focus.map((c) => c.label)).toEqual(["Split", "Focus pads", "Focus rig"])
     // Right after Screens…, before the shows for other windows.
-    expect(commands.findIndex((c) => c.id === "window-focus-split")).toBe(commands.findIndex((c) => c.id === "window-screens") + 1)
+    // Right after the theme command, which follows Screens…
+    expect(commands.findIndex((c) => c.id === "window-focus-split")).toBe(commands.findIndex((c) => c.id === "window-theme") + 1)
     expect(focus.map((c) => c.detail)).toEqual(["this window", "current", "this window"])
     focus[2]!.run()
     expect(inputs.actions.setFocus).toHaveBeenCalledWith("rig")
@@ -342,18 +347,70 @@ describe("window commands", () => {
   it("gives Show Busk on <window> a focus arm: the show, then that window's focus on the view it lands on", () => {
     const inputs = base()
     const commands = buildWindowCommands(inputs)
-    const arms = commands.filter((c) => /^window-show-s-2-busk-/.test(c.id))
+    const arms = commands.filter((c) => /^window-show-s-2-busk-(split|pads|rig)$/.test(c.id))
     expect(arms.map((c) => c.label)).toEqual([
       "Show Busk on Screen 2 · Split",
       "Show Busk on Screen 2 · Focus pads",
       "Show Busk on Screen 2 · Focus rig",
     ])
-    // No arm on a view that contributes no focus.
-    expect(commands.some((c) => /^window-show-s-2-show-/.test(c.id))).toBe(false)
+    // No focus arm on a view that contributes no focus (the immersive arm is every live view's).
+    expect(commands.some((c) => /^window-show-s-2-show-(split|pads|rig)$/.test(c.id))).toBe(false)
     arms[1]!.run()
     expect(inputs.actions.show).toHaveBeenCalledWith("s-2", "/projects/1/busk")
     expect(inputs.actions.setViewOptions).toHaveBeenCalledWith("s-2", "/projects/1/busk", { focus: "pads" })
     expect(new Set(commands.map((c) => c.id)).size).toBe(commands.length)
+  })
+
+  it("gives Show <view> on <window> an immersive arm on every live view and none on a library (busk-chrome D9)", () => {
+    const inputs = base()
+    const commands = buildWindowCommands(inputs)
+    const arms = commands.filter((c) => /^window-show-s-2-.*-immersive$/.test(c.id))
+    expect(arms.map((c) => c.label)).toEqual([
+      "Show Programmer on Screen 2 · Immersive",
+      "Show Show on Screen 2 · Immersive",
+      "Show Prompt Book on Screen 2 · Immersive",
+      "Show Busk on Screen 2 · Immersive",
+    ])
+    // The focus arms come first on Busk, the immersive arm after them.
+    const buskIds = commands.filter((c) => /^window-show-s-2-busk/.test(c.id)).map((c) => c.id)
+    expect(buskIds).toEqual(["window-show-s-2-busk", "window-show-s-2-busk-split", "window-show-s-2-busk-pads", "window-show-s-2-busk-rig", "window-show-s-2-busk-immersive"])
+    arms[1]!.run()
+    expect(inputs.actions.show).toHaveBeenCalledWith("s-2", "/projects/1/show")
+    expect(inputs.actions.setViewOptions).toHaveBeenCalledWith("s-2", "/projects/1/show", { immersive: "on" })
+    expect(new Set(commands.map((c) => c.id)).size).toBe(commands.length)
+  })
+
+  it("offers Expand over the app / Show the app for this window only on a live view, flipping with the state (busk-chrome D7)", () => {
+    // Off a live view (null): no item — setting it from a library would be a silent write.
+    expect(buildWindowCommands(base()).some((c) => c.id.startsWith("window-immersive"))).toBe(false)
+
+    const off = base({ immersive: false })
+    const expand = buildWindowCommands(off).find((c) => c.id === "window-immersive")!
+    expect(expand.label).toBe("Expand over the app")
+    expect(expand.detail).toBe("this window")
+    // Beside the full-screen pair — it is a second pair, not an arm of the first (D8).
+    const labels = buildWindowCommands(off).map((c) => c.label)
+    expect(labels.slice(0, 3)).toEqual(["Go full screen", "Expand over the app", "Screens…"])
+    expand.run()
+    expect(off.actions.setImmersive).toHaveBeenCalledWith(true)
+
+    const on = base({ immersive: true })
+    const back = buildWindowCommands(on).find((c) => c.id === "window-immersive-off")!
+    expect(back.label).toBe("Show the app")
+    expect(buildWindowCommands(on).some((c) => c.id === "window-immersive")).toBe(false)
+    back.run()
+    expect(on.actions.setImmersive).toHaveBeenCalledWith(false)
+  })
+
+  it("offers the theme as a command after Screens…, naming the theme it switches to (busk-chrome D10)", () => {
+    const light = base()
+    const commands = buildWindowCommands(light)
+    const theme = commands.find((c) => c.id === "window-theme")!
+    expect(theme.label).toBe("Switch to dark mode")
+    expect(commands.findIndex((c) => c.id === "window-theme")).toBe(commands.findIndex((c) => c.id === "window-screens") + 1)
+    theme.run()
+    expect(light.actions.toggleTheme).toHaveBeenCalledTimes(1)
+    expect(buildWindowCommands(base({ theme: "dark" })).find((c) => c.id === "window-theme")!.label).toBe("Switch to light mode")
   })
 
   it("keeps the Screens… count in step with the registry", () => {

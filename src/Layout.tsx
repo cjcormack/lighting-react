@@ -7,8 +7,11 @@ import { Card } from "@/components/ui/card"
 import { FeatureErrorBoundary } from "./components/FeatureErrorBoundary"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { useMediaQuery } from "@/hooks/useMediaQuery"
+import { MD_BREAKPOINT, useMediaQuery } from "@/hooks/useMediaQuery"
 import { useSidebarOpen } from "@/hooks/useSidebarOpen"
+import { useImmersive } from "@/lib/immersive"
+import { isLiveViewPath } from "@/lib/liveViews"
+import { MobileDrawerContext } from "./components/mobileDrawerContext"
 
 import { ConnectionStatus } from "./connection"
 import { ProgrammerIndicator } from './components/ProgrammerIndicator'
@@ -80,7 +83,19 @@ export default function Layout() {
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { panels, byId } = useOverviewPanels()
   const location = useLocation()
-  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const isDesktop = useMediaQuery(MD_BREAKPOINT)
+
+  // **Immersive** (busk-chrome plan D7; `Immersive.dc.html`): one boolean, the window's fact
+  // *and* a live view. While it holds, the desktop sidebar, the app header, the four overview
+  // panels and the sidebar's margin are not drawn — hidden, not collapsed, and the panels'
+  // visibility is untouched so they come back on exit. On every other route the app is drawn
+  // whatever the fact says: the fixtures list is navigated *from* the sidebar, and a window that
+  // leaves a live view for it gets the app back and finds immersive waiting when it returns.
+  // Banners, `HandChip`, the AI panel and `DeskDndProvider` are untouched. The `ShowHeader` is
+  // the row that stays and carries the way back (D11); below `md` it also draws the mobile
+  // drawer's button (D10), through the opener provided below — the drawer itself is still here.
+  const immersive = useImmersive() && isLiveViewPath(location.pathname)
+  const openMobileDrawer = useCallback(() => setMobileDrawerOpen(true), [])
 
   // This window's announce to the desk's windows registry, and the handler for the commands
   // another window sends it. Here and not in a store, because it needs the router (see the hook).
@@ -102,10 +117,11 @@ export default function Layout() {
 
   return (
     <TooltipProvider delayDuration={0}>
+      <MobileDrawerContext.Provider value={openMobileDrawer}>
       <SyncNotifications />
       <div className="flex h-dvh">
-        {/* Desktop Sidebar */}
-        {isDesktop && (
+        {/* Desktop Sidebar — not drawn while immersive (D7). */}
+        {isDesktop && !immersive && (
           <aside
             className={cn(
               "flex flex-col border-r bg-background transition-all duration-200",
@@ -165,7 +181,7 @@ export default function Layout() {
         {/* Main Content Area */}
         <div
           className="flex flex-1 flex-col transition-all duration-200 min-w-0"
-          style={{ marginLeft: isDesktop ? sidebarWidth : 0 }}
+          style={{ marginLeft: isDesktop && !immersive ? sidebarWidth : 0 }}
         >
           {/* Header. The tool row must stay on ONE line: it is chrome, and a wrapped chrome
               bar eats a third of an iPhone's viewport before any content renders.
@@ -197,7 +213,15 @@ export default function Layout() {
               Groups cards, Scripts, Project Settings) get the whole 53 back — the six list views
               are full-height columns on the list shell and never do. Making it *disappear* on a short screen would
               be a different decision, and a worse one below 768px of width, where the hamburger
-              inside it is the only navigation there is. */}
+              inside it is the only navigation there is.
+
+              **Not drawn while immersive** (busk-chrome plan D7). What it carried comes back where
+              it is read (D10): the connection state as an *Offline* chip on the `ShowHeader`, only
+              while offline; the hamburger on that header's left edge below `md`; theme (a ⌘K
+              command of its own since this, `window-theme`), full screen and Screens… through ⌘K.
+              The overview panels' toggles go with it — here and in the palette below — and their
+              stored visibility is untouched. */}
+          {!immersive && (
           <header className="@container sticky top-0 z-40 border-b bg-primary px-2 py-2 text-primary-foreground sm:px-4 [@media(max-height:500px)]:static">
             <div className="flex items-center gap-x-2 sm:gap-x-4">
               {/* Mobile hamburger button */}
@@ -233,33 +257,41 @@ export default function Layout() {
               </div>
             </div>
           </header>
+          )}
 
           {/* The four overview panels, stacked in `DESCRIPTORS`' order so the toolbar reads left
               to right as these read top to bottom. Each is always rendered — but only its animated
               wrapper is: every one of them puts its live body behind `CollapsiblePanel`, which
               unmounts it once the collapse has finished. Adding a panel here means doing the same,
-              or the rig pays for it on every route the operator is on. */}
-          <StageOverviewPanel
-            isVisible={byId.stage.isVisible}
-            selectedFixtureKey={selectedFixture}
-            onFixtureClick={setSelectedFixture}
-          />
+              or the rig pays for it on every route the operator is on. None of the four is drawn
+              while immersive (D7): their toggles — on the header above and in the palette's View
+              group — are withheld with them, and their stored visibility is left alone so they
+              return on exit. */}
+          {!immersive && (
+            <>
+              <StageOverviewPanel
+                isVisible={byId.stage.isVisible}
+                selectedFixtureKey={selectedFixture}
+                onFixtureClick={setSelectedFixture}
+              />
 
-          <FixtureOverviewPanel
-            onFixtureClick={setSelectedFixture}
-            isVisible={byId.fixtures.isVisible}
-          />
+              <FixtureOverviewPanel
+                onFixtureClick={setSelectedFixture}
+                isVisible={byId.fixtures.isVisible}
+              />
 
-          {/* The speed-master bank, summoned (`PD-SPEED-OVERLAY`). Outside `DeskDndProvider`,
-              unlike the cue-slot panel: that one is inside because its slots are droppables a
-              busk-page drag must reach, and this panel has no drag at all — nothing in it is
-              draggable and nothing may be dropped on it. */}
-          <SpeedMasterOverviewPanel isVisible={byId.speedMasters.isVisible} />
+              {/* The speed-master bank, summoned (`PD-SPEED-OVERLAY`). Outside `DeskDndProvider`,
+                  unlike the cue-slot panel: that one is inside because its slots are droppables a
+                  busk-page drag must reach, and this panel has no drag at all — nothing in it is
+                  draggable and nothing may be dropped on it. */}
+              <SpeedMasterOverviewPanel isVisible={byId.speedMasters.isVisible} />
+            </>
+          )}
 
           {/* The app's one DndContext, wrapping the cue-slot overlay and the routed page together:
               a drag started in either must be able to land in the other. See DeskDndProvider. */}
           <DeskDndProvider>
-            <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />
+            {!immersive && <CueSlotOverviewPanel isVisible={byId.cueSlots.isVisible} />}
 
             {/* Page Content. The re-auth banner sits inside the scroll container's flex
                 column rather than above it so it doesn't shift the ShowBar or the panels;
@@ -321,13 +353,18 @@ export default function Layout() {
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
             // The same four panels the toolbar renders, from the same array — the palette used to
-            // declare its own copy, which is how the Stage entry drifted onto a second icon.
-            ...panels.map((panel) => ({
-              label: panel.label,
-              icon: panel.icon,
-              isVisible: panel.isVisible,
-              onToggle: panel.toggle,
-            })),
+            // declare its own copy, which is how the Stage entry drifted onto a second icon. None
+            // of them while immersive: the panels are not mounted then, and a row reading "On"
+            // for a panel that is not on screen, whose press draws nothing, is a control
+            // reporting a state it is not in. Lux stays — the AI panel is outside the gate.
+            ...(immersive
+              ? []
+              : panels.map((panel) => ({
+                  label: panel.label,
+                  icon: panel.icon,
+                  isVisible: panel.isVisible,
+                  onToggle: panel.toggle,
+                }))),
             { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setAiChatVisible(!isAiChatVisible) },
           ]}
         />
@@ -348,6 +385,7 @@ export default function Layout() {
           />
         )}
       </div>
+      </MobileDrawerContext.Provider>
     </TooltipProvider>
   )
 }

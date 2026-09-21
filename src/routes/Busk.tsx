@@ -2,6 +2,7 @@ import { Navigate, useParams } from 'react-router'
 import { Card } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { ShowHeader } from '@/components/ShowHeader'
+import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { BuskingView } from '../components/busking/BuskingView'
@@ -53,19 +54,27 @@ export function ProjectBusk() {
     return <Navigate to={`/projects/${currentProject.id}/busk`} replace />
   }
 
+  // Both arms draw the immersive glyph over the card: with no header there would otherwise be no
+  // way back on a touch screen (`ImmersiveEscape`).
   if (projectLoading || currentLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <>
+        <ImmersiveEscape />
+        <Card className="m-4 p-4 flex items-center justify-center">
+          <Loader2 className="size-6 animate-spin" />
+        </Card>
+      </>
     )
   }
 
   if (!project) {
     return (
-      <Card className="m-4 p-4 text-center text-muted-foreground">
-        Project not found
-      </Card>
+      <>
+        <ImmersiveEscape />
+        <Card className="m-4 p-4 text-center text-muted-foreground">
+          Project not found
+        </Card>
+      </>
     )
   }
 
