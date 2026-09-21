@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { BUSK_WIDTHS, BUSK_WIDTH_LABELS, type BuskBank as BuskBankModel } from '@/api/buskApi'
+import { BUSK_FLOWS, BUSK_FLOW_LABELS, BUSK_WIDTHS, BUSK_WIDTH_LABELS, type BuskBank as BuskBankModel } from '@/api/buskApi'
 import { HandPlaceStrip } from '@/components/hand/HandTarget'
 import {
   buskBankBodyId,
@@ -82,8 +82,10 @@ function BankHeader({
         onSave={(name) => commit((page) => setBank(page, at, { name }))}
         // A real minimum, not `min-w-0`: in a quarter-width column the field would otherwise
         // shrink to nothing and the controls beside it would carry on past the bank's border. With
-        // a floor the header wraps instead (see above), which is the better failure.
-        className="min-w-[7rem] flex-1"
+        // a floor the header wraps instead (see above), which is the better failure — and the
+        // column itself has a floor in edit mode (`BuskPage`), so the field's 6rem plus the grip
+        // always fits inside the bank's padding rather than running past its border.
+        className="min-w-[6rem] flex-1"
       />
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <span className="text-[10px] text-muted-foreground">Solo</span>
@@ -138,8 +140,11 @@ function BankHeader({
                 commit((page) => setBank(page, at, { flow: flow as BuskBankModel['flow'] }))
               }
             >
-              <DropdownMenuRadioItem value="WRAP">Flow: Wrap</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="COLUMN">Flow: Column</DropdownMenuRadioItem>
+              {BUSK_FLOWS.map((flow) => (
+                <DropdownMenuRadioItem key={flow} value={flow}>
+                  Flow: {BUSK_FLOW_LABELS[flow]}
+                </DropdownMenuRadioItem>
+              ))}
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => commit((page) => duplicateBank(page, at))}>
@@ -268,18 +273,31 @@ export function BuskBankCluster({
         />
         <div
           ref={setBodyRef}
+          data-bank-flow={bank.flow}
           className={cn(
-            'grid gap-2',
-            bank.flow === 'COLUMN'
-              ? 'grid-cols-1'
-              : 'grid-cols-[repeat(auto-fill,minmax(110px,1fr))]',
+            'gap-2',
+            // SCROLL is the rig row's own flow, offered here too (2026-09-21): one line of pads at
+            // the pad's width, scrolling sideways, where WRAP is the grid and COLUMN one per line.
+            // The 7px inset with the negative margin is room for the pad's edit cross, which hangs
+            // 7px off its top-left corner: `overflow-x: auto` clips both axes, and a scroller
+            // clips at its padding edge, so the padding is what keeps the cross visible while the
+            // margin keeps the pads where the other flows put them. The placeholder is the one
+            // child that must fill rather than take a pad's width.
+            bank.flow === 'SCROLL'
+              ? 'flex overflow-x-auto pb-1 -mt-[7px] -ml-[7px] pt-[7px] pl-[7px] *:shrink-0 [&>*:not([data-bank-placeholder])]:w-[120px] [&>[data-bank-placeholder]]:flex-1'
+              : bank.flow === 'COLUMN'
+                ? 'grid grid-cols-1'
+                : 'grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))]',
             // An empty bank is legal and keeps its own height, so there is somewhere to drop into.
             bank.pads.length === 0 && slotIndex == null && 'min-h-[56px]',
           )}
         >
           {cells}
           {bank.pads.length === 0 && slotIndex == null && editing && (
-            <div className="flex min-h-[56px] items-center justify-center rounded-lg border border-dashed text-[11px] text-muted-foreground">
+            <div
+              data-bank-placeholder
+              className="flex min-h-[56px] items-center justify-center rounded-lg border border-dashed text-[11px] text-muted-foreground"
+            >
               Drag a pad here
             </div>
           )}

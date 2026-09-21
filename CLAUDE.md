@@ -507,7 +507,8 @@ master bank.
 
 **The busk page is a thing the operator builds, not a view the library lays out.** A page is rows; a
 row is columns, each with a **width share in twelfths**; a column stacks banks top to bottom; a bank
-has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN`) and holds ordered **pads**, each a
+has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN` | `SCROLL` — the last one line of fixed-width
+pads scrolling sideways, the rig row's own flow, offered to banks since 2026-09-21) and holds ordered **pads**, each a
 reference to exactly one template, Look or cue. One record may sit on several pads, on several
 pages. Backend contract in `lighting7/models/buskLayout.kt` and
 `lighting7/docs/lighting-composition-model.md` §"The busk layout"; the plan is
@@ -788,7 +789,7 @@ drawing crosses on whatever page the operator went to next.
 
 **Each window gives the busk view its own shape, and the shape is three per-tab facts**
 (busk-further plan D5–D7, `lib/buskWindow.ts`): `busk.focus` (`split` · `pads` · `rig`),
-`busk.rigRows` (how many rig rows the split shows) and `busk.sheet` (`none` · `speed` · `colour` ·
+`busk.rigRows` (how many rig lines the split shows — a line holds the rows that share it) and `busk.sheet` (`none` · `speed` · `colour` ·
 `spread`, where `none` is the fold). They sit on `buskPageFollow.ts`'s model and **beside** it —
 per-tab `sessionStorage` through `createSyncStore`, never `localStorage`, never the desk's — and
 nothing here reads the selection's follow flag or the page's. The reason is the reason focus
@@ -796,27 +797,48 @@ exists: two screens at one desk showing two shapes of one view, pressed onto one
 
 **Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
 folds the rig to `RigStrip` (the summary, the family pill, the desk chip — what a press needs to
-be honest about — and a chevron that unfolds Split) and the page fills the body; **Rig** fills the
+be honest about — and a chevron that unfolds Split) **off the desk board**, and on it to the band's own
+label and controls rows plus a chevron pill back to Split, and the page fills the body; **Rig** fills the
 body with every row and folds the page to `BuskPageStrip`'s **40px folded arm** at the bottom —
-the page's name, its bank count and the Focus control, **not the tab strip drawn folded**
+the page's name and its bank count, **not the tab strip drawn folded**
 (`Phones.dc.html` note 8, busk-further plan §11): Rig focus exists to give the band the height,
 the full tab strip wraps on a phone and takes it back, and a page is chosen in Split. **The Cells
-chip is not on the folded rig strip**, by decision (session 8): `Focus` and `Phones` draw the strip
-without it and `Cells` draws it with, and the strip carries what a press must be *honest* about,
-where the chip is a *write*. **Below `md` Rig focus stacks every row two tiles across, scrolling
+menu is not on the folded rig strip** — the compact boards' fold — by decision (session 8): `Focus`
+and `Phones` draw the strip without it and `Cells` draws it with, and the strip carries what a press
+must be *honest* about, where the menu is a *write*. On the desk board the fold is the band's own
+controls row, which carries it in every shape by the 2026-09-21 decision that no control moves. **Below `md` Rig focus stacks every row two tiles across, scrolling
 vertically with the band** (`Phones` note 6, `RigBand`'s `stackRows`, which `BuskingView` sets
 for the **narrow board only** — the short board is compact too but wider than `md`, and keeps its
 sideways rows): it is D15's replacement for the narrow-width target sheet, and a sideways scroll
 per row on a phone defeats the point of a list; Split there keeps the one sideways row with the
-row chip. **The Focus control is
-on the page strip in every shape** — below the band in Split and Pads, on the folded strip at the
-bottom in Rig, so Rig focus always has its way back — one strip component, placed twice, the
-control travelling with it through its `controls` slot; `RigStrip` carries only its chevron. The handle and the segmented control are **one setting** (D6): one
-more than the last row is Rig focus, one fewer than the first is Pads, so the handle's buttons are
-never disabled at the ends. It is drawn for a **one-row rig too** (D6 says 1…N; hiding it below two
-rows left the segmented control as the only route) and **hidden off the desk board** — below `md`
-and on the short board, where the band is one row with a row chip and the segmented control is the
-route. **Edit mode forces Split** for its duration, because a palette drag
+row chip. **The band's controls row is the same row in every shape, and the Focus control and
+*Edit layout* / *Done* end it** (2026-09-21): on the desk board the band draws a label row (summary,
+family pill, desk chip) and under it a controls row (the Cells menu and its steps, the verbs, then
+the host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by `BuskingView`) in
+Split, Rig **and Pads**, where the band is `focus="pads"`: its two rows and the grip, no rows, in
+place of `RigStrip`, which is the compact boards' fold. The page strip below is tabs and the page
+chip and nothing else. The Focus control was on the page strip and moved with the fold — below the
+band in Split and Pads, at the bottom of the body in Rig — and then briefly on the band's one
+label row, which a desk width with the sidebar open filled to wrapping. **The handle is `RigHandle`,
+one grip in three shapes**: in Split a drag (a focusable `role="separator"`) that snaps to whole
+lines on release — every line is drawn while it is held and **the clip is the snap**: dragged into
+the Pads region the rows clip to nothing, into the Rig region the clip lifts and the rows stretch to
+take the page body's room, and between them the rows' bottom edge follows the pointer — cut at it
+above the tiles, extended to it below, so a drag past the last line visibly pushes the page down —
+so the band already has the shape the release will give it (a badge naming the shape was tried and read as a status box; there is none);
+`snapRigRows` is the pure rule and the arrow keys step it one line at a time — and in Pads and Rig
+a **chevron pill** drawn where the drag would be, a press on it returning to Split, pointing the way
+the rows will come; it replaced the strip's *Unfold the rig* chevron on the desk board. There is **no count caption**: *1 of 2 rows*
+said nothing the rows did not and made the snap to Pads or Rig a caption change the eye missed. The
+handle and the segmented control are **one setting** (D6): past the last line **or within 40px of
+the column's bottom** (`data-busk-column`, read as the drag's floor) is Rig focus, above the first
+line's middle is Pads, so it is never stuck at either end. The floor rule exists because on a rig
+taller than the window the last line's bottom is below the viewport and Rig was unreachable by drag —
+reported from the desk as the snap working upward only — and the grip takes pointer capture so a
+drag that runs off the bottom of the window still delivers its release. It is drawn for a **one-line
+rig too** (D6 says 1…N; hiding it below two rows left the segmented control as the only route) and
+**hidden off the desk board** — below `md` and on the short board, where the band is one row with a
+row chip and the segmented control is the route. **Edit mode forces Split** for its duration, because a palette drag
 needs both regions, and restores the window's focus on Done by never having written it; the
 control is disabled while editing rather than hidden, still lighting the stored focus, which is
 what Done returns to. A project with **no pages** forces Split too: its first-open screen lives in
@@ -848,9 +870,20 @@ tab strip and the tab when the fact names a live tab and `SideSheetFold` (the sh
 the beat, master 1's tempo, one glyph per live tab, the selection's colour off the stage's colour
 dispatch, the head count) otherwise. What *is* kept beside it is the last tab that was open — a memory, not a flag —
 so a MIDI `{sheet: 'toggle'}` **and the fold's chevron** unfold onto the tab the operator had —
-both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`
-mounted unchanged** inside the sheet, **Colour is `ColourSheet`** and **Spread is `SpreadSheet`**
-(both below). All three have landed, and `LIVE_SHEET_TABS` stays the one list rather than
+both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`**
+inside the sheet — filling the width the sheet is dragged to since 2026-09-21, where it was a fixed
+288px column, and drawing no heading or caption (the usage badge's sentence is on the badge's own
+title) — **Colour is `ColourSheet`** and **Spread is `SpreadSheet`** (both below). **None of the three
+draws a heading**: the tab strip names the tab and the rig band's label row already says what is
+selected and under which mask. **Colour and Spread keep their verbs in a static footer** under the
+tab's one scroller, the save first on both (*Save as template…* / *Save as Look…*), so the two tabs
+put their save in one place; the Colour footer is its own `@container` and *Pick* and *Spread…* fold
+to icons below `SHEET_FOOTER_WORDS` (340px), since at the sheet's 320px default the worded three
+wrapped. The Spread footer also carries **Live** beside **Apply** — with its word at every width,
+since *Save as Look… · Live · Apply* fits the floor — and while Live is on Apply reads *Send again*
+and stays pressable, the un-deduped resend. Their pickers are `fluid` (`ColourPickerBody`), taking the sheet's
+width, and their picker rows are padded to the knob's half-width — a tab body scrolls, a scroller
+clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All three have landed, and `LIVE_SHEET_TABS` stays the one list rather than
 collapsing into the sheet vocabulary: a fourth tab would land the way Colour and Spread did,
 **hidden** there until its session — adding a tab to that list lights it in the strip, the fold's
 glyph row, the Screens sheet's Sheet segment and the toggle's memory at once — because a tab with
@@ -885,8 +918,8 @@ draws that strip at 44 — **the commit wins**, as elsewhere in this doc.
 preference in `ProgrammerWorkspace`; this sheet's fold is `busk.sheet === 'none'`, a per-tab fact
 the announce, ⌘K, the Screens sheet and MIDI all write. Nor is Escape: a *docked* panel takes it on
 neither view, and only the overlay arms do — the rail's through its own window listener, this one's
-through Radix. The busk sheet has no resize handle either; the rail's width is a stored desk
-preference with a drag, and the sheet is a fixed 288px.
+through Radix. (The sheet had no resize handle and a fixed 288px until both panels took the one
+drag below.)
 
 **Both panels are dragged to width by one piece of code** — `useSidePanelResize` and
 `SidePanelResizeHandle`, the rail's drag lifted out so the busk sheet is resized by it rather than
@@ -976,8 +1009,8 @@ colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has 
 for a layer to follow, and *Save as template…* (`NewTemplateFromSelectionSheet` over the sheet's
 targets, family Colour) is the route to something trackable. **The family mask is not consulted**:
 the desk's mask gates presses, not value writes, so the sheet does not refuse under a Position
-marquee — the header says what it is about to do (*Colour of 14 heads · writes to Local*) and reads
-the family pill, the honest answer the programmer's Set gives. A *Recent* chip is a press and goes
+marquee — the rig band's family pill, one row up, is where the mask is read (the tab's own header
+said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A *Recent* chip is a press and goes
 through `useTemplatePress` under the mask like any other. The writes go through
 `hooks/useLivePush.ts`, the tempo fader's discipline lifted out of `BuskSpeedRail` and made generic
 over the value: dedupe on an equality, a 50 ms floor, a deferred value sent when the floor lifts,
@@ -1007,9 +1040,10 @@ asked from a click — into the picker *without writing*: the first head in rig 
 normalised to full brightness, emitters folded in — and **only heads with a colour descriptor**: the
 dispatch answers a gel or the default tungsten for a colourless head, which is no colour this sheet
 could write, so a dimmer-only par in the selection is neither read nor a reason to say *mixed*. The rig tiles report, and the sheet mounts a hidden leaf per
-selected head as well, so Pick answers in Pads focus with the tiles folded away. **The hex beside
+selected head as well, so Pick answers in Pads focus with the tiles folded away. **The hex under
 the picker is a read-out, not a field** (session 8's call): the typed route is R/G/B, as the
-programmer's colour cell has no hex field either. The *Spread to a
+programmer's colour cell has no hex field either; it sits beside the emitter count with the swatch
+and the *mixed* marker, where the heading used to carry them. The *Spread to a
 second colour…* button — a plain button with a verb, since it opens a tab and holds no state a
 `role="switch"` could ever read as checked — hands the current channels to `onSpread`, which both sheet hosts wire
 (`SideSheet.tsx`'s `useSpreadSeed`): it opens the Spread tab with *From* set to their **RGB** —
@@ -1030,23 +1064,19 @@ fixture has and what a colour means on a head with amber — the same rule that 
 `templateIntent.ts` a serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per
 family over `templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference
 through `colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an
-emitter) and `spreadIntent.test.ts` asserts its import list reaches no resolver. **The preview
-strip is drawn from the answer** — one bar per head, the `written[]` heads in the order the desk
-wrote them (rig order) and then the `skipped[]` heads, dimmed with the desk's reason on their
-titles, a multi-head fixture's cells folded into its bar (`previewBarsOf`). A single-head bar
-carries the **value with the head's name under it**, as `Spread` draws it; a folded bar has no one
-value to state and carries its name alone, its values on its title. A skipped head sits
-after the written ones rather than in its rig position because the answer is two lists with no
-index, and recovering a position here would be a second copy of an order the desk owns. The strip
-is empty until the desk has answered, and it is cleared by a refusal, a property change and a
-selection change — it says it is the answer to *this* spread, and must not outlive the state it
-describes. The strip draws the answer to the **latest** request only: Live keeps several in
-flight and their answers can land out of order;
+emitter) and `spreadIntent.test.ts` asserts its import list reaches no resolver. **There is no
+preview strip** (2026-09-21): there was one, drawn from `written[]` and `skipped[]` — one bar per
+head in the desk's order — and it went because it cost the tab its height and the rig itself is the
+preview. The rule it embodied stands and is why nothing replaced it client-side: the tab never shows
+what it thinks the desk *would* do. The desk's answer is read for `skippedFamilies` alone, and only
+the **latest** request's: Live keeps several in flight and their answers can land out of order, so a
+property or selection change disowns whatever is in flight (`requestSeq`).
 `SpreadSheet.test.tsx` asserts the file never imports `sheet/fanMath.ts`, the client fan that lerps
 bytes over rows it can see. The family segment is **Intensity · Colour · Position · Beam** with a
 **Property** row beneath it where a family holds more than one (zoom and frost under Beam): the
 board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each
-drawn as a picture); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
+drawn as a picture — Wings as **two strokes meeting at a marked centre**, since its eight fractions
+are Mirror's and one polyline through them *was* Mirror's V); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
 `LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
@@ -1058,12 +1088,14 @@ hard stop. *Over: Cells* is enabled only where a
 selected fixture has elements, with the cell count (`selectedCells` in `lib/cellsSubSelection.ts`, the
 Cells chip's own expansion). **Live** sends every
 adjustment through `useLivePush` with an equality over the whole request, the release read from the
-window as the Colour tab's is; off, only *Apply* writes, and an explicit Apply always sends. The
+window as the Colour tab's is; off, only *Apply* writes. An explicit Apply always sends — and stays
+pressable while Live is on, reading *Send again*, because it is the one un-deduped resend after a
+write the desk refused; turning Live on sends nothing by itself. The
 window release flushes only while Live is on, since the switch can be toggled from the keyboard
 with no `pointerup` to clear the gesture; the typed fields keep a draft and commit only a number,
 so clearing one writes nothing and a leading minus can be typed; and the `skippedFamilies` toast is
 keyed like the endpoint's error toast, since a Live drag under a mask answers it on every write.
-Under an empty selection nothing is sent and the strip's own sentence is toasted — the desk would
+Under an empty selection nothing is sent and the tab's own sentence is toasted — the desk would
 answer `SPREAD_NEEDS_SELECTION` otherwise, and `errorToastMiddleware` renders every 400 (the
 mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replaces one toast), so the
 tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property outside the
@@ -1175,14 +1207,17 @@ whole bar covers a press on its cells, a layer on four cells does not cover the 
 rule — `lookPresence.test.ts`'s cells block pins that a cell selection lights from what `applied`
 names and from nothing here.
 
-**The Cells chip is one desk op, and an unlinked window mirrors it** (D12). Five modes on its face
-— All · Odd · Even · Next · Prev — and four in its menu — 1st half · 2nd half · Invert · Masters only
-— each a press of `selection.subselect {mode}` (`api/selectionApi.ts`'s `subselect`,
+**The Cells menu is one desk op, and an unlinked window mirrors it** (D12, revised 2026-09-21). The
+seven **filters** — All · Odd · Even · 1st half · 2nd half · Invert · Masters only — in one menu whose
+label names the filter last pressed, and *Prev* / *Next* as two **step buttons** beside it
+(`SUBSELECT_FILTER_MODES` / `SUBSELECT_STEP_MODES`), because a step moves the selection along the rig
+where a filter narrows it, and the two read as one control only while they shared a chip's face —
+each a press of `selection.subselect {mode}` (`api/selectionApi.ts`'s `subselect`,
 `store/selection.ts`'s `subselectDeskSelection`; `SubselectMode` is the backend's nine names, pinned
 against the server's fixture) while the window follows the desk, which rewrites the selection's
 **targets** over rig order, keeps the mask, and answers with the ordinary `selection.state` frame.
-The desk keeps **no** sub-selection state, so nothing on the chip's face is derived from the
-selection: *Cells: Odd* is only the mode last pressed here. Unlinked, `useBuskingSelection`'s
+The desk keeps **no** sub-selection state, so nothing on the menu's face is derived from the
+selection: *Cells: Odd* is only the filter last pressed here, and a step is never remembered as it. Unlinked, `useBuskingSelection`'s
 `subselect` runs `lib/cellsSubSelection.ts` over the tab's copy — and **only once the rig has
 answered** (`RigBand`'s own `rigLoaded` guard), because `effectiveRig(undefined, …)` is the show-all
 fallback and a press before the query lands would walk the wrong order with no frame to correct it — the nine modes over
@@ -1237,14 +1272,29 @@ takes either kind; `setTile` is the cell-mode mutator and leaves a group alone).
 *replaces* it (a group, a whole fixture, a single-cell tile — `Bar L · Cell 3`), the fixture's own
 name where the cell names *compose on* it (per cell, halves), and every drawn sibling of one stored
 tile takes the one label. `tileInput` sets the label **before** the GROUP arm's early return — a
-label set only on the patch path silently reverted every group rename on the drained response. The `n of N rows`
-handle (D6) reads and writes the window's `busk.rigRows` (§Focus and the side sheet), snaps at
-both ends, is drawn for a one-row rig and hidden off the desk board (below `md` and on the short
-board alike, `!compact`); edit mode shows every row, since a
-hidden one cannot take a drop. **The label row wraps rather than folding**: the verbs are a fixed
-~330px and at a tablet width they take a second line while the summary keeps a readable floor
-(seen on the desk at 800px) — Highlight does not fold into the menu at 1100 the way row C's does,
-by decision (session 8). Below `md` the band is one row with a row chip and the verbs in a menu,
+label set only on the patch path silently reverted every group rename on the drained response. **A row is laid
+out the way a bank is** (2026-09-21): it carries a `width` share in twelfths and a `flow` — the
+bank's two facts, plus `SCROLL`, the sideways-scrolling line every row was and still the default
+(`rowFlow` / `rowWidth` read an absent field as the default, for a desk that predates the two
+columns) — set from the row's `…` menu in edit mode (`setRowLayout`). The rows fill a twelve-track
+grid in order (`rigLines`), so two half-width rows share a line, and the band's unit is the **line**:
+the handle counts lines and `clampRigRows` clamps to them. `toRigRequest` sends the two only where
+they differ from the defaults, since the desk's Json refuses a key it does not know and a desk
+mid-upgrade must keep accepting a rig nobody has re-laid-out. The drag handle (D6, §Focus and the
+side sheet) reads and writes the window's `busk.rigRows`, snaps past both ends, is drawn for a
+one-line rig and hidden off the desk board (below `md` and on the short board alike, `!compact`);
+edit mode shows every row, since a hidden one cannot take a drop. **The controls row folds to icons
+before it wraps** (2026-09-21): the band is its own `@container`, every verb is the desk's outline
+button with its icon and the words hide below `@[860px]` (`VERB_WORD_CLASS`, from a measured 847px
+worded row), the Cells label and the Focus labels below `@[680px]`; `flex-wrap` stays as the last
+resort for a row narrower than the icons. They were 1150 and 1000 while the verbs shared the label
+row, and at those an 1122px window fell to icons for nothing. It was one row with the label row's summary and chips, fixed ~330px word buttons
+included, which took a second line at a tablet width and twelve controls at a desk width. **A
+tile's cross and menu sit inside its top-right corner**: hanging 7px off the corners they were
+clipped by a `SCROLL` row's body and overlapped the next tile's at the 8px gap. **A selected pip is
+the accent, solid** (`Cells.dc.html`'s `pip.on`), and **a dark head draws no live bar** — the bar
+sits inside the tile's border and is transparent at zero intensity, where a 15% floor painted a
+faint line over a dark spot's bottom edge. Below `md` the band is one row with a row chip and the verbs in a menu,
 and there is no editing there; in Rig focus below `md` every row is stacked two tiles across
 (§Focus and the side sheet).
 
@@ -1304,9 +1354,11 @@ pages" after a fourth was added. Intended — a pad's face is frozen between rea
 build anything that presents those two fields as live**.
 
 **Drawing the held record from its own DTO makes `HandChip` the widest blast radius on the desk, and
-an empty list is what found it.** Both of lighting7's converters set `encodeDefaults = false`, so a
-defaulted **empty** collection is not serialised as `[]` — it vanishes from the frame, and a client
-that declares the field required reads `undefined`. An *effect* template holds no rows, so
+an empty list is what found it.** lighting7's **WebSocket and sync converters** set
+`encodeDefaults = false` (the REST `json()` is Ktor's `DefaultJson` and *does* encode defaults — a
+fact the rig row's `flow` / `width` test pins, and which four docblocks had backwards until
+2026-09-21), so on a socket frame a defaulted **empty** collection is not serialised as `[]` — it
+vanishes, and a client that declares the field required reads `undefined`. An *effect* template holds no rows, so
 `TemplateDto.rows` did exactly that, and `templateRowsSwatch` threw on `rows.find`. Because this
 chip is mounted in `Layout.tsx` and draws through `padFaceOf`, **every route** sat behind the error
 boundary for as long as the desk held one.

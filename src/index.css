@@ -220,6 +220,17 @@
   height: 20px !important;
 }
 
+/* The fluid picker: the busk view's side sheet, which is dragged to width (`fluid` on
+   `ColourPickerBody`). The square takes the row's width beside the R/G/B boxes and keeps the
+   pinned height; `flex: 1 1 0%` with `min-width: 0` is what lets it shrink below 200px in a
+   narrow sheet as readily as it grows in a wide one. Here for the reason the compact rule is:
+   the width above is `!important` and a utility would lose to it. */
+.colour-picker-fluid .react-colorful {
+  width: auto !important;
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
 /* Cue slot edit mode wiggle animation */
 @keyframes wiggle {
   0%, 100% { transform: rotate(0deg); }

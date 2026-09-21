@@ -48,17 +48,37 @@ export function buskingTargetKey(target: BuskingTarget): string {
 
 /**
  * `Front wash, Bar L · 14 heads`, or `nothing selected` — the one summary the rig band and its
- * folded strip both draw. A cell names its parent and itself; a group counts its members.
+ * folded strip both draw. A group counts its members. **Cells fold into their parent**, named once
+ * with the tile's own `4 of 8` (`Cells.dc.html`): six selected cells of a twelve-cell bar read
+ * `Bar L · 6 of 12`, where naming each cell read `Bar L · Head 1, Bar L · Head 2, …` and was
+ * truncated to nothing useful by the fourth. Parents keep their first-selected order.
  */
 export function summariseSelection(selected: readonly BuskingTarget[]): string {
   if (selected.length === 0) return 'nothing selected'
-  const names = selected.map((target) =>
-    target.type === 'group'
-      ? target.name
-      : target.element != null
-        ? `${target.fixture.name} · ${target.element.displayName}`
-        : target.fixture.name,
-  )
+  type Entry = { name: string } | { parentKey: string; name: string; count: number; total: number }
+  const entries: Entry[] = []
+  const cellsByParent = new Map<string, Extract<Entry, { parentKey: string }>>()
+  for (const target of selected) {
+    if (target.type === 'group') {
+      entries.push({ name: target.name })
+    } else if (target.element != null) {
+      const parent = cellsByParent.get(target.fixture.key)
+      if (parent != null) {
+        parent.count += 1
+      } else {
+        const entry = { parentKey: target.fixture.key, name: target.fixture.name, count: 1, total: target.fixture.elements?.length ?? 0 }
+        cellsByParent.set(target.fixture.key, entry)
+        entries.push(entry)
+      }
+    } else {
+      entries.push({ name: target.fixture.name })
+    }
+  }
+  const names = entries.map((entry) => {
+    if (!('parentKey' in entry)) return entry.name
+    if (entry.total > 0) return `${entry.name} · ${entry.count} of ${entry.total}`
+    return `${entry.name} · ${entry.count} ${entry.count === 1 ? 'cell' : 'cells'}`
+  })
   const heads = selectedHeadCount(selected)
   return `${names.join(', ')} · ${heads} ${heads === 1 ? 'head' : 'heads'}`
 }

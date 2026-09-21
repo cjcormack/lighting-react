@@ -4,14 +4,23 @@ import { isBuskFocus, setBuskFocus, useBuskFocus, type BuskFocus } from '@/lib/b
 import { cn } from '@/lib/utils'
 
 /**
- * The **Focus** segmented control — Split · Pads · Rig — on the page strip beside *Edit layout*
- * (busk-further plan D5–D6, `Focus.dc.html`). It reads and writes the window's `busk.focus` and
- * nothing else, so it and the rig band's rows handle are one setting: the handle dragged past the
- * last row lands on *Rig* here, and to none on *Pads*.
+ * The **Focus** segmented control — Split · Pads · Rig (busk-further plan D5–D6, `Focus.dc.html`).
+ * It reads and writes the window's `busk.focus` and nothing else, so it and the rig band's rows
+ * handle are one setting: the handle dragged past the last row lands on *Rig* here, and to none on
+ * *Pads*.
  *
- * Glyphs only below `sm`, one control still. Disabled while editing: edit mode forces Split for its
- * duration, because a palette drag needs both regions on screen, and restores the window's focus on
- * Done — the fact is never written by entering edit mode, so there is nothing to restore *to*.
+ * **It sits at the end of the rig band's controls row in every shape** (2026-09-21) — Split, Rig
+ * and, on the desk board, Pads, where the band is drawn folded to its two rows; off the desk board
+ * it is on the rig strip, or the short board's merged row. It used to be on the page strip — below
+ * the band in Split and Pads, on the folded strip at the bottom in Rig — so it moved between the
+ * middle and the bottom of the body as the operator pressed it, which read as confusing. The host
+ * mounts it; this component only draws it.
+ *
+ * Labels by [labelClass], which the host sets from its own container query — the band folds them
+ * with its verbs — glyphs alone otherwise, one control still. Disabled while editing: edit mode
+ * forces Split for its duration, because a palette drag needs both regions on screen, and restores
+ * the window's focus on Done — the fact is never written by entering edit mode, so there is nothing
+ * to restore *to*.
  */
 const FOCUSES: readonly { id: BuskFocus; label: string; icon: LucideIcon; title: string }[] = [
   { id: 'split', label: 'Split', icon: Rows2, title: 'Split: rig rows above, the page below' },
@@ -19,7 +28,16 @@ const FOCUSES: readonly { id: BuskFocus; label: string; icon: LucideIcon; title:
   { id: 'rig', label: 'Rig', icon: Lightbulb, title: 'Rig: every row at full size, the page folds to its strip' },
 ]
 
-export function BuskFocusControl({ disabled = false, className }: { disabled?: boolean; className?: string }) {
+export function BuskFocusControl({
+  disabled = false,
+  className,
+  labelClass = 'hidden sm:inline',
+}: {
+  disabled?: boolean
+  className?: string
+  /** The segment labels' class — the host's fold, since only the host knows how wide its row is. */
+  labelClass?: string
+}) {
   const focus = useBuskFocus()
   return (
     <ToggleGroup
@@ -43,7 +61,7 @@ export function BuskFocusControl({ disabled = false, className }: { disabled?: b
           className="h-6 gap-1 px-2 text-xs"
         >
           <entry.icon className="size-3.5" />
-          <span className="hidden sm:inline">{entry.label}</span>
+          <span className={labelClass}>{entry.label}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

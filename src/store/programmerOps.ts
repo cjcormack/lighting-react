@@ -456,15 +456,16 @@ export const programmerOpsApi = restApi.injectEndpoints({
     /**
      * `POST /projects/{id}/programmer/spread` — fan, resolved on the desk (busk-further plan D9).
      *
-     * A REST mutation for this file's reason: the Spread tab's preview strip is drawn from the
-     * structured reply and nothing else, and the programmer WS channel has no reply to draw from.
+     * A REST mutation for this file's reason: the tab reads the **structured reply** — the desk's
+     * `skippedFamilies`, toasted in the press's vocabulary (a preview strip read `written[]` too,
+     * until 2026-09-21) — and the programmer WS channel has no reply to read.
      * It invalidates nothing — every write lands as an ordinary Local entry and rides
      * `programmer.entryChanged`, which is how the rig tiles and the grid already learn of it.
      *
      * **Not** in `SILENT_ENDPOINTS`: the two 400s (`SPREAD_INVALID`, `SPREAD_NEEDS_SELECTION`) are
      * toasted by `errorToastMiddleware` under the endpoint's own id, so a Live gesture that keeps
      * failing replaces one toast rather than stacking twenty. The tab pre-empts the second with its
-     * own sentence (the strip's) and never sends under an empty selection.
+     * own sentence and never sends under an empty selection.
      */
     spread: build.mutation<SpreadResponse, SpreadRequest>({
       query: ({ projectId, ...body }) => ({

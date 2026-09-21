@@ -51,7 +51,7 @@ export interface SelectionSource {
 
 /**
  * The ways `selection.subselect` rewrites the selection's **targets** (busk-further plan D12) — the
- * Cells chip's face and menu, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
+ * Cells menu and its two step buttons, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
  * button, sharing one rule on the desk. The nine names mirror `SubselectMode` in
  * lighting7's `state/DeskSelection.kt`, and `cellsSubSelection.test.ts` pins the list against the
  * server's own fixture: a tenth mode there fails here. The frame carries the name and nothing else —

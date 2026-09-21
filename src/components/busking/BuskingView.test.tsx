@@ -18,18 +18,27 @@ configure({ asyncUtilTimeout: 5000 })
 // pad's press handler is built at render time, so a test that fires a `selection.state` frame and
 // presses has to wait for the *render*, not merely for the cache write — `findByTestId` on this
 // content is that wait, and without it the press sends the pair from the frame before last.
-vi.mock('./RigBand', () => ({
-  RigBand: ({ selectedTargets, focus, compact }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean }) => (
-    <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'}>
-      {[...selectedTargets.keys()].join(' ') || 'none'}
-    </div>
-  ),
-}))
+vi.mock('./RigBand', async () => {
+  const real = await import('./RigBand')
+  return {
+    FOCUS_WORD_CLASS: real.FOCUS_WORD_CLASS,
+    // The band draws the host's `controls` at its label row's end — the Focus control lives there.
+    RigBand: ({ selectedTargets, focus, compact, controls }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean; controls?: React.ReactNode }) => (
+      <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'}>
+        <span data-testid="target-band-selection">{[...selectedTargets.keys()].join(' ') || 'none'}</span>
+        {controls}
+      </div>
+    ),
+  }
+})
 vi.mock('./RigStrip', () => ({
-  RigStrip: ({ onUnfold }: { onUnfold: () => void }) => (
-    <button data-testid="rig-strip" onClick={onUnfold}>
-      unfold
-    </button>
+  RigStrip: ({ onUnfold, controls }: { onUnfold: () => void; controls?: React.ReactNode }) => (
+    <div data-testid="rig-strip-row">
+      <button data-testid="rig-strip" onClick={onUnfold}>
+        unfold
+      </button>
+      {controls}
+    </div>
   ),
   // The strip's pieces, as the short board's merged row mounts them.
   RigStripContent: ({ onUnfold }: { onUnfold: () => void }) => (
@@ -459,7 +468,7 @@ describe('the busk view', () => {
   })
 
   describe('focus — the three shapes', () => {
-    it('is Split by default: the band over the page strip, with the Focus control on the strip', async () => {
+    it('is Split by default: the band over the page strip, with the Focus control on the band', async () => {
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
       expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
@@ -468,18 +477,21 @@ describe('the busk view', () => {
       expect(document.querySelector('[data-busk-page-strip="open"]')).not.toBeNull()
     })
 
-    it('folds the rig to the strip in Pads focus, and the strip’s chevron unfolds Split', async () => {
+    it('folds the band in Pads focus on the desk board — the band itself, with its controls, and no strip', async () => {
       setBuskFocus('pads')
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
-      expect(screen.getByTestId('rig-strip')).toBeTruthy()
-      expect(screen.queryByTestId('target-band')).toBeNull()
-      fireEvent.click(screen.getByTestId('rig-strip'))
-      expect(getBuskFocus()).toBe('split')
+      // The desk board's Pads is the band folded (`focus="pads"`), so the controls row is the same
+      // row in every shape; the 36px strip is the compact boards' fold.
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
+      expect(screen.queryByTestId('rig-strip')).toBeNull()
+      expect(screen.getByTestId('target-band').querySelector('[aria-label="Focus"]')).not.toBeNull()
+      expect(document.querySelector('[data-busk-page-strip="open"]')!.querySelector('[aria-label="Focus"]')).toBeNull()
+      act(() => setBuskFocus('split'))
       expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
     })
 
-    it('fills the body with the band in Rig focus and folds the page to the board’s 40px strip at the bottom — name, bank count, the Focus control', async () => {
+    it('fills the body with the band in Rig focus and folds the page to the board’s 40px strip at the bottom — name and bank count', async () => {
       setBuskFocus('rig')
       draw([generated])
       await screen.findByText('Ballads')
@@ -493,9 +505,18 @@ describe('the busk view', () => {
       expect(strip).toHaveTextContent('1 bank')
       expect(within(strip as HTMLElement).queryByRole('button', { name: 'Ballads' })).toBeNull()
       expect(within(strip as HTMLElement).queryByRole('button', { name: /^Page:/ })).toBeNull()
-      // The Focus control travels with the folded strip, and the band precedes it in the column.
-      expect(strip.querySelector('[aria-label="Focus"]')).not.toBeNull()
-      expect(screen.getByTestId('target-band').compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // *Edit layout* and the Focus control are on the band's controls row, where they are in every
+      // shape — so Rig focus has its way into edit mode, and the strip carries neither.
+      expect(within(strip as HTMLElement).queryByRole('button', { name: 'Edit layout' })).toBeNull()
+      expect(strip.querySelector('[aria-label="Focus"]')).toBeNull()
+      const band = screen.getByTestId('target-band')
+      expect(band.querySelector('[aria-label="Focus"]')).not.toBeNull()
+      expect(within(band).getByRole('button', { name: 'Edit layout' })).toBeEnabled()
+      expect(band.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // And pressing it enters edit mode, which forces Split: the page unfolds.
+      fireEvent.click(within(band).getByRole('button', { name: 'Edit layout' }))
+      expect(await screen.findByText('Done')).toBeTruthy()
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
     })
 
     it('moves the fact from the segmented control', async () => {
@@ -510,14 +531,14 @@ describe('the busk view', () => {
       setBuskFocus('pads')
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
-      expect(screen.getByTestId('rig-strip')).toBeTruthy()
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
       fireEvent.click(screen.getByRole('button', { name: 'Edit layout' }))
       expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
       expect(screen.getByRole('radio', { name: 'Split' })).toBeDisabled()
       // The fact itself is untouched: Done reads it back.
       expect(getBuskFocus()).toBe('pads')
       fireEvent.click(screen.getByText('Done'))
-      expect(await screen.findByTestId('rig-strip')).toBeTruthy()
+      await waitFor(() => expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads'))
     })
 
     it('forces Split on a project with no pages, so the first-open screen is never folded away', async () => {
@@ -535,7 +556,7 @@ describe('the busk view', () => {
       await screen.findByRole('button', { name: 'Ballads' })
       expect(getBuskFocus()).toBe('pads')
       expect(getBuskSheet()).toBe('none')
-      expect(screen.getByTestId('rig-strip')).toBeTruthy()
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
       // No transient: the mirror waited for the decision to render, so the URL never held the
       // defaults the window was arriving from.
       expect(shapeSeen).toEqual(['pads/none'])
@@ -761,7 +782,7 @@ describe('the busk view', () => {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 20))
       })
-      expect(screen.getByTestId('target-band').textContent).toBe('group:Movers')
+      expect(screen.getByTestId('target-band-selection').textContent).toBe('group:Movers')
       expect(await press(calls)).toEqual({
         targets: [{ type: 'group', key: 'Movers' }],
         families: ['POSITION'],

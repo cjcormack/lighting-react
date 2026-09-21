@@ -68,6 +68,23 @@ import { useRigEdit } from './RigEditProvider'
  * `Bar L` under tiles reading `Bar L · Cell 1…4`, and every drawn sibling takes the one label,
  * being one stored tile. Saving that name back clears the label rather than storing a copy of it,
  * so there is a way back to the record's name without a second verb.
+ *
+ * **The two edit controls sit inside the tile's top-right corner** (2026-09-21), the cross and the
+ * menu side by side, and the tile pads its name away from them. They hung off the corners at −7px,
+ * which failed twice at once on a real row: a `SCROLL` row's body clips its overflow, so the top
+ * 7px of both were cut off, and at the row's 8px tile gap the menu of one tile and the cross of
+ * the next overlapped by 6px. Inside the border nothing clips and nothing collides.
+ *
+ * **A selected pip is the accent, solid** (`Cells.dc.html`: `pip.on { background: var(--pri) }`),
+ * where it was the stage's colour under a 1px ring — which on a dark bar was a dark pip with a
+ * hairline, and read as nothing at a glance. The live colour is the unselected pip's; a selected
+ * one says *selected* first.
+ *
+ * **The live bar sits inside the border and is not drawn for a dark head.** It was `inset-x-0
+ * bottom-0` at a 15% floor, so a spot at zero intensity wore a faint blue line *over* its bottom
+ * border — the "weird bit of styling" reported on the desk. Inside the border it cannot repaint
+ * the frame, and a head at zero draws no bar rather than a dim one; the pips keep their floor,
+ * since a pip at zero would otherwise vanish and take its press target with it.
  */
 
 /** What a fixture tile's appearance leaf needs, looked up once by the band and threaded down. */
@@ -107,6 +124,10 @@ export interface RigTileProps {
 
 const TILE_CLASS =
   'relative flex items-center gap-2 whitespace-nowrap rounded-lg border px-3.5 select-none touch-manipulation text-sm transition-all'
+
+/** One of the two edit controls in the tile's corner: an 18px round button, inside the border. */
+const TILE_CONTROL_CLASS =
+  'grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'
 
 function presenceClass(presence: EffectPresence) {
   return cn(
@@ -184,6 +205,8 @@ export function RigTile({
         : null
 
   const menu = editing && inDocument && stored != null
+  // Both edit controls live inside the top-right corner; the name keeps clear of them.
+  const editControls = editing && inDocument
   // The cell modes are a multi-head fixture's alone (D3); a cell tile and a group have none.
   const multiHead =
     stored != null && stored.kind === 'FIXTURE' && stored.elementKey == null && (stored.patch?.elements?.length ?? 0) > 1
@@ -228,6 +251,8 @@ export function RigTile({
           editing ? (inDocument ? 'cursor-grab' : 'cursor-default') : 'active:scale-[0.96]',
           // Room for the bar and the pips under the name.
           cells.length > 0 && 'pb-2.5',
+          // Room for the cross and the menu in the corner.
+          editControls && 'pr-12',
         )}
       >
         <Icon className={cn('size-3.5 shrink-0', presence !== 'none' ? 'text-primary' : 'text-muted-foreground')} />
@@ -248,25 +273,27 @@ export function RigTile({
           onPressCell={onPressCell}
         />
       )}
-      {editing && inDocument && (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${tile.name} from the rig`}
-          className="absolute -top-[7px] -left-[7px] grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X className="size-2.5" strokeWidth={2.5} />
-        </button>
-      )}
-      {menu && (
-        <TileMenu
-          tile={stored}
-          name={tile.name}
-          multiHead={multiHead}
-          onSetMode={onSetMode}
-          onRename={() => setRenaming(true)}
-          onRemove={onRemove}
-        />
+      {editControls && (
+        <div data-rig-tile-controls className="absolute top-1 right-1 flex items-center gap-0.5">
+          {menu && (
+            <TileMenu
+              tile={stored}
+              name={tile.name}
+              multiHead={multiHead}
+              onSetMode={onSetMode}
+              onRename={() => setRenaming(true)}
+              onRemove={onRemove}
+            />
+          )}
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove ${tile.name} from the rig`}
+            className={TILE_CONTROL_CLASS}
+          >
+            <X className="size-2.5" strokeWidth={2.5} />
+          </button>
+        </div>
       )}
     </div>
   )
@@ -299,11 +326,7 @@ function TileMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Options for ${name}`}
-          className="absolute -top-[7px] -right-[7px] grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
+        <button type="button" aria-label={`Options for ${name}`} className={TILE_CONTROL_CLASS}>
           <MoreHorizontal className="size-3" />
         </button>
       </DropdownMenuTrigger>
@@ -407,11 +430,19 @@ function TileLive({
   )
 }
 
+/** A pip's colour: the stage's, with a floor so a dark cell is still a target. */
 function sliceStyle(appearance: FixtureAppearance, index: number | null) {
   const segment = index == null || index < 0 ? undefined : appearance.segments?.[index]
   const color = segment?.css ?? appearance.color
   const intensity = segment?.intensity ?? appearance.intensity
   return { background: color, opacity: 0.15 + 0.85 * Math.max(0, Math.min(1, intensity)) }
+}
+
+/** The bar's colour: the stage's, and **nothing at zero** — a dark head wears no line (file note). */
+function barStyle(appearance: FixtureAppearance, index: number | null) {
+  const segment = index == null || index < 0 ? undefined : appearance.segments?.[index]
+  const intensity = Math.max(0, Math.min(1, segment?.intensity ?? appearance.intensity))
+  return { background: segment?.css ?? appearance.color, opacity: intensity <= 0 ? 0 : 0.15 + 0.85 * intensity }
 }
 
 function LiveBar({
@@ -436,11 +467,16 @@ function LiveBar({
 }) {
   return (
     <>
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[3px] overflow-hidden rounded-b-lg">
+      {/* Inside the tile's 1px border, with the border's inner radius, so it never paints over the frame. */}
+      <span
+        aria-hidden
+        data-rig-tile-bar
+        className="pointer-events-none absolute inset-x-px bottom-px flex h-[3px] overflow-hidden rounded-b-[7px]"
+      >
         {slices == null ? (
-          <span className="flex-1" style={sliceStyle(appearance, null)} />
+          <span className="flex-1" style={barStyle(appearance, null)} />
         ) : (
-          slices.map((index, i) => <span key={i} className="flex-1" style={sliceStyle(appearance, index)} />)
+          slices.map((index, i) => <span key={i} className="flex-1" style={barStyle(appearance, index)} />)
         )}
       </span>
       {pips.length > 0 && (
@@ -647,9 +683,10 @@ function Pips({
             className={cn(
               'min-w-0 flex-1 rounded-[1px] transition-[height] duration-100',
               hot === cell.key ? 'z-10 h-11 ring-2 ring-primary' : 'h-2',
-              selected && hot !== cell.key && 'ring-1 ring-primary',
+              // Selected: the accent, solid, over whatever the stage says — the design's `pip.on`.
+              selected && 'bg-primary shadow-[0_0_0_1px_var(--background)]',
             )}
-            style={sliceStyle(appearance, index)}
+            style={selected ? undefined : sliceStyle(appearance, index)}
           />
         )
       })}

@@ -38,16 +38,19 @@ import { BuskPageChip } from './BuskPageChip'
  * is an ordinary save, so it already reports there (see `NON_SAVE_ENDPOINTS`, which the *press*
  * joins and the layout write deliberately does not).
  *
- * **`controls` is the Focus control and its neighbours** (busk-further plan session 4), handed in
- * by `BuskingView` rather than mounted here, because in Rig focus this strip is the *folded* page
- * at the bottom of the body and the control has to be there too, or Rig focus would have no way
- * back — one strip component, placed twice, and the control travels with it.
+ * **`controls` is whatever the host wants at the strip's end**, handed in by `BuskingView` rather
+ * than mounted here — the *Sheet* button off the desk board, and on the short board's merged row
+ * the Focus control and the edit toggle. On the desk board the strip carries **tabs and the page
+ * chip only** (2026-09-21): the Focus control and *Edit layout* / *Done* both live on the rig
+ * band's controls row, which is the same row in every shape, so nothing an operator presses moves
+ * as the shape changes. [EditLayoutToggle] is exported from here so the button keeps its rules
+ * (disabled with no pages; *Done* drawn on every board) wherever it is mounted.
  *
  * **Folded, it is the board's 40px strip and not the tab strip drawn folded** (`Phones.dc.html`
- * note 8, busk-further plan §11): the page's name, its bank count and the controls, nothing else.
- * Rig focus exists to give the band the height, and the full tab strip wraps on a phone and takes
- * it back. A page is chosen in Split; the fold says which one this window is on and offers the one
- * tap back.
+ * note 8, busk-further plan §11): the page's name, its bank count and the controls. Rig focus
+ * exists to give the band the height, and the full tab strip wraps on a phone and takes it back. A
+ * page is chosen in Split; the fold says which one this window is on, and the band's grip above it
+ * is the tap back.
  */
 
 function PageTab({
@@ -108,8 +111,10 @@ export interface BuskPageStripProps {
   onDelete: () => void
   /** Every page id, in the order wanted — the reorder route takes nothing less. */
   onReorder: (pageIds: number[]) => void
-  onToggleEditing: () => void
-  /** The Focus control (and, off the desk board, the sheet button), drawn beside *Edit layout* / *Done*. */
+  /**
+   * Drawn beside *Edit layout* / *Done*: the sheet button off the desk board, and on the short
+   * board's merged row the Focus control — which otherwise lives on the rig's top row, not here.
+   */
   controls?: ReactNode
   /** Rig focus: the 40px folded page at the bottom of the body — name, bank count, the controls. */
   folded?: boolean
@@ -121,12 +126,39 @@ export interface BuskPageStripProps {
   dense?: boolean
   /** Drawn before the tabs: the rig strip's pieces on the merged row. */
   leading?: ReactNode
-  /**
-   * Whether *Edit layout* is offered at all. Off below `md` and on the short board alike: the
-   * palette needs both regions on screen, and there is no room for both. `Done` is drawn whatever
-   * this says, so a window narrowed mid-edit can still leave the mode.
-   */
-  editable?: boolean
+}
+
+/**
+ * *Edit layout* / *Done* — the one edit toggle, mounted by the host on the rig band's controls
+ * row. The desk board's by decision (`editable`): below `md` the library palette is not shown, and
+ * on the short board there is no room for it beside the page — an edit mode with nothing to drag
+ * from, or nowhere to drop it, is a trap rather than a feature. `Done` is drawn whatever the board,
+ * so a window narrowed mid-edit can still leave the mode.
+ */
+export function EditLayoutToggle({
+  editing,
+  editable,
+  hasPages,
+  onToggle,
+}: {
+  editing: boolean
+  editable: boolean
+  hasPages: boolean
+  onToggle: () => void
+}) {
+  if (editing) {
+    return (
+      <Button size="sm" className="h-7 text-xs" onClick={onToggle}>
+        Done
+      </Button>
+    )
+  }
+  if (!editable) return null
+  return (
+    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onToggle} disabled={!hasPages}>
+      <Pencil className="size-3.5" /> Edit layout
+    </Button>
+  )
 }
 
 export function BuskPageStrip({
@@ -138,12 +170,10 @@ export function BuskPageStrip({
   onRename,
   onDelete,
   onReorder,
-  onToggleEditing,
   controls,
   folded = false,
   dense = false,
   leading,
-  editable = true,
 }: BuskPageStripProps) {
   const { pending, savedTick } = useSelector(selectSaveStatus)
   const [naming, setNaming] = useState<'create' | 'rename' | null>(null)
@@ -219,7 +249,8 @@ export function BuskPageStrip({
       data-busk-page-strip="open"
       data-busk-page-strip-dense={dense ? 'true' : undefined}
       className={cn(
-        'flex shrink-0 items-center px-4',
+        // `@container` for the Focus labels the merged row carries: they fold on a container query.
+        '@container flex shrink-0 items-center px-4',
         // The merged row is exactly 32px and never wraps — a second line would cost the pads the
         // row it was merged to save; the desk rows wrap, the verbs taking a second line at a
         // tablet width.
@@ -328,27 +359,8 @@ export function BuskPageStrip({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <Button size="sm" className="h-7 text-xs" onClick={onToggleEditing}>
-            Done
-          </Button>
         </>
-      ) : (
-        // The desk board's by decision (`editable`): below `md` the library palette is not shown,
-        // and on the short board there is no room for it beside the page — an edit mode with
-        // nothing to drag from, or nowhere to drop it, is a trap rather than a feature. `Done`
-        // above stays whatever the board, so a window narrowed mid-edit can still leave the mode.
-        editable && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={onToggleEditing}
-            disabled={pages.length === 0}
-          >
-            <Pencil className="size-3.5" /> Edit layout
-          </Button>
-        )
-      )}
+      ) : null}
       {/* Confirmed, unlike every other edit-mode gesture: the rest move pads about and are undone by
           moving them back, while this takes a whole arrangement away and the layout write has no
           undo. */}

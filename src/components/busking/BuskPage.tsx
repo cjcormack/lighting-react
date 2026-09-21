@@ -35,6 +35,9 @@ import type { PadBehaviour } from './padBehaviour'
 /** Below this many pixels of body width the columns of a row stack. See the docblock above. */
 export const STACK_BELOW_PX = 600
 
+/** The narrowest an editing column may be drawn: the bank header's controls fit above it, not below. */
+export const EDIT_COLUMN_MIN_PX = 150
+
 function BuskGutter({ row, column }: { row: number; column: number }) {
   const { editing, source } = useBuskEdit()
   const draggingBank = source?.type === 'busk-bank'
@@ -72,9 +75,14 @@ function PageRow({
 }) {
   const { editing, commit } = useBuskEdit()
 
+  // Editing, every column has a **floor** under its share: the bank header's grip, its name field
+  // and its controls need ~150px inside the bank's padding, and a quarter-width column of a
+  // four-column row beside the palette was ~120 — the controls ran past the bank's border. With
+  // the floor the row is wider than the body where it must be and the body scrolls sideways, which
+  // is the honest failure. Play mode keeps bare shares: a pad wraps and a name truncates.
   const tracks = editing
     ? [
-        ...row.columns.flatMap((column) => ['20px', `${column.width}fr`]),
+        ...row.columns.flatMap((column) => ['20px', `minmax(${EDIT_COLUMN_MIN_PX}px, ${column.width}fr)`]),
         '20px',
         // The `+ Bank` slot ends the row, and adds a *column* holding one empty bank — its label
         // says Bank because that is what the operator is making; its position says Column because
@@ -160,7 +168,7 @@ export function BuskPageBody({
   const { editing } = useBuskEdit()
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
+    <div data-busk-page-body className="@container flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-4">
       {page.rows.map((row, index) => (
         // A row has no id of its own — it is list position on both sides of the wire — so its key
         // comes from the first column, which the server's own rule guarantees exists. An index key

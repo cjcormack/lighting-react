@@ -8,6 +8,7 @@ import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { resetDeskFollowStores } from '@/lib/deskFollow'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
+import { snapRigRows } from './RigBand'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
@@ -18,8 +19,10 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  * The first test is the migration: an empty rig draws what the target band drew — every group then
  * every fixture, groups badged. The rest are the band's own: a built rig draws its rows; the three
  * cell modes expand; a tile press toggles the whole fixture (and a cell tile its cell) through the
- * one `{type, key}` shape; the rows handle clamps; the Cells chip presses one desk op per mode and
- * *Spread…* opens the side sheet's tab; and below `md` the band is one row with a row chip. Session 7's
+ * one `{type, key}` shape; the rows handle — a drag that snaps to whole lines, stepped by the arrow
+ * keys — clamps and snaps past both ends; the Cells menu presses one desk op per filter and the two
+ * step buttons one per step; *Spread…* opens the side sheet's tab; and below `md` the band is one
+ * row with a row chip. Session 7's
  * block is the pips: a tap toggles a cell, a mouse drag across them is a run, a finger runs only
  * after a hold, and a tile with every cell selected reads `all`.
  */
@@ -124,6 +127,7 @@ function draw(
         compact={handlers.compact ?? false}
         stackRows={handlers.stackRows ?? false}
         focus={handlers.focus ?? 'split'}
+        controls={handlers.controls}
       />
     </DndContext>,
   )
@@ -244,7 +248,8 @@ describe('the rig band', () => {
     const bar = screen.getByRole('button', { name: 'Bar L' })
     expect(bar).toHaveAttribute('aria-pressed', 'true')
     expect(within(bar).getByText('1 of 4')).toBeInTheDocument()
-    expect(screen.getByText('Bar L · Cell 2 · 1 head')).toBeInTheDocument()
+    // A cell folds into its parent in the summary: the bar once, with the tile's own `1 of 4`.
+    expect(screen.getByText('Bar L · 1 of 4 · 1 head')).toBeInTheDocument()
   })
 
   it('draws the live bar and the pips through the stage’s colour dispatch, the pips beside the tile’s button', () => {
@@ -361,51 +366,104 @@ describe('the rig band', () => {
     })
   })
 
-  it('summarises the selection in heads, and clears through the handler', () => {
+  it('summarises the selection in heads, folding cells into their parent, and clears through the handler', () => {
     const onClear = vi.fn()
-    draw([{ type: 'group', name: 'Front wash', group: groups[0] }, { type: 'fixture', key: 'par-1', fixture: parFixture }], { onClear })
-    expect(screen.getByText('Front wash, PAR 1 · 7 heads')).toBeInTheDocument()
+    draw(
+      [
+        { type: 'group', name: 'Front wash', group: groups[0] },
+        { type: 'fixture', key: 'par-1', fixture: parFixture },
+        { type: 'fixture', key: 'bar-1.pixel-0', fixture: barFixture, element: barCells[0] as never },
+        { type: 'fixture', key: 'bar-1.pixel-2', fixture: barFixture, element: barCells[2] as never },
+      ],
+      { onClear },
+    )
+    // Two selected cells of a four-cell bar read as the bar once, `2 of 4` — the tile's own badge —
+    // not as `Bar L · Cell 1, Bar L · Cell 3`.
+    expect(screen.getByText('Front wash, PAR 1, Bar L · 2 of 4 · 9 heads')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onClear).toHaveBeenCalledTimes(1)
   })
 
-  it('wraps the label row rather than overflowing the band at a tablet width', () => {
-    draw()
+  it('folds the verbs to their icons before it wraps: each verb is an icon button whose word hides below the band’s width', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }])
     const row = document.querySelector('[data-rig-label-row]')!
     expect(row.className).toContain('flex-wrap')
-    expect(screen.getByText('nothing selected').className).toContain('min-w-[8rem]')
+    expect(row.parentElement!.className).toContain('@container')
+    expect(screen.getByText('PAR 1 · 1 head').className).toContain('min-w-[6rem]')
+    for (const name of ['Spread…', 'Locate', 'Highlight', 'Clear']) {
+      const button = screen.getByRole('button', { name })
+      expect(button.querySelector('svg')).not.toBeNull()
+      const word = [...button.querySelectorAll('span')].find((el) => el.textContent === name)!
+      expect(word.className).toContain('@[860px]:inline')
+    }
   })
 
-  it('presses the Cells chip as one op per mode — five on the face, four in the menu — and labels only the last press', () => {
+  it('draws the common controls on a row of their own, ending with the host’s controls — the same row in every shape', () => {
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls: <button type="button">Focus here</button> })
+    const row = document.querySelector('[data-rig-controls-row]')!
+    expect(row).not.toBeNull()
+    expect(row.lastElementChild).toHaveTextContent('Focus here')
+    // The sub-selection and the verbs are on it, not on the label row.
+    expect(within(row as HTMLElement).getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
+    expect(within(row as HTMLElement).getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    expect(within(document.querySelector('[data-rig-label-row]') as HTMLElement).queryByRole('button', { name: 'Clear' })).toBeNull()
+
+    // Pads focus on the desk board: the band folded — label row, controls row, the grip — and no rows.
+    cleanup()
+    rigData = builtRig()
+    draw([], { focus: 'pads', controls: <button type="button">Focus here</button> })
+    expect(document.querySelector('[data-rig-controls-row]')!.lastElementChild).toHaveTextContent('Focus here')
+    expect(document.querySelector('[data-rig-rows]')).toBeNull()
+    expect(screen.queryByText('Wash')).not.toBeInTheDocument()
+    // A press, drawn as one: a chevron pill pointing the way the rows will come, not the drag bar.
+    const back = screen.getByRole('button', { name: 'Show the rig rows again: Split' })
+    expect(back.querySelector('svg')).not.toBeNull()
+    fireEvent.click(back)
+    expect(getBuskFocus()).toBe('split')
+
+    // Rig focus: the grip under the rows is the way back too.
+    cleanup()
+    draw([], { focus: 'rig' })
+    expect(screen.queryByRole('separator', { name: 'Rig rows' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the page again: Split' }))
+    expect(getBuskFocus()).toBe('split')
+  })
+
+  it('presses the Cells menu as one op per filter — all seven in one menu — and labels only the last press', () => {
     const onSubselect = vi.fn()
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
-    const trigger = screen.getByRole('button', { name: 'More sub-selections' })
+    const trigger = screen.getByRole('button', { name: 'Cells: All' })
     expect(trigger).toHaveTextContent('Cells: All')
-    for (const [name, mode] of [
-      ['Cells: Odd', 'ODD'],
-      ['Cells: Even', 'EVEN'],
-      ['Cells: Next', 'NEXT'],
-      ['Cells: Prev', 'PREV'],
-      ['Cells: All', 'ALL'],
-    ] as const) {
-      fireEvent.click(screen.getByRole('button', { name }))
-      expect(onSubselect).toHaveBeenLastCalledWith(mode)
-      expect(trigger).toHaveTextContent(name)
-    }
     for (const [item, mode] of [
+      ['Odd', 'ODD'],
+      ['Even', 'EVEN'],
       ['1st half', 'FIRST_HALF'],
       ['2nd half', 'SECOND_HALF'],
       ['Invert', 'INVERT'],
       ['Masters only', 'MASTERS'],
+      ['All', 'ALL'],
     ] as const) {
-      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' })
-      fireEvent.click(screen.getByRole('menuitem', { name: item }))
+      fireEvent.pointerDown(screen.getByRole('button', { name: /^Cells:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      // A radio item, since the seven are one choice; a step is not among them.
+      expect(screen.queryByRole('menuitemradio', { name: /Next|Prev/ })).toBeNull()
+      fireEvent.click(screen.getByRole('menuitemradio', { name: item }))
       expect(onSubselect).toHaveBeenLastCalledWith(mode)
-      expect(trigger).toHaveTextContent(`Cells: ${item}`)
+      expect(screen.getByRole('button', { name: `Cells: ${item}` })).toBeInTheDocument()
     }
-    expect(onSubselect).toHaveBeenCalledTimes(9)
+    expect(onSubselect).toHaveBeenCalledTimes(7)
     // Nothing on the face is derived from the selection: the desk keeps no sub-selection state.
-    expect(screen.getByRole('button', { name: 'Cells: Odd' })).not.toHaveAttribute('aria-pressed')
+    expect(screen.getByRole('button', { name: 'Cells: All' })).not.toHaveAttribute('aria-pressed')
+  })
+
+  it('steps the selection along the rig from two buttons beside the menu, which never become its label', () => {
+    const onSubselect = vi.fn()
+    draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
+    fireEvent.click(screen.getByRole('button', { name: 'Next along the rig' }))
+    expect(onSubselect).toHaveBeenLastCalledWith('NEXT')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous along the rig' }))
+    expect(onSubselect).toHaveBeenLastCalledWith('PREV')
+    // A step moves the selection; it is not a mode the menu remembers.
+    expect(screen.getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
   })
 
   it('draws the family pill, and Spread… opens the side sheet’s Spread tab', () => {
@@ -425,33 +483,37 @@ describe('the rig band', () => {
     expect(getBuskSheet()).toBe('spread')
   })
 
-  it('folds the Cells chip’s nine modes into the compact verbs menu below md', () => {
+  it('folds the Cells menu’s seven filters and the two steps into the compact verbs menu below md', () => {
     const onSubselect = vi.fn()
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { compact: true, onSubselect })
-    expect(screen.queryByRole('button', { name: 'More sub-selections' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Cells:/ })).not.toBeInTheDocument()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'All', 'Odd', 'Even', 'Next', 'Prev', '1st half', '2nd half', 'Invert', 'Masters only', 'Spread…', 'Locate', 'Clear',
+      'All', 'Odd', 'Even', '1st half', '2nd half', 'Invert', 'Masters only', 'Previous along the rig', 'Next along the rig', 'Spread…', 'Locate', 'Clear',
     ])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Invert' }))
     expect(onSubselect).toHaveBeenCalledWith('INVERT')
   })
 
-  it('clamps the rows handle to 1…N, and the handle writes the window’s fact', () => {
+  it('clamps the rows handle to 1…N lines, and the keys step it — writing the window’s fact', () => {
     rigData = builtRig()
     setBuskRigRows(3)
     draw()
-    expect(screen.getByText('3 of 4 rows')).toBeInTheDocument()
+    const handle = screen.getByRole('separator', { name: 'Rig rows' })
+    expect(handle).toHaveAttribute('aria-valuenow', '3')
+    expect(handle).toHaveAttribute('aria-valuemax', '5')
     expect(screen.queryByText('Four')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
-    expect(screen.getByText('4 of 4 rows')).toBeInTheDocument()
+    // The old ± buttons and the "3 of 4 rows" caption are gone: the count is the handle's own value.
+    expect(screen.queryByRole('button', { name: 'Show one row more' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/of 4 rows/)).not.toBeInTheDocument()
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '4')
     expect(screen.getByText('Four')).toBeInTheDocument()
     expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
-    const fewer = screen.getByRole('button', { name: 'Show one row fewer' })
-    fireEvent.click(fewer)
-    fireEvent.click(fewer)
-    fireEvent.click(fewer)
-    expect(screen.getByText('1 of 4 rows')).toBeInTheDocument()
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '1')
     expect(window.sessionStorage.getItem('busk.rigRows')).toBe('1')
     expect(screen.queryByText('Cells')).not.toBeInTheDocument()
   })
@@ -460,8 +522,9 @@ describe('the rig band', () => {
     rigData = builtRig()
     setBuskRigRows(4)
     draw()
-    expect(screen.getByText('4 of 4 rows')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
+    const handle = screen.getByRole('separator', { name: 'Rig rows' })
+    expect(handle).toHaveAttribute('aria-valuenow', '4')
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
     expect(getBuskFocus()).toBe('rig')
     // The wish is untouched: back in Split the band shows the same four rows.
     expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
@@ -470,21 +533,140 @@ describe('the rig band', () => {
     setBuskRigRows(1)
     cleanup()
     draw()
-    expect(screen.getByText('1 of 4 rows')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show one row fewer' }))
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '1')
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Rig rows' }), { key: 'ArrowUp' })
     expect(getBuskFocus()).toBe('pads')
+  })
+
+  it('drags to a height and snaps to whole lines on release — every line drawn while held, the rows clipped at the pointer, Pads and Rig named over them', () => {
+    rigData = builtRig()
+    setBuskRigRows(2)
+    draw()
+    const handle = screen.getByRole('separator', { name: 'Rig rows' })
+    expect(screen.queryByText('Four')).not.toBeInTheDocument()
+    // jsdom lays nothing out, so the lines' boxes are stubbed at 40px each from y=100.
+    let boxes = 0
+    const rows = document.querySelector('[data-rig-rows]')!
+    const originalRect = Element.prototype.getBoundingClientRect
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === rows) return { top: 100, bottom: 260, left: 0, right: 0, width: 0, height: 160, x: 0, y: 100, toJSON: () => ({}) } as DOMRect
+      const line = (this as HTMLElement).dataset?.rigLine
+      if (line != null) {
+        boxes += 1
+        const top = 100 + Number(line) * 40
+        return { top, bottom: top + 40, left: 0, right: 0, width: 0, height: 40, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+      }
+      return originalRect.call(this)
+    })
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 180 })
+    // Held: every line is in the DOM (so it can be measured), and the handle says so.
+    expect(screen.getByText('Four')).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('data-rig-rows-dragging', 'true')
+    // The clip is the snap: above the first line's middle the rows clip to nothing (the shape Pads
+    // gives the band), past the last line the clip lifts and every line shows (Rig's), and between
+    // them the rows are cut at the pointer.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 105 })
+    expect((rows as HTMLElement).style.maxHeight).toBe('0px')
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 300 })
+    expect((rows as HTMLElement).style.maxHeight).toBe('')
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 225 })
+    expect((rows as HTMLElement).style.maxHeight).toBe('125px')
+    // Released at 225: three lines' bottoms (140, 180, 220) are within reach; the fourth (260) is not.
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 225 })
+    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('3')
+    expect(boxes).toBeGreaterThan(0)
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).not.toHaveAttribute('data-rig-rows-dragging')
+    expect((rows as HTMLElement).style.maxHeight).toBe('')
+    vi.restoreAllMocks()
+  })
+
+  it('cancels a drag when the shape changes under it — another window’s focus write mid-drag — clearing the clip and re-arming nothing', () => {
+    rigData = builtRig()
+    setBuskRigRows(2)
+    const { rerender } = draw()
+    const handle = screen.getByRole('separator', { name: 'Rig rows' })
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 180 })
+    const rows = document.querySelector('[data-rig-rows]') as HTMLElement
+    expect(rows.style.overflow).toBe('hidden')
+    // Another window sends `focus: 'rig'`: the band re-renders in Rig, the handle becomes the way
+    // back, and the drag in flight is cancelled — no stale clip, no phantom drag armed.
+    const map = new Map<string, BuskingTarget>()
+    rerender(
+      <DndContext>
+        <RigBand projectId={1} selectedTargets={map} families={null} onToggle={() => {}} onClear={() => {}} onSubselect={() => {}} editing={false} compact={false} stackRows={false} focus="rig" />
+      </DndContext>,
+    )
+    expect((document.querySelector('[data-rig-rows]') as HTMLElement).style.overflow).toBe('')
+    expect(screen.getByRole('button', { name: 'Show the page again: Split' })).toBeInTheDocument()
+    // Back in Split with the pointer released elsewhere: nothing writes the row count.
+    rerender(
+      <DndContext>
+        <RigBand projectId={1} selectedTargets={map} families={null} onToggle={() => {}} onClear={() => {}} onSubselect={() => {}} editing={false} compact={false} stackRows={false} focus="split" />
+      </DndContext>,
+    )
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 105 })
+    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('2')
+    expect(getBuskFocus()).toBe('split')
+  })
+
+  it('snaps a drag position to Pads above the first line, Rig well past the last, and whole lines between', () => {
+    const lines = [0, 1, 2, 3].map((i) => ({ top: 100 + i * 40, bottom: 140 + i * 40 }))
+    expect(snapRigRows(105, lines, 4)).toBe(0)
+    expect(snapRigRows(125, lines, 4)).toBe(1)
+    expect(snapRigRows(150, lines, 4)).toBe(1)
+    expect(snapRigRows(172, lines, 4)).toBe(2)
+    expect(snapRigRows(260, lines, 4)).toBe(4)
+    expect(snapRigRows(270, lines, 4)).toBe(4)
+    expect(snapRigRows(300, lines, 4)).toBe(5)
+    expect(snapRigRows(300, [], 4)).toBe(0)
+    // The floor rule: a rig taller than the column puts its last line's bottom out of reach, so
+    // within 40px of the column's bottom is Rig whatever the lines say — and above that the lines
+    // still decide.
+    expect(snapRigRows(172, lines, 4, 200)).toBe(5)
+    expect(snapRigRows(150, lines, 4, 200)).toBe(1)
+    expect(snapRigRows(105, lines, 4, 130)).toBe(0)
   })
 
   it('draws the handle for a one-row rig too — 1…N, so a one-row rig still reaches Rig and Pads from the band (D6)', () => {
     rigData = { rows: [{ id: 1, uuid: 'r1', name: 'Wash', tiles: [tile({ kind: 'FIXTURE', patch: parPatch })] }] }
     setBuskRigRows(1)
     draw()
-    expect(screen.getByText('1 of 1 rows')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show one row more' }))
+    const handle = screen.getByRole('separator', { name: 'Rig rows' })
+    expect(handle).toHaveAttribute('aria-valuenow', '1')
+    expect(handle).toHaveAttribute('aria-valuemax', '2')
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
     expect(getBuskFocus()).toBe('rig')
     setBuskFocus('split')
-    fireEvent.click(screen.getByRole('button', { name: 'Show one row fewer' }))
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Rig rows' }), { key: 'ArrowUp' })
     expect(getBuskFocus()).toBe('pads')
+  })
+
+  it('lays rows out on a twelve-track grid by their width, two half-width rows sharing a line, and flows a row’s tiles by its flow', () => {
+    const rig = builtRig()
+    rig.rows![0].width = 6
+    rig.rows![1].width = 6
+    rig.rows![1].flow = 'WRAP'
+    rig.rows![2].flow = 'COLUMN'
+    rigData = rig
+    setBuskRigRows(2)
+    draw()
+    // Two lines shown: Wash and Cells share the first, Three is the second; Four is on the third.
+    expect(screen.getByText('Wash')).toBeInTheDocument()
+    expect(screen.getByText('Cells')).toBeInTheDocument()
+    expect(screen.getByText('Three')).toBeInTheDocument()
+    expect(screen.queryByText('Four')).not.toBeInTheDocument()
+    const lines = [...document.querySelectorAll('[data-rig-line]')]
+    expect(lines.map((el) => el.getAttribute('data-rig-line'))).toEqual(['0', '0', '1'])
+    expect(lines.map((el) => (el as HTMLElement).style.gridColumn)).toEqual(['span 6 / span 6', 'span 6 / span 6', 'span 12 / span 12'])
+    expect(document.querySelector('[data-rig-rows]')!.className).toContain('grid-cols-12')
+    const bodies = [...document.querySelectorAll('[data-rig-row-body]')].map((b) => b.getAttribute('data-rig-row-body'))
+    expect(bodies).toEqual(['scroll', 'wrap', 'column'])
+    expect(document.querySelector('[data-rig-row-body="wrap"]')!.className).toContain('flex-wrap')
+    expect(document.querySelector('[data-rig-row-body="column"]')!.className).toContain('flex-col')
+    expect(document.querySelector('[data-rig-row-body="scroll"]')!.className).toContain('overflow-x-auto')
+    // Two rows share a line, so the unit the handle counts is the line: three lines for four rows.
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '2')
+    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuemax', '4')
   })
 
   it('stacks every row two tiles across, scrolling with the band, in Rig focus below md — never a sideways row', () => {
@@ -495,20 +677,21 @@ describe('the rig band', () => {
     expect(bodies.every((body) => body.getAttribute('data-rig-row-body') === 'stacked')).toBe(true)
     expect(bodies[0].className).toContain('grid-cols-2')
     expect(bodies[0].className).not.toContain('overflow-x-auto')
-    // The band is the scroller, vertically.
-    expect(document.querySelector('[data-rig-band="rig"]')!.className).toContain('overflow-y-auto')
+    // The rows are the scroller, vertically — not the band, whose label row carries the way back.
+    expect(document.querySelector('[data-rig-rows]')!.className).toContain('overflow-y-auto')
+    expect(document.querySelector('[data-rig-band="rig"]')!.className).not.toContain('overflow-y-auto')
     cleanup()
     // Split below md keeps the one sideways row, and the desk board's Rig focus keeps its rows.
     draw([], { compact: true, stackRows: true })
-    expect(document.querySelector('[data-rig-row-body]')).toHaveAttribute('data-rig-row-body', 'row')
+    expect(document.querySelector('[data-rig-row-body]')).toHaveAttribute('data-rig-row-body', 'scroll')
     cleanup()
     // The short board is compact too — 48px tiles, the row chip — but wider than `md`, so its Rig
     // focus keeps the sideways rows: stacking is the narrow board's alone.
     draw([], { focus: 'rig', compact: true })
-    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'row')).toBe(true)
+    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'scroll')).toBe(true)
     cleanup()
     draw([], { focus: 'rig' })
-    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'row')).toBe(true)
+    expect([...document.querySelectorAll('[data-rig-row-body]')].every((b) => b.getAttribute('data-rig-row-body') === 'scroll')).toBe(true)
   })
 
   it('shows every row with no handle in Rig focus, filling the body — below md too', () => {
@@ -518,6 +701,7 @@ describe('the rig band', () => {
     expect(screen.getByText('Four')).toBeInTheDocument()
     expect(screen.queryByText(/of 4 rows/)).not.toBeInTheDocument()
     expect(document.querySelector('[data-rig-band="rig"]')!.className).toContain('flex-1')
+    expect(document.querySelector('[data-rig-rows]')!.className).toContain('overflow-y-auto')
 
     cleanup()
     draw([], { focus: 'rig', compact: true })
@@ -543,6 +727,12 @@ describe('the rig band', () => {
       draw([], { editing: true })
       expect(screen.getAllByLabelText('Row name')).toHaveLength(4)
       expect(screen.getByLabelText('Remove Front wash from the rig')).toBeInTheDocument()
+      // Both controls sit inside the tile's corner — nothing hangs past the row body's clip or into
+      // the next tile — the cross last, so it reads as the tile's own.
+      const controls = screen.getByLabelText('Remove Front wash from the rig').closest('[data-rig-tile-controls]')!
+      expect(controls.className).toContain('top-1')
+      expect(controls.className).toContain('right-1')
+      expect(controls.lastElementChild).toBe(screen.getByLabelText('Remove Front wash from the rig'))
       expect(screen.getByLabelText('Options for Bar L')).toBeInTheDocument()
       expect(screen.getAllByLabelText('Options for PAR 1')).toHaveLength(2)
       fireEvent.pointerDown(screen.getAllByLabelText('Options for PAR 1')[0], { button: 0, ctrlKey: false, pointerType: 'mouse' })
@@ -557,6 +747,25 @@ describe('the rig band', () => {
       // The play verbs step aside while editing: tiles are drag handles, not toggles.
       expect(screen.queryByRole('button', { name: 'Cells: All' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    })
+
+    it('sets a row’s width and flow from its menu — the bank’s two facts, on the row — and removes the row from it', () => {
+      rigData = builtRig()
+      draw([], { editing: true })
+      fireEvent.pointerDown(screen.getByLabelText('Options for row Wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('button', { name: '½' }))
+      let op = commit.mock.calls.at(-1)![0] as (rig: BuskRig) => BuskRig
+      expect(op(builtRig()).rows![0].width).toBe(6)
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+      fireEvent.pointerDown(screen.getByLabelText('Options for row Wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      expect(screen.getByRole('menuitemradio', { name: 'Flow: Scroll' })).toHaveAttribute('aria-checked', 'true')
+      fireEvent.click(screen.getByRole('menuitemradio', { name: 'Flow: Wrap' }))
+      op = commit.mock.calls.at(-1)![0] as (rig: BuskRig) => BuskRig
+      expect(op(builtRig()).rows![0].flow).toBe('WRAP')
+      fireEvent.pointerDown(screen.getByLabelText('Options for row Wash'), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Remove row' }))
+      op = commit.mock.calls.at(-1)![0] as (rig: BuskRig) => BuskRig
+      expect(op(builtRig()).rows!.map((row) => row.name)).toEqual(['Cells', 'Three', 'Four'])
     })
 
     it('renames a tile in place — Rename tile… writes the tile’s label, and the record’s own name clears it', () => {
@@ -679,8 +888,10 @@ describe('the folded rig strip', () => {
     const map = new Map<string, BuskingTarget>([
       ['group:Front wash', { type: 'group', name: 'Front wash', group: group('Front wash', 6) }],
     ])
-    render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} />)
+    render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} controls={<span>Focus here</span>} />)
     expect(screen.getByText('Front wash · 6 heads')).toBeInTheDocument()
+    // The host's controls — the Focus control — sit at the strip's end, as on the band's label row.
+    expect(screen.getByText('Focus here')).toBeInTheDocument()
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Targets: Desk' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Unfold the rig' }))

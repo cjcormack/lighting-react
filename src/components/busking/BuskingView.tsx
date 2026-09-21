@@ -49,13 +49,13 @@ import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
-import { RigBand } from './RigBand'
+import { FOCUS_WORD_CLASS, RigBand } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
 import { BuskFocusControl } from './BuskFocusControl'
 import { BuskEditProvider } from './BuskEditProvider'
 import { BuskPageBody } from './BuskPage'
-import { BuskPageStrip } from './BuskPageStrip'
+import { BuskPageStrip, EditLayoutToggle } from './BuskPageStrip'
 import { BuskFirstOpen } from './BuskFirstOpen'
 import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
@@ -77,15 +77,17 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * the band.
  *
  * **The view has three shapes, and which one is this window's fact** (busk-further plan D5–D7,
- * `lib/buskWindow.ts`): **Split** — the band showing `busk.rigRows` rows over the page, the
- * handle between; **Pads** — the page fills the body and the rig folds to `RigStrip`, whose chevron
- * unfolds Split; **Rig** — the band fills the body with every row and the page folds to its strip
- * at the bottom. The Focus control is on the page strip in every shape — below the band in Split
- * and Pads, on the folded strip at the bottom in Rig — so one strip component, placed twice,
- * carries it. Edit mode **forces Split** for its duration, because a palette drag needs both
- * regions on screen, and restores the window's focus on Done by never having written it; so does
- * a project with no pages, whose first-open screen lives in the page column. The side sheet is
- * `busk.sheet`'s: a tab, or `none` for the fold.
+ * `lib/buskWindow.ts`): **Split** — the band showing `busk.rigRows` lines over the page, the
+ * handle between; **Pads** — the page fills the body and the rig folds: on the desk board to the
+ * band's own label and controls rows plus a chevron pill back to Split (`RigBand focus="pads"`),
+ * off it to `RigStrip`, whose chevron unfolds Split; **Rig** — the band fills the body with every
+ * row and the page folds to its strip at the bottom, name and bank count only. **The band's
+ * controls row is the same row in every shape** (2026-09-21), and the Focus control and *Edit
+ * layout* / *Done* end it — so neither moves as the shape changes; both used to be on the page
+ * strip, below the band in Split and Pads and at the bottom of the body in Rig. Edit mode **forces Split** for its
+ * duration, because a palette drag needs both regions on screen, and restores the window's focus
+ * on Done by never having written it; so does a project with no pages, whose first-open screen
+ * lives in the page column. The side sheet is `busk.sheet`'s: a tab, or `none` for the fold.
  *
  * **`?focus=` and `?sheet=` are this window's on arrival**, latched once per tab exactly as
  * `?page=` is below — the raw strings read at mount, applied through `applyBuskArrival`, which
@@ -448,6 +450,27 @@ export function BuskingView({ projectId }: { projectId: number }) {
   // folded. In Split and Rig focus the band carries them itself, so the row holds only the page.
   const merged = board === 'short' && shape === 'pads'
 
+  const focusControl = <BuskFocusControl disabled={editing} labelClass={FOCUS_WORD_CLASS} />
+  const editToggle = (
+    <EditLayoutToggle
+      editing={editing}
+      editable={docked}
+      hasPages={(pages?.length ?? 0) > 0}
+      onToggle={() => {
+        if (editing) dispatch(exitBuskEdit())
+        else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
+      }}
+    />
+  )
+  // The band's controls row (the label row, on the compact board) ends with these two, in every
+  // shape — the Focus control and *Edit layout* / *Done* — so neither moves as the shape changes.
+  const bandControls = (
+    <>
+      {focusControl}
+      {editToggle}
+    </>
+  )
+
   const pageStrip = (folded: boolean) => (
     <BuskPageStrip
       pages={pages ?? []}
@@ -458,7 +481,6 @@ export function BuskingView({ projectId }: { projectId: number }) {
       // shortened mid-edit keeps `editing` until Done. `merged` is already false there, since edit
       // mode forces Split.
       dense={board === 'short' && !folded && !editing}
-      editable={docked}
       leading={
         merged ? (
           <RigStripContent
@@ -483,10 +505,6 @@ export function BuskingView({ projectId }: { projectId: number }) {
         if (activePage == null) return
         void deletePage({ projectId, pageId: activePage.id })
       }}
-      onToggleEditing={() => {
-        if (editing) dispatch(exitBuskEdit())
-        else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
-      }}
       controls={
         <>
           {!docked && !editing && (
@@ -508,29 +526,42 @@ export function BuskingView({ projectId }: { projectId: number }) {
               <PanelBottomOpen className="size-3.5" /> Sheet
             </Button>
           )}
-          <BuskFocusControl disabled={editing} />
+          {/* On the merged row this *is* the body's top row, so the Focus control and the edit
+              toggle are here; every other shape puts them on the band. */}
+          {merged && bandControls}
         </>
       }
     />
   )
 
   return (
-    <div className="flex h-full flex-col">
+    // `min-h-0 flex-1`, never `h-full`: the view is a flex item under the ShowHeader and ShowBar in
+    // `routes/Busk.tsx`'s column, and a percentage height there is the whole column's — Chromium
+    // shrinks the item back to fit, Safari does not, and the page body then overflowed `<main>` by
+    // exactly a header and a bar. Two scrollers: one hiding the breadcrumbs, one for the pads.
+    // `ProgrammerWorkspace` is the same pattern for the same reason.
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* `relative` is the side sheet's containing block in overlay mode — it is absolutely
           positioned against this row, over the page body, exactly as the programmer rail's
           overlay arm is against the workspace row. */}
       <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* `data-busk-column`: the rows handle reads this column's bottom as the floor of its drag
+            and the page body's height as the room Rig gives the band (`RigHandle`). */}
+        <div data-busk-column className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Not dimmed while editing any more: the band is being *edited* then — its tiles are
               drag handles and take drops — and a dim over a drop target reads as "not here". Pads
               do not press in edit mode and tiles do not select; both say so by their cursors. */}
-          {shape === 'pads' ? (
-            // On the short board the strip's pieces lead the merged page row instead (`merged`).
+          {shape === 'pads' && !docked ? (
+            // Off the desk board the fold is the 36px strip; on the short board its pieces lead the
+            // merged page row instead (`merged`). On the desk board Pads is the band itself, folded
+            // to its label and controls rows and the grip — so the controls row is the same row in
+            // every shape.
             !merged && (
               <RigStrip
                 selectedTargets={selectedTargets}
                 families={families}
                 onUnfold={() => setBuskFocus('split')}
+                controls={bandControls}
               />
             )
           ) : (
@@ -545,6 +576,7 @@ export function BuskingView({ projectId }: { projectId: number }) {
               compact={!docked}
               stackRows={board === 'narrow'}
               focus={shape}
+              controls={bandControls}
             />
           )}
 
@@ -561,12 +593,13 @@ export function BuskingView({ projectId }: { projectId: number }) {
               ) : activePage != null ? (
                 <BuskPageBody page={activePage} behaviour={behaviour} />
               ) : (
-                <div className="min-h-0 flex-1" />
+                <div data-busk-page-body className="min-h-0 flex-1" />
               )}
             </BuskEditProvider>
           )}
 
-          {/* Rig focus: the page folded to its strip at the bottom, the Focus control on it. */}
+          {/* Rig focus: the page folded to its strip at the bottom — name and bank count; the Focus
+              control and Edit layout are on the band's controls row above, as in every shape. */}
           {shape === 'rig' && pageStrip(true)}
         </div>
 

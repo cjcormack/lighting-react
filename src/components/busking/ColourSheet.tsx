@@ -3,7 +3,6 @@ import { Pipette, Save, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import type { TemplateSummary } from '@/api/templatesApi'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ColourPickerBody, type ColourChannels } from '@/components/fixtures/ColourPickerBody'
 import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance'
@@ -13,7 +12,7 @@ import { useTemplatePress } from '@/components/programmer/useTemplatePress'
 import { useCellEditorCramped } from '@/components/sheet/cells/CellEditorSurface'
 import { useLivePush } from '@/hooks/useLivePush'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { effectiveRig } from '@/lib/buskRig'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { hexToRgb, rgbToHex } from '@/components/fx/colourUtils'
@@ -49,10 +48,21 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * writes go through {@link useLivePush}, the tempo fader's discipline over six bytes.
  *
  * **The family mask is not consulted.** The desk's mask gates *presses*, and a colour drag is a
- * value write like a cell edit, so the sheet does not refuse under a Position marquee — but the
- * header says what it is about to do (*Colour of 14 heads · writes to Local*) and reads the family
- * pill, which is the honest answer the programmer's Set gives. A Recent chip is a *press*, and
- * goes through `useTemplatePress` under the mask like any other.
+ * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Recent
+ * chip is a *press*, and goes through `useTemplatePress` under the mask like any other.
+ *
+ * **There is no heading** (2026-09-21): the tab strip names the tab, the rig band's label row
+ * already says what is selected and under which mask, and *Colour of 14 heads · writes to Local*
+ * repeated both. What the heading also carried — the swatch, the hex read-out and the *mixed*
+ * marker Pick sets — sits under the picker now, beside the emitter count. The hex stays a read-out
+ * and not a field (session 8's call): the typed route is R/G/B.
+ *
+ * **The verbs are a footer, static at the bottom of the tab**, with *Save as template…* first — the
+ * Spread tab's footer has the same shape with *Save as Look…* first, so the two tabs put their save
+ * in one place. The body above them is the tab's one scroller. The picker is `fluid`, so it takes
+ * the width the operator drags the sheet to, and its row is padded to the knob's half-width: the
+ * tab body scrolls, and a scroller clips at its edge, so a knob at 0% hanging 14px past the
+ * square's left edge was cut off at the sheet's 12px gutter.
  *
  * **Recent** is the template recents row (`lib/templateRecents.ts`, colour family only): a tap is a
  * template **apply**, so it stamps `lastPressedAt` and lands as literals like the chip. No new list,
@@ -107,6 +117,15 @@ export interface ColourWrite {
 }
 
 const EMPTY_SELECTION_TOAST = 'colour-sheet-empty-selection'
+
+/**
+ * The footer's lesser verbs keep their words only where the footer is wide enough for all three:
+ * measured, *Save as template… · Pick · Spread…* is 305px of buttons at the sheet's 320px default
+ * (295px inside the gutters), so below this the two fold to their icons and the save keeps its word.
+ * This footer's alone: the Spread footer's *Save as Look… · Live · Apply* fits the floor, so it
+ * folds nothing.
+ */
+const SHEET_FOOTER_WORDS = 'hidden @[340px]:inline'
 const NEUTRAL: ColourChannels = { r: 255, g: 255, b: 255, w: 0, a: 0, uv: 0 }
 
 function colourDescriptorOf(properties: readonly { type: string }[]): ColourPropertyDescriptor | null {
@@ -411,13 +430,9 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
   const combinedCss = computeCombinedCss(channels.r, channels.g, channels.b, channels.w, channels.a, channels.uv)
   const hex = rgbToHex(channels.r, channels.g, channels.b)
   const withEmitters = emitterCounts.any
-  const maskExcludesColour = families != null && families.length > 0 && !families.includes('COLOUR')
 
   return (
-    <div
-      data-colour-sheet={isCompact ? 'compact' : 'full'}
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto border-l"
-    >
+    <div data-colour-sheet={isCompact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col border-l">
       {/* Hidden leaves, one per selected head, so Pick can read a selection whose tiles are folded
           away. They draw nothing; the store is the output. */}
       <div hidden>
@@ -438,77 +453,89 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
         })}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5 pb-2">
-        <span data-colour-sheet-heading className="text-[11px] font-semibold">
-          Colour of {headCount} {headCount === 1 ? 'head' : 'heads'}
-          <span className="font-normal text-muted-foreground"> · writes to Local</span>
-        </span>
-        {families != null && families.length > 0 && (
-          <Badge
-            variant="outline"
-            className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-            title={
-              maskExcludesColour
-                ? 'The mask gates presses, not value writes: a drag here lands whatever the selection is masked to'
-                : 'The selection’s attribute mask'
-            }
-          >
-            {formatFamilyList(families, ' · ')}
-          </Badge>
-        )}
-        <span
-          aria-hidden
-          className="ml-auto size-4 shrink-0 rounded-full border border-border"
-          style={{ background: combinedCss }}
-        />
-        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{hex}</span>
-        {picked?.mixed && (
-          <span data-colour-picked="mixed" className="text-[10px] text-amber-500" title="The selected heads disagree; the first in rig order is shown">
-            mixed
-          </span>
-        )}
-      </div>
-
-      <div className={cn('px-3', isCompact ? 'pb-2' : 'pb-3')}>
-        <ColourPickerBody
-          r={channels.r}
-          g={channels.g}
-          b={channels.b}
-          w={hasWhite ? channels.w : undefined}
-          a={hasAmber ? channels.a : undefined}
-          uv={hasUv ? channels.uv : undefined}
-          combinedCss={seed.css}
-          seedKey={seed.key}
-          hasWhiteChannel={hasWhite}
-          hasAmberChannel={hasAmber}
-          hasUvChannel={hasUv}
-          onColourChange={onColourChange}
-          channelFields
-          compact={isCompact}
-          open
-        />
-        {emitters.length > 0 && (
-          <p data-colour-emitters className="mt-2 text-[10px] text-muted-foreground">
-            Emitters on {withEmitters} of {headCount} {headCount === 1 ? 'head' : 'heads'}
-            {withEmitters < headCount ? ' · the rest take RGB only' : ''}
-          </p>
-        )}
-      </div>
-
-      <div className="border-t px-3 pt-2 pb-2">
-        <BuskLabel>Recent from templates</BuskLabel>
-        {recent.length === 0 ? (
-          <p className="mt-1 text-[10px] text-muted-foreground">Colour templates you press show up here</p>
-        ) : (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {recent.map((template) => (
-              <RecentChip key={template.id} template={template} onPress={() => press(template, false)} />
-            ))}
+      {/* The tab's one scroller: the picker, its read-out, Recent. */}
+      <div data-colour-sheet-body className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn('px-3.5 pt-3', isCompact ? 'pb-2' : 'pb-3')}>
+          <ColourPickerBody
+            r={channels.r}
+            g={channels.g}
+            b={channels.b}
+            w={hasWhite ? channels.w : undefined}
+            a={hasAmber ? channels.a : undefined}
+            uv={hasUv ? channels.uv : undefined}
+            combinedCss={seed.css}
+            seedKey={seed.key}
+            hasWhiteChannel={hasWhite}
+            hasAmberChannel={hasAmber}
+            hasUvChannel={hasUv}
+            onColourChange={onColourChange}
+            channelFields
+            compact={isCompact}
+            fluid
+            open
+          />
+          {/* The read-out: what the picker holds, and where the emitters land. */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+            {emitters.length > 0 && (
+              <span data-colour-emitters>
+                Emitters on {withEmitters} of {headCount} {headCount === 1 ? 'head' : 'heads'}
+                {withEmitters < headCount ? ' · the rest take RGB only' : ''}
+              </span>
+            )}
+            <span className="ml-auto inline-flex items-center gap-1.5">
+              {picked?.mixed && (
+                <span data-colour-picked="mixed" className="text-amber-500" title="The selected heads disagree; the first in rig order is shown">
+                  mixed
+                </span>
+              )}
+              <span aria-hidden className="size-3.5 shrink-0 rounded-full border border-border" style={{ background: combinedCss }} />
+              <span data-colour-sheet-hex className="font-mono text-[11px] tabular-nums">{hex}</span>
+            </span>
           </div>
-        )}
+        </div>
+
+        <div className="border-t px-3 pt-2 pb-2">
+          <BuskLabel>Recent from templates</BuskLabel>
+          {recent.length === 0 ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">Colour templates you press show up here</p>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {recent.map((template) => (
+                <RecentChip key={template.id} template={template} onPress={() => press(template, false)} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2">
+      {/* The footer, static at the bottom; the Spread tab's has the same shape with its save first.
+          **One line, never a wrap**: the footer is its own container and the two lesser verbs fold
+          to their icons below `SHEET_FOOTER_WORDS`, since at the sheet's 320px default the three
+          worded buttons came to 305px in 295 and *Spread…* dropped to a second line. */}
+      <div data-colour-sheet-footer className="@container flex shrink-0 items-center gap-1.5 border-t px-3 py-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 min-w-0 text-xs"
+          disabled={selected.length === 0}
+          title="Record the selection’s colour as a template — the route to something a layer can track"
+          onClick={() => setSaving(true)}
+        >
+          <Save className="size-3.5" /> <span className="truncate">Save as template…</span>
+        </Button>
+        <span className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          aria-label="Pick"
+          title="Read the selection’s current colour into the picker without writing"
+          onClick={pick}
+        >
+          <Pipette className="size-3.5" /> <span className={SHEET_FOOTER_WORDS}>Pick</span>
+        </Button>
         {/* A plain button, not a switch: it opens the Spread tab and holds no state of its own, so a
             `role="switch"` that never read checked promised a toggle it could not be. */}
         <Button
@@ -517,32 +544,11 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
           size="sm"
           className="h-7 text-xs"
           disabled={onSpread == null}
+          aria-label="Spread to a second colour…"
           title={onSpread == null ? 'No Spread tab to open from here' : 'Open the Spread tab with this colour as From'}
           onClick={() => onSpread?.(channels)}
         >
-          <Waves className="size-3.5" /> Spread to a second colour…
-        </Button>
-        <span className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          disabled={selected.length === 0}
-          title="Record the selection’s colour as a template — the route to something a layer can track"
-          onClick={() => setSaving(true)}
-        >
-          <Save className="size-3.5" /> Save as template…
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          title="Read the selection’s current colour into the picker without writing"
-          onClick={pick}
-        >
-          <Pipette className="size-3.5" /> Pick
+          <Waves className="size-3.5" /> <span className={SHEET_FOOTER_WORDS}>Spread…</span>
         </Button>
       </div>
 

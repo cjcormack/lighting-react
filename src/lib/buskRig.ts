@@ -1,5 +1,6 @@
 import type { GroupSummary } from '@/api/groupsApi'
 import type { CueTarget } from '@/api/cuesApi'
+import { BUSK_WIDTHS, type BuskFlow } from '@/api/buskApi'
 import type { FixturePatch } from '@/api/patchApi'
 import type {
   BuskRig,
@@ -173,6 +174,46 @@ export function rowTiles(row: BuskRigRow): BuskRigTile[] {
   return row.tiles ?? []
 }
 
+/** A row's default layout — what every row was before it had one: a whole line that scrolls sideways. */
+export const DEFAULT_ROW_FLOW: BuskFlow = 'SCROLL'
+export const DEFAULT_ROW_WIDTH = 12
+
+/**
+ * How a row lays its tiles out. **Absent is `SCROLL`** — a desk that predates the field serves
+ * none, and a row this client minted has none until it chooses one — so every reader goes through
+ * here rather than reading `row.flow`.
+ */
+export function rowFlow(row: BuskRigRow): BuskFlow {
+  return row.flow ?? DEFAULT_ROW_FLOW
+}
+
+/** The row's width share in twelfths; absent, or a value outside `BUSK_WIDTHS`, is the whole line. */
+export function rowWidth(row: BuskRigRow): number {
+  return row.width != null && BUSK_WIDTHS.includes(row.width) ? row.width : DEFAULT_ROW_WIDTH
+}
+
+/**
+ * The rows cut into the **lines** the band draws them on — a twelve-track grid filled in order, a
+ * row starting a new line when it does not fit beside the last (`rowWidth`). Each line is the row
+ * indices on it. This is the unit the Split handle counts and `clampRigRows` clamps to: two
+ * half-width rows side by side are one line, and showing "one row" of them would show half a line.
+ */
+export function rigLines(rows: readonly BuskRigRow[]): number[][] {
+  const lines: number[][] = []
+  let used = 0
+  rows.forEach((row, index) => {
+    const width = rowWidth(row)
+    if (lines.length === 0 || used + width > 12) {
+      lines.push([index])
+      used = width
+    } else {
+      lines[lines.length - 1].push(index)
+      used += width
+    }
+  })
+  return lines
+}
+
 export function tileAt(rig: BuskRig, at: RigTileAddress): BuskRigTile | null {
   return rigRows(rig)[at.row]?.tiles?.[at.tile] ?? null
 }
@@ -286,6 +327,20 @@ export class RigRequestError extends Error {
   }
 }
 
+/**
+ * A row's layout on the wire — **only where it differs from the defaults**. The desk's Json is
+ * bare, so a key it does not know fails the whole body, and a desk mid-upgrade (handler bodies
+ * hot-swapped, the two columns not yet added) must keep accepting a rig nobody has re-laid-out.
+ */
+function rowLayoutInput(row: BuskRigRow): Pick<BuskRigRowInput, 'flow' | 'width'> {
+  const out: Pick<BuskRigRowInput, 'flow' | 'width'> = {}
+  const flow = rowFlow(row)
+  const width = rowWidth(row)
+  if (flow !== DEFAULT_ROW_FLOW) out.flow = flow
+  if (width !== DEFAULT_ROW_WIDTH) out.width = width
+  return out
+}
+
 function tileInput(tile: BuskRigTile, at: RigTileAddress, ids: RigIds): BuskRigTileInput {
   const input: BuskRigTileInput = { cellMode: tile.kind === 'GROUP' ? 'PIPS' : tile.cellMode }
   if (tile.id != null) input.tileId = tile.id
@@ -335,6 +390,7 @@ export function toRigRequest(rig: BuskRig, ids: RigIds): BuskRigRequest {
     rows: rigRows(rig).map((row, rowIndex) => {
       const input: BuskRigRowInput = {
         name: row.name,
+        ...rowLayoutInput(row),
         tiles: rowTiles(row).map((tile, tileIndex) => tileInput(tile, { row: rowIndex, tile: tileIndex }, ids)),
       }
       if (row.id != null) input.rowId = row.id
@@ -366,6 +422,8 @@ function shapeOf(rig: BuskRig): string {
     rigRows(rig).map((row) => ({
       id: row.id,
       name: row.name,
+      flow: rowFlow(row),
+      width: rowWidth(row),
       tiles: rowTiles(row).map((tile) => ({
         id: tile.id,
         record: recordKeyOf(tile),
@@ -402,6 +460,20 @@ export function renameRow(rig: BuskRig, row: number, name: string): BuskRig {
   const target = rigRows(next)[row]
   if (target == null) return rig
   target.name = name
+  return normaliseRig(next)
+}
+
+/**
+ * Set a row's flow or width — the bank's two layout facts, on the row (the band's `…` menu). A
+ * width outside `BUSK_WIDTHS` is refused here rather than sent, since the write would 400 it.
+ */
+export function setRowLayout(rig: BuskRig, row: number, patch: { flow?: BuskFlow; width?: number }): BuskRig {
+  if (patch.width != null && !BUSK_WIDTHS.includes(patch.width)) return rig
+  const next = clone(rig)
+  const target = rigRows(next)[row]
+  if (target == null) return rig
+  if (patch.flow != null) target.flow = patch.flow
+  if (patch.width != null) target.width = patch.width
   return normaliseRig(next)
 }
 
@@ -761,9 +833,9 @@ export function rigSteps(rows: readonly BuskRigRow[]): CueTarget[][] {
   return steps
 }
 
-// ─── The rows handle ────────────────────────────────────────────────────
+// ─── The rows handle (in lines) ─────────────────────────────────────────
 
-/** How many rows the split shows: 1…N, or 0 for a rig with no rows to show. */
+/** How many **lines** the split shows (`rigLines`): 1…N, or 0 for a rig with no rows to show. */
 export function clampRigRows(wanted: number, total: number): number {
   if (total <= 0) return 0
   return Math.max(1, Math.min(Math.round(wanted), total))

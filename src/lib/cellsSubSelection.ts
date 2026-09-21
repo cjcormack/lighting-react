@@ -62,8 +62,10 @@ export type CellsOver = 'HEADS' | 'CELLS'
 
 /**
  * The chip's words for the nine modes, shared with the MIDI library's chips and `describeTarget`
- * so a button and the chip name one rule the same way. *Cells* draws the first five on its face and
- * the last four in its menu (D12; `Main.dc.html`, `Cells.dc.html`).
+ * so a button and the chip name one rule the same way. The *Cells* menu holds the seven
+ * **filters** and two step buttons beside it hold *Prev* / *Next* (D12 as revised 2026-09-21; the
+ * design's face-and-menu split put five on the face and four in the menu, and the mix read as two
+ * controls).
  */
 export const SUBSELECT_MODE_LABELS: Record<SubselectMode, string> = {
   ALL: 'All',
@@ -77,11 +79,18 @@ export const SUBSELECT_MODE_LABELS: Record<SubselectMode, string> = {
   MASTERS: 'Masters only',
 }
 
-/** The five on the chip's face, in the design's order. */
-export const SUBSELECT_FACE_MODES: readonly SubselectMode[] = ['ALL', 'ODD', 'EVEN', 'NEXT', 'PREV']
+/**
+ * The seven modes that decide **what a selection covers** — every one a rewrite of the same heads
+ * to a sub-set (or, for *All*, back to the whole) — in the Cells menu, in the design's order.
+ */
+export const SUBSELECT_FILTER_MODES: readonly SubselectMode[] = ['ALL', 'ODD', 'EVEN', 'FIRST_HALF', 'SECOND_HALF', 'INVERT', 'MASTERS']
 
-/** The rest, in the chip's menu. */
-export const SUBSELECT_MENU_MODES: readonly SubselectMode[] = ['FIRST_HALF', 'SECOND_HALF', 'INVERT', 'MASTERS']
+/**
+ * The two modes that **move** the selection along the rig rather than filter it. Semantically a
+ * different gesture — a step, not a mask — so they are two buttons beside the menu, never items in
+ * it, and pressing one does not become the chip's remembered mode.
+ */
+export const SUBSELECT_STEP_MODES: readonly SubselectMode[] = ['PREV', 'NEXT']
 
 function keyOf(target: CueTarget): string {
   return `${target.type}:${target.key}`

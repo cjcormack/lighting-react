@@ -32,6 +32,10 @@ import {
   tileOwnName,
   toRigRequest,
   type RigIds,
+  rigLines,
+  rowFlow,
+  rowWidth,
+  setRowLayout,
 } from './buskRig'
 import { parseBuskDragId } from './buskLayout'
 
@@ -405,6 +409,45 @@ describe('expandTile', () => {
     expect(expandTile(fixtureTile(named, { elementKey: 'bar-3.e1', cellMode: 'WHOLE' }), 'k')[0].name).toBe('Bar C Element 2')
     // A single-head fixture has no cells to split, whatever its stored mode says.
     expect(expandTile(fixtureTile(hex2, { cellMode: 'PER_CELL' }), 'k')).toMatchObject([{ kind: 'fixture', pips: false }])
+  })
+})
+
+describe('a row’s layout — the bank’s two facts, on the row', () => {
+  it('reads an absent flow as SCROLL and an absent or foreign width as 12 — a desk that predates the fields serves none', () => {
+    const row = { name: 'Wash', tiles: [] }
+    expect(rowFlow(row)).toBe('SCROLL')
+    expect(rowWidth(row)).toBe(12)
+    expect(rowFlow({ ...row, flow: 'WRAP' })).toBe('WRAP')
+    expect(rowWidth({ ...row, width: 6 })).toBe(6)
+    expect(rowWidth({ ...row, width: 5 })).toBe(12)
+  })
+
+  it('cuts the rows into the lines a twelve-track grid draws them on, a row starting a new line when it does not fit', () => {
+    const rows = [
+      { name: 'a', width: 6, tiles: [] },
+      { name: 'b', width: 6, tiles: [] },
+      { name: 'c', width: 8, tiles: [] },
+      { name: 'd', width: 4, tiles: [] },
+      { name: 'e', width: 9, tiles: [] },
+      { name: 'f', tiles: [] },
+    ]
+    expect(rigLines(rows)).toEqual([[0, 1], [2, 3], [4], [5]])
+    expect(rigLines([])).toEqual([])
+  })
+
+  it('sets a row’s flow and width, refuses a width the write would 400, and sends only what differs from the defaults', () => {
+    const rig = sampleRig()
+    const laid = setRowLayout(setRowLayout(rig, 0, { flow: 'WRAP' }), 0, { width: 6 })
+    expect(rowFlow(laid.rows![0])).toBe('WRAP')
+    expect(rowWidth(laid.rows![0])).toBe(6)
+    expect(setRowLayout(rig, 0, { width: 5 })).toBe(rig)
+    expect(setRowLayout(rig, 9, { width: 6 })).toBe(rig)
+    const request = toRigRequest(laid, ids)
+    expect(request.rows[0]).toMatchObject({ flow: 'WRAP', width: 6 })
+    // A row at the defaults carries neither key: a desk that predates the two columns must go on
+    // accepting a rig nobody has re-laid-out, and its Json refuses a key it does not know.
+    expect('flow' in request.rows[1]).toBe(false)
+    expect('width' in request.rows[1]).toBe(false)
   })
 })
 

@@ -25,8 +25,22 @@ import type { TemplateSummary } from '@/api/templatesApi'
  * why {@link BuskRow} carries nothing but its columns.
  */
 
-/** How a bank lays its pads out: wrapping to the bank's width, or one pad per line. */
-export type BuskFlow = 'WRAP' | 'COLUMN'
+/**
+ * How a bank lays its pads out — and, since the rig's rows took the bank's layout, how a rig row
+ * lays its tiles out: wrapping to the box's width, one per line, or one line that scrolls
+ * sideways. Mirrors `BuskFlow` in `models/buskLayout.kt`; `SCROLL` is what every rig row did
+ * before it had a flow, so it is the row's default where a bank's is `WRAP`.
+ */
+export type BuskFlow = 'WRAP' | 'COLUMN' | 'SCROLL'
+
+export const BUSK_FLOWS: readonly BuskFlow[] = ['WRAP', 'COLUMN', 'SCROLL']
+
+/** The flow menu's words, one rule for banks and rows alike. */
+export const BUSK_FLOW_LABELS: Readonly<Record<BuskFlow, string>> = {
+  WRAP: 'Wrap',
+  COLUMN: 'Column',
+  SCROLL: 'Scroll',
+}
 
 /** The three things a pad can press. */
 export type BuskPadKind = 'TEMPLATE' | 'LOOK' | 'CUE'

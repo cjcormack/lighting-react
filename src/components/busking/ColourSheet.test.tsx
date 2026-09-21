@@ -248,12 +248,25 @@ describe('writes', () => {
     expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('34')
   })
 
-  it('does not consult the mask: a drag under a Position mask still lands, and the header says what it will do', () => {
+  it('does not consult the mask: a drag under a Position mask still lands — and the tab draws no heading, only the hex read-out', () => {
     draw([group, cell], { families: ['POSITION'] })
-    expect(document.querySelector('[data-colour-sheet-heading]')).toHaveTextContent('Colour of 4 heads · writes to Local')
-    expect(screen.getByText('Position')).toBeInTheDocument()
+    // No *Colour of 4 heads* line and no mask pill: the tab strip names the tab and the rig band's
+    // label row already says what is selected and under which mask.
+    expect(document.querySelector('[data-colour-sheet-heading]')).toBeNull()
+    expect(screen.queryByText('Position')).toBeNull()
+    expect(document.querySelector('[data-colour-sheet-hex]')).toHaveTextContent(/^#[0-9a-f]{6}$/i)
     fireEvent.change(screen.getByLabelText('G'), { target: { value: '5' } })
     expect(setColour).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps its verbs in a footer below the scroller, the save first — the Spread tab’s shape', () => {
+    draw([group, cell])
+    const footer = document.querySelector('[data-colour-sheet-footer]')!
+    expect(footer.className).toContain('shrink-0')
+    expect(document.querySelector('[data-colour-sheet-body]')!.className).toContain('overflow-y-auto')
+    const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names[0]).toMatch(/Save as template/)
+    expect(names).toContain('Spread to a second colour…')
   })
 })
 

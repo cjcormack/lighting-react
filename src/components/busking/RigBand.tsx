@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { ChevronDown, GripVertical, Minus, MoreHorizontal, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Crosshair, Flashlight, Grid2x2, GripVertical, MoreHorizontal, Waves, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 import type { CueTarget } from '@/api/cuesApi'
 import type { SubselectMode } from '@/api/selectionApi'
 import type { HeldRecord } from '@/api/handApi'
+import { BUSK_FLOWS, BUSK_FLOW_LABELS, BUSK_WIDTHS, BUSK_WIDTH_LABELS, type BuskFlow } from '@/api/buskApi'
 import type { BuskRigCellMode, BuskRigRow } from '@/api/buskRigApi'
 import { useGroupListQuery } from '@/store/groups'
 import { usePatchListQuery } from '@/store/patches'
@@ -41,8 +42,8 @@ import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from 
 import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
-import { setBuskFocus, setBuskRigRows, setBuskSheet, useBuskRigRows } from '@/lib/buskWindow'
-import { SUBSELECT_FACE_MODES, SUBSELECT_MENU_MODES, SUBSELECT_MODE_LABELS } from '@/lib/cellsSubSelection'
+import { setBuskSheet, useBuskRigRows } from '@/lib/buskWindow'
+import { SUBSELECT_FILTER_MODES, SUBSELECT_MODE_LABELS, SUBSELECT_STEP_MODES } from '@/lib/cellsSubSelection'
 import {
   applyDrop,
   effectiveRig,
@@ -52,11 +53,15 @@ import {
   removeTile,
   renameRow,
   rigIdsFromPatches,
+  rigLines,
   rigRowBodyId,
   rigRowGapId,
   rigRowId,
   RIG_NEW_ROW_ID,
+  rowFlow,
   rowTiles,
+  rowWidth,
+  setRowLayout,
   setTile,
   tileKeyOf,
   type RenderTile,
@@ -67,6 +72,7 @@ import { RIG_DROP_DEPTH, rigDragData, type RigDropData, type RigRowDragData } fr
 import { BuskLabel } from './BuskLabel'
 import { NameField } from './NameField'
 import { RigEditProvider, useRigEdit } from './RigEditProvider'
+import { RigHandle } from './RigHandle'
 import { RigDropSlot, RigTile, type TileLookup } from './RigTile'
 import { summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
 
@@ -79,32 +85,54 @@ import { summariseSelection, type BuskingTarget, type EffectPresence } from './b
  * nothing built sees what the target band showed. There is **one render path**: the fallback is a
  * set of rows like any other, only its tiles carry no address and take no drop.
  *
+ * **A row is laid out the way a bank is** (2026-09-21): it carries a `width` share in twelfths and
+ * a `flow` — the bank's two facts, plus `SCROLL`, the sideways-scrolling line every row was before
+ * it had a flow and still the default. The rows fill a twelve-track grid in order (`rigLines`), so
+ * two half-width rows sit side by side as two half-width columns do on a page, and the band's unit
+ * is the **line**, not the row: the handle counts lines and `clampRigRows` clamps to them. Both
+ * facts are set from the row's `…` menu in *Edit layout*, as a bank's are from its own.
+ *
  * **A press is a plain toggle**, as it was, and a **pip is a press of its own** (session 7): a
  * `PIPS` tile's cells toggle `{type: 'fixture', key: element.key}` through the same `onToggle`, and
- * a drag across them is a run (`RigTile`). The label row is the design's (`Main.dc.html`): the
- * selection summary, the family pill, the desk chip, then the verbs — the **Cells chip** (below),
- * *Spread…* (opens the side sheet's Spread tab), Locate, Highlight, Clear — and the `n of N rows`
- * handle under the rows. Below `md` the band is one row with a row chip and the verbs in a menu
- * (the phone board), where the chip's nine modes sit under a *Cells* heading, and there is no
+ * a drag across them is a run (`RigTile`). **Two rows of chrome, then the rows** (`Main.dc.html`
+ * as revised 2026-09-21): the **label row** — the selection summary, the family pill, the desk chip
+ * — and under it a **controls row** — the **Cells menu** with its two step buttons, the verbs
+ * (*Spread…*, Locate, Highlight, Clear, each an icon with a word beside it where the band is wide,
+ * `VERB_WORD_CLASS`, and the icon alone where it is not) and, at its end, whatever the host hands in
+ * as [controls]: the Focus control and *Edit layout* / *Done*. They were one row, and a desk width
+ * with the sidebar open put twelve controls on it; the controls row is the same row in every shape
+ * — Split, Rig **and Pads**, where the band is drawn without its rows — so nothing on it moves as
+ * the shape changes, and the page strip below is tabs and the page chip and nothing else. Below `md`
+ * the band is one row with a row chip and the verbs in a menu (the phone board), and there is no
  * editing: the palette is not drawn there either.
  *
- * **The Cells chip is one desk op** (busk-further plan D12): five modes on its face — All · Odd ·
- * Even · Next · Prev — and the other four in its menu, each press `onSubselect(mode)`, which is
- * `selection.subselect` while this window follows the desk and `lib/cellsSubSelection.ts`'s mirror
- * over the tab's copy when it is unlinked (`useBuskingSelection`). The desk keeps **no**
- * sub-selection state, so nothing on the face is derived from the selection: the chip's label
- * (*Cells: Odd*) is only the mode last pressed here, and it resets with the band.
+ * **The Cells menu is one desk op** (busk-further plan D12): the seven *filters* — All · Odd ·
+ * Even · 1st half · 2nd half · Invert · Masters only — in one menu whose label names the mode last
+ * pressed here, and *Prev* / *Next* as two buttons beside it, because a step moves the selection
+ * along the rig where a filter narrows it, and the two read as one control only while they sat on
+ * one chip. Each press is `onSubselect(mode)`, which is `selection.subselect` while this window
+ * follows the desk and `lib/cellsSubSelection.ts`'s mirror over the tab's copy when it is unlinked
+ * (`useBuskingSelection`). The desk keeps **no** sub-selection state, so nothing on the face is
+ * derived from the selection: the label is only the filter last pressed here, and it resets with
+ * the band. A step is never remembered as the label — it is not a mode.
  *
- * **The handle reads and writes the window's `busk.rigRows`** (`lib/buskWindow.ts`), clamped to
- * the rig on read, and **snaps at both ends** (busk-further plan D6): one more than the last row
- * is Rig focus, one fewer than the first is Pads focus, so the segmented control on the page strip
- * and this handle are one setting. It is drawn for **one row too** (D6: 1…N) — a one-row rig still
- * needs its way into Rig and Pads from the band. In **Rig focus** the band takes `focus="rig"`:
- * every row, the band filling the body and scrolling, no handle. **Below `md` Rig focus stacks
- * every row two tiles across, scrolling vertically** (`Phones.dc.html` note 6): it is D15's
- * replacement for the narrow-width target sheet, and a sideways scroll per row on a phone would
- * defeat the point of a list. Edit mode shows every row regardless, since a hidden row cannot take
- * a drop.
+ * **The handle is `RigHandle`, in all three shapes** (busk-further plan D6, revised 2026-09-21): in
+ * Split a grip under the rows, dragged to a height and **snapping to whole lines** — a half line of
+ * tiles is useless — that reads and writes the window's `busk.rigRows` (`lib/buskWindow.ts`), and
+ * **snaps past both ends**: dragged past the last line it lands on Rig focus, dragged above the
+ * first on Pads, so the segmented control and this handle are one setting. While it is dragged every
+ * line is drawn and the clip is the snap: cut at the pointer between the ends, to nothing in the
+ * Pads region, lifted to every line in the Rig region — no count caption and no badge, the band
+ * simply takes the shape the release will give it; the arrow keys step it one line at a time for
+ * the keyboard. It is drawn for **one line too** (D6: 1…N — a one-row rig still needs its way into
+ * Rig and Pads from the band). In **Pads** and **Rig** a chevron pill is drawn where the drag would
+ * be — under the controls row, or under the rows at the bottom — and a press on it is the way back
+ * to Split. In **Rig focus** the
+ * band takes `focus="rig"`: every row, the band filling the body and its rows scrolling. **Below `md` Rig
+ * focus stacks every row two tiles across, scrolling vertically** (`Phones.dc.html` note 6): it is
+ * D15's replacement for the narrow-width target sheet, and a sideways scroll per row on a phone would
+ * defeat the point of a list. Edit mode shows every row regardless, since a hidden row cannot take a
+ * drop.
  *
  * In *Edit layout* the band joins the app's one `DndContext` through `RigEditProvider`: rows
  * reorder by their grip onto the gaps between rows, a tile or a Rig-tab palette row lands on a tile,
@@ -120,7 +148,7 @@ export interface RigBandProps {
   families: AttributeFamily[] | null
   onToggle: (target: CueTarget) => void
   onClear: () => void
-  /** The Cells chip's press — one desk op, or the client mirror when unlinked (D12). */
+  /** The Cells menu's and the step buttons' press — one desk op, or the client mirror when unlinked (D12). */
   onSubselect: (mode: SubselectMode) => void
   editing: boolean
   /** Off the desk board — below `md` and on the short board: one row with a row chip, 48px tiles, the verbs in a menu. */
@@ -131,9 +159,42 @@ export interface RigBandProps {
    * keeps its sideways rows, which is why this is not derived from [compact].
    */
   stackRows?: boolean
-  /** Split shows `busk.rigRows` rows under the handle; Rig fills the body with every row. */
-  focus: 'split' | 'rig'
+  /**
+   * Split shows `busk.rigRows` lines under the handle; Rig fills the body with every row; Pads
+   * draws the label and controls rows and the grip, and no rows — the desk board's fold, in place
+   * of `RigStrip`, so the controls row is the same row in every shape.
+   */
+  focus: 'split' | 'rig' | 'pads'
+  /**
+   * Drawn at the right end of the controls row (the label row, on the compact board): the Focus
+   * control and *Edit layout* / *Done*. Handed in rather than mounted here because the band knows
+   * nothing about the window's shape or the page's edit mode.
+   */
+  controls?: ReactNode
 }
+
+/**
+ * The verbs' words, drawn only where the controls row is wide enough for everything on it with
+ * them. The band is its own `@container`; measured on the desk, the controls row with every word
+ * — the Cells menu, the two steps, four verbs, the Focus control and *Edit layout* — is 847px with
+ * its gaps and ~600 without the verbs' words, so below this the verbs are their icons and the row
+ * stays one line.
+ * The thresholds were 1150 / 1000 when the verbs shared the label row with the summary and the
+ * chips; a dedicated row has the room, and folding at those widths dropped an 1122px window to
+ * icons for nothing. Wrapping remains the last resort for a row narrower than the icons.
+ */
+export const VERB_WORD_CLASS = 'hidden @[860px]:inline'
+
+export { snapRigRows } from './RigHandle'
+
+/** The Cells menu's label folds to its glyph a step later than the verbs' words do: it names a state. */
+const CELLS_WORD_CLASS = 'hidden @[680px]:inline'
+
+/** The Focus control's labels, by the same measure as the Cells label — glyphs alone below it. */
+export const FOCUS_WORD_CLASS = 'hidden @[680px]:inline'
+
+/** One verb on the controls row: a 28px outline button with its icon, its word folding away first (`VERB_WORD_CLASS`). */
+const VERB_CLASS = 'h-7 gap-1.5 px-2 text-xs'
 
 export function RigBand(props: RigBandProps) {
   const { projectId, editing } = props
@@ -159,6 +220,7 @@ function RigBandBody({
   compact,
   stackRows = false,
   focus,
+  controls,
   rigLoaded,
 }: RigBandProps & { rigLoaded: boolean }) {
   const { rig, source, foreign, commit } = useRigEdit()
@@ -176,23 +238,28 @@ function RigBandBody({
     () => (rigLoaded ? effectiveRig(rig, groups, fixtures) : { rows: [], fallback: false }),
     [rigLoaded, rig, groups, fixtures],
   )
+  const lines = useMemo(() => rigLines(effective.rows), [effective.rows])
 
-  // The handle: 1…N whole rows (D6), the window's fact clamped to the rig. Edit mode and Rig focus
-  // show every row — a hidden row cannot take a drop, and Rig focus *is* the whole rig.
-  const shown = useBuskRigRows(effective.rows.length)
+  // The handle: 1…N whole lines (D6), the window's fact clamped to the rig. Edit mode and Rig focus
+  // show every row — a hidden row cannot take a drop, and Rig focus *is* the whole rig — and so
+  // does a drag in progress, which clips the rows at the pointer instead (`RigRowsHandle`).
+  const shown = useBuskRigRows(lines.length)
   const everyRow = editing || focus === 'rig'
+  const folded = focus === 'pads' && !editing
   const [compactRow, setCompactRow] = useState(0)
   const compactIndex = Math.min(compactRow, Math.max(0, effective.rows.length - 1))
-  const visibleRows = everyRow
-    ? effective.rows
-    : compact
-      ? effective.rows.slice(compactIndex, compactIndex + 1)
-      : effective.rows.slice(0, shown)
-  const rowOffset = !everyRow && compact ? compactIndex : 0
-  // One fewer than the first row is Pads, one more than the last is Rig: the control and the
-  // handle are one setting.
-  const fewerRows = () => (shown <= 1 ? setBuskFocus('pads') : setBuskRigRows(shown - 1))
-  const moreRows = () => (shown >= effective.rows.length ? setBuskFocus('rig') : setBuskRigRows(shown + 1))
+  // Held by the band because it decides what is drawn (every line while the handle is held); the
+  // clip at the pointer is the handle's own, written imperatively onto `rowsRef` per move so a
+  // pointer frame re-renders the overlay and not every tile on the band.
+  const [dragging, setDragging] = useState(false)
+  const visibleLines: number[][] = folded
+    ? []
+    : everyRow || dragging
+      ? lines
+      : compact
+        ? effective.rows.length === 0 ? [] : [[compactIndex]]
+        : lines.slice(0, shown)
+  const rowsRef = useRef<HTMLDivElement>(null)
 
   // Every cell the selection **covers**: the cells selected on their own, and every cell of a
   // selected whole fixture — the desk's `TargetCoverage` reads a cell as covered by its parent, so
@@ -329,30 +396,53 @@ function RigBandBody({
 
   const nothingToShow = rigLoaded && effective.rows.length === 0
 
+  /** Edit mode's reset, drawn on whichever row the board has — a window narrowed mid-edit keeps it. */
+  const resetButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={VERB_CLASS}
+      onClick={() => setConfirmingReset(true)}
+      disabled={effective.fallback}
+      title="Remove every row: the rig goes back to every group then every fixture"
+    >
+      Show every target
+    </Button>
+  )
+
+  const locateTitle = allLocated ? 'Release locate on the selection' : 'Locate the selection: white beam at centre'
+
   return (
     <div
       data-rig-band={focus}
       className={cn(
-        'shrink-0 border-b px-4 pt-2.5 pb-2',
+        // Its own container, so the verbs' words and the Focus labels fold on the band's width —
+        // what the rail or the sheet has taken is the band's business, not the viewport's.
+        '@container shrink-0 border-b px-4 pt-2.5 pb-2',
         editing && 'bg-muted/20',
-        focus === 'rig' && !editing && 'min-h-0 flex-1 overflow-y-auto',
+        // Rig focus: the band fills the body and the **rows** scroll, not the band — the controls
+        // row carries the Focus control, the way back to Split and Pads, and a scroller that took it
+        // along would put the only way back off-screen on any rig taller than the body.
+        focus === 'rig' && !editing && 'flex min-h-0 flex-1 flex-col',
+        // Pads: the band folds to its two rows and the grip; the page takes the body.
+        folded && 'pb-1',
       )}
     >
       {/* ── Label row ── */}
-      {/* `flex-wrap`: the verbs are a fixed ~330px and the summary gives, so at a tablet width the
-          row overflowed into the speed rail with the summary squeezed to nothing (seen on the desk
-          at 800px). Wrapped, the verbs take a second line and the summary keeps a readable floor. */}
-      <div data-rig-label-row className="mb-2 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1">
+      {/* The label row: the summary, the pill and the desk chip; `flex-wrap` as the last resort. */}
+      <div data-rig-label-row className={cn('flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1', compact ? 'mb-2' : 'mb-1.5')}>
         <BuskLabel>Rig</BuskLabel>
         {compact && !everyRow && effective.rows.length > 1 && (
           <RowChip rows={effective.rows} index={compactIndex} onSelect={setCompactRow} />
         )}
         {editing ? (
-          <span className="min-w-[8rem] flex-1 truncate text-[11px] text-muted-foreground">
+          <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground">
             Editing · drag targets from the palette, rows reorder by their grip
           </span>
         ) : (
-          <span className="min-w-[8rem] flex-1 truncate text-[11px] text-muted-foreground">{summary}</span>
+          <span className="min-w-[6rem] flex-1 truncate text-[11px] text-muted-foreground" title={summary}>
+            {summary}
+          </span>
         )}
         {families != null && families.length > 0 && (
           <Badge
@@ -365,124 +455,147 @@ function RigBandBody({
         {/* `showSubject`: the page strip below carries the same pill for the page, and two bare
             *Desk* chips a row apart would be worse than either alone. */}
         {!editing && <DeskChip showSubject />}
-        {!editing && !compact && <CellsChip onSubselect={onSubselect} />}
-        {editing ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs"
-            onClick={() => setConfirmingReset(true)}
-            disabled={effective.fallback}
-            title="Remove every row: the rig goes back to every group then every fixture"
-          >
-            Show every target
-          </Button>
-        ) : compact ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 px-1.5" aria-label="Selection verbs">
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {/* Below `md` the chip's modes sit here: the label row has no room for a second chip. */}
-              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
-              {[...SUBSELECT_FACE_MODES, ...SUBSELECT_MENU_MODES].map((mode) => (
-                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
-                  {SUBSELECT_MODE_LABELS[mode]}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setBuskSheet('spread')} title="Spread a value across the selection">
-                Spread…
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={locateTargets.length === 0} onSelect={locateSelection}>
-                {allLocated ? 'Release locate' : 'Locate'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={selected.length === 0} onSelect={onClear}>
-                Clear
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
+        {/* The compact board has one row: its verbs menu, the edit-mode reset and the host's
+            controls sit here, for `Done`'s reason — a desk window narrowed mid-edit keeps editing. */}
+        {compact && !editing && (
+          <CompactVerbs
+            onSubselect={onSubselect}
+            onClear={onClear}
+            canClear={selected.length > 0}
+            locateLabel={allLocated ? 'Release locate' : 'Locate'}
+            canLocate={locateTargets.length > 0}
+            onLocate={locateSelection}
+          />
+        )}
+        {compact && editing && resetButton}
+        {compact && controls}
+      </div>
+
+      {/* ── Controls row ── */}
+      {/* The common controls, on a row of their own in every shape (2026-09-21): the sub-selection,
+          the verbs, then the host's Focus control and Edit layout / Done. One row on the desk board
+          where the label row used to carry all of it and wrapped; the compact board keeps its one. */}
+      {!compact && (
+        <div data-rig-controls-row className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
+          {!editing && (
+            <>
+              <CellsMenu onSubselect={onSubselect} />
+              <StepButtons onSubselect={onSubselect} />
+            </>
+          )}
+          {editing ? (
+            resetButton
+          ) : (
           <>
             {/* *Spread…* is a selection verb beside Locate and Highlight: it opens the Spread tab,
                 which reads the selection, and writes nothing but the sheet fact — below `md` the
-                overlay carries the tab, so the same write opens it there. */}
+                overlay carries the tab, so the same write opens it there. Each verb is the desk's
+                ordinary outline button with its icon (the programmer's toolbar draws Locate and
+                Highlight with these two glyphs), the word folding away first. */}
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className={VERB_CLASS}
               onClick={() => setBuskSheet('spread')}
+              aria-label="Spread…"
               title="Spread a value across the selection"
             >
-              Spread…
+              <Waves className="size-3.5" />
+              <span className={VERB_WORD_CLASS}>Spread…</span>
             </Button>
             <Button
               variant={allLocated ? 'default' : 'outline'}
               size="sm"
-              className={cn('h-6 px-2 text-xs', allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
+              className={cn(VERB_CLASS, allLocated && 'bg-sky-500 text-white hover:bg-sky-600')}
               onClick={locateSelection}
               disabled={locateTargets.length === 0}
-              title={allLocated ? 'Release locate on the selection' : 'Locate the selection: white beam at centre'}
+              aria-label="Locate"
+              title={locateTitle}
             >
-              Locate
+              <Crosshair className="size-3.5" />
+              <span className={VERB_WORD_CLASS}>Locate</span>
             </Button>
             <Button
               variant={highlight.isActive ? 'default' : 'outline'}
               size="sm"
-              className="h-6 px-2 text-xs"
+              className={VERB_CLASS}
               disabled={selected.length === 0}
               onPointerDown={highlight.press}
               onPointerUp={highlight.release}
               onPointerCancel={highlight.release}
               onPointerLeave={highlight.release}
+              aria-label="Highlight"
               title="Hold: every selected dimmer to full"
             >
-              Highlight
+              <Flashlight className="size-3.5" />
+              <span className={VERB_WORD_CLASS}>Highlight</span>
             </Button>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className={VERB_CLASS}
               onClick={onClear}
               disabled={selected.length === 0}
+              aria-label="Clear"
+              title="Clear the selection"
             >
-              Clear
+              <X className="size-3.5" />
+              <span className={VERB_WORD_CLASS}>Clear</span>
             </Button>
           </>
         )}
-      </div>
+          <span className="flex-1" />
+          {controls}
+        </div>
+      )}
 
       {/* ── Rows ── */}
-      {nothingToShow && !editing ? (
+      {folded ? null : nothingToShow && !editing ? (
         <p className="py-4 text-center text-sm text-muted-foreground">No fixtures or groups configured</p>
       ) : (
-        <div className={cn('flex flex-col gap-1.5', editing && effective.fallback && 'opacity-60')}>
+        <div
+          ref={rowsRef}
+          data-rig-rows
+          className={cn(
+            // Twelve tracks, the page's own grid: a row is `span <width>`, so two half-width rows
+            // share a line. Compact and stacked rows are one to a line whatever their width.
+            // `content-start` in every shape: the handle's drag extends the grid below its last
+            // line, and stretched tracks would grow the tiles instead of leaving the room empty.
+            'grid grid-cols-12 content-start gap-x-3 gap-y-1.5',
+            editing && effective.fallback && 'opacity-60',
+            focus === 'rig' && !editing && 'min-h-0 flex-1 overflow-y-auto',
+          )}
+        >
           {editing && effective.fallback && effective.rows.length > 0 && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="col-span-12 text-[11px] text-muted-foreground">
               Showing every target — drop a target below to start building a rig.
             </p>
           )}
-          {visibleRows.map((row, index) => (
-            <RigRow
-              key={row.uuid ?? row.localKey ?? `row-${index}`}
-              row={row}
-              index={rowOffset + index}
-              inDocument={!effective.fallback}
-              editing={editing}
-              compact={compact}
-              stacked={stackRows && focus === 'rig' && !editing}
-              lookup={lookup}
-              presenceOf={presenceOf}
-              wholeSelected={wholeSelected}
-              selectedCells={selectedCells}
-              onPress={press}
-              onPressCell={onToggle}
-              onPlace={placeHeld}
-            />
-          ))}
+          {visibleLines.map((line, lineIndex) =>
+            line.map((index) => {
+              const row = effective.rows[index]
+              return (
+                <RigRow
+                  key={row.uuid ?? row.localKey ?? `row-${index}`}
+                  row={row}
+                  index={index}
+                  line={lineIndex}
+                  span={compact || (stackRows && focus === 'rig' && !editing) ? 12 : rowWidth(row)}
+                  inDocument={!effective.fallback}
+                  editing={editing}
+                  compact={compact}
+                  stacked={stackRows && focus === 'rig' && !editing}
+                  lookup={lookup}
+                  presenceOf={presenceOf}
+                  wholeSelected={wholeSelected}
+                  selectedCells={selectedCells}
+                  onPress={press}
+                  onPressCell={onToggle}
+                  onPlace={placeHeld}
+                />
+              )
+            }),
+          )}
         </div>
       )}
 
@@ -495,33 +608,20 @@ function RigBandBody({
         </>
       )}
 
-      {/* ── The rows handle ── */}
-      {!everyRow && !compact && effective.rows.length > 0 && (
-        <div className="mt-1.5 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            aria-label="Show one row fewer"
-            title={shown <= 1 ? 'Fold the rig: Pads focus' : 'Show one row fewer'}
-            onClick={fewerRows}
-          >
-            <Minus className="size-3" />
-          </Button>
-          <span data-rig-rows-handle className="tabular-nums">
-            {shown} of {effective.rows.length} rows
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            aria-label="Show one row more"
-            title={shown >= effective.rows.length ? 'Every row, full size: Rig focus' : 'Show one row more'}
-            onClick={moreRows}
-          >
-            <Plus className="size-3" />
-          </Button>
-        </div>
+      {/* ── The handle ── */}
+      {/* One grip in three shapes, on the desk board: the drag in Split; the press back to Split
+          under the controls row in Pads and under the rows in Rig. Not in edit mode, which forces
+          Split for its duration, and not on the compact board, where the segmented control is the
+          route. */}
+      {!editing && !compact && (focus !== 'split' || lines.length > 0) && (
+        <RigHandle
+          mode={focus}
+          shown={shown}
+          total={lines.length}
+          rowsRef={rowsRef}
+          dragging={dragging}
+          onDragging={setDragging}
+        />
       )}
 
       {/* Confirmed, like the page delete: this takes a whole arrangement away and the rig write
@@ -565,50 +665,71 @@ function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   return null
 }
 
+// ─── The Cells menu and the steps ────────────────────────────────────────
+
 /**
- * The Cells chip (D12): *Cells: <last>* opening the four menu modes, then the five face modes as
- * their own presses. `last` is the mode pressed here most recently and nothing more — the desk
- * keeps no sub-selection, so there is nothing to read one back from.
+ * The Cells menu (D12, revised 2026-09-21): *Cells: <last>* opening the seven filters. `last` is
+ * the filter pressed here most recently and nothing more — the desk keeps no sub-selection, so
+ * there is nothing to read one back from. The two steps are `StepButtons`, beside it.
  */
-function CellsChip({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
+function CellsMenu({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
   const [last, setLast] = useState<SubselectMode>('ALL')
   const press = (mode: SubselectMode) => {
     setLast(mode)
     onSubselect(mode)
   }
   return (
-    <div data-cells-chip className="flex h-6 shrink-0 items-center rounded-md border bg-card">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="More sub-selections"
-            title="Sub-selection over rig order — 1st half · 2nd half · Invert · Masters only"
-            className="inline-flex h-full items-center gap-1 border-r px-2 text-xs font-medium hover:bg-accent"
-          >
-            Cells: {SUBSELECT_MODE_LABELS[last]}
-            <ChevronDown className="size-3 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {SUBSELECT_MENU_MODES.map((mode) => (
-            <DropdownMenuItem key={mode} onSelect={() => press(mode)}>
-              {SUBSELECT_MODE_LABELS[mode]}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {SUBSELECT_FACE_MODES.map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          aria-label={`Cells: ${SUBSELECT_MODE_LABELS[mode]}`}
-          title={CELLS_MODE_TITLES[mode]}
-          onClick={() => press(mode)}
-          className="h-full px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          data-cells-chip
+          aria-label={`Cells: ${SUBSELECT_MODE_LABELS[last]}`}
+          title={`Sub-selection over rig order — ${SUBSELECT_FILTER_MODES.map((mode) => SUBSELECT_MODE_LABELS[mode]).join(' · ')}`}
+          className={cn(VERB_CLASS, 'gap-1')}
         >
-          {SUBSELECT_MODE_LABELS[mode]}
-        </button>
+          <Grid2x2 className="size-3.5" />
+          <span className={CELLS_WORD_CLASS}>Cells: {SUBSELECT_MODE_LABELS[last]}</span>
+          <ChevronDown className="size-3 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={last} onValueChange={(mode) => press(mode as SubselectMode)}>
+          {SUBSELECT_FILTER_MODES.map((mode) => (
+            <DropdownMenuRadioItem key={mode} value={mode} title={CELLS_MODE_TITLES[mode]}>
+              {SUBSELECT_MODE_LABELS[mode]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const STEP_LABELS: Partial<Record<SubselectMode, string>> = {
+  PREV: 'Previous along the rig',
+  NEXT: 'Next along the rig',
+}
+
+/** *Prev* / *Next*: a step along the rig order, which moves the selection rather than filtering it. */
+function StepButtons({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Step the selection along the rig">
+      {SUBSELECT_STEP_MODES.map((mode) => (
+        <Button
+          key={mode}
+          variant="outline"
+          size="sm"
+          data-cells-step={mode}
+          aria-label={STEP_LABELS[mode]}
+          title={CELLS_MODE_TITLES[mode]}
+          className="h-7 w-7 px-0"
+          onClick={() => onSubselect(mode)}
+        >
+          {mode === 'PREV' ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        </Button>
       ))}
     </div>
   )
@@ -618,8 +739,71 @@ const CELLS_MODE_TITLES: Partial<Record<SubselectMode, string>> = {
   ALL: 'Every selected cell widened to its whole fixture',
   ODD: 'Every other unit in rig order, from the first — cells where a selected head has them',
   EVEN: 'Every other unit in rig order, from the second',
+  FIRST_HALF: 'The first half of the selection in rig order',
+  SECOND_HALF: 'The second half of the selection in rig order',
+  INVERT: 'Every unit of the selected heads that is not selected',
+  MASTERS: 'The masters only: a multi-head fixture’s own channels, no cell',
   NEXT: 'The whole selection one step along rig order; one cell when only cells are selected',
   PREV: 'The whole selection one step back along rig order',
+}
+
+/**
+ * Below `md` the label row has no room for a second control: the filters, the steps and the verbs
+ * sit in one menu. **Module-level, not a closure inside the band**: a component declared during a
+ * render is a new element type per render, so React remounted it — and closed its open menu —
+ * on every `selection.state` frame, locate push or rig refetch while the operator had it open.
+ */
+function CompactVerbs({
+  onSubselect,
+  onClear,
+  canClear,
+  locateLabel,
+  canLocate,
+  onLocate,
+}: {
+  onSubselect: (mode: SubselectMode) => void
+  onClear: () => void
+  canClear: boolean
+  locateLabel: string
+  canLocate: boolean
+  onLocate: () => void
+}) {
+  return (
+    <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 px-1.5" aria-label="Selection verbs">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* Below `md` the menu's filters and the two steps sit here: the label row has no
+                  room for a second control. */}
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+              {SUBSELECT_FILTER_MODES.map((mode) => (
+                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
+                  {SUBSELECT_MODE_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              {SUBSELECT_STEP_MODES.map((mode) => (
+                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)} title={CELLS_MODE_TITLES[mode]}>
+                  {STEP_LABELS[mode] ?? SUBSELECT_MODE_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setBuskSheet('spread')} title="Spread a value across the selection">
+                Spread…
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canLocate} onSelect={onLocate}>
+                {locateLabel}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={!canClear} onSelect={onClear}>
+                Clear
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+  )
 }
 
 function RowChip({
@@ -656,9 +840,26 @@ function RowChip({
   )
 }
 
+// ─── A row ───────────────────────────────────────────────────────────────
+
+/** The row body per flow: the sideways line it always was, a wrapping grid of tiles, or one tile per line. */
+function rowBodyClass(flow: BuskFlow, stacked: boolean): string {
+  if (stacked) return 'grid grid-cols-2 gap-2 pb-1'
+  switch (flow) {
+    case 'WRAP':
+      return 'flex flex-wrap gap-2 pb-1'
+    case 'COLUMN':
+      return 'flex flex-col gap-2 pb-1'
+    case 'SCROLL':
+      return 'flex gap-2 overflow-x-auto pb-1'
+  }
+}
+
 function RigRow({
   row,
   index,
+  line,
+  span,
   inDocument,
   editing,
   compact,
@@ -673,6 +874,10 @@ function RigRow({
 }: {
   row: BuskRigRow
   index: number
+  /** Which line of the band's grid this row is on (`rigLines`), for the handle's measurement. */
+  line: number
+  /** The row's grid span in twelfths — its width, or 12 where rows are one to a line. */
+  span: number
   /** False for a show-all fallback row, which nothing can address. */
   inDocument: boolean
   editing: boolean
@@ -691,6 +896,7 @@ function RigRow({
   const editable = editing && inDocument
   const draggingRow = source?.type === 'rig-row'
   const tiles = rowTiles(row)
+  const flow = rowFlow(row)
 
   const { attributes, listeners, setNodeRef: setRowRef, isDragging } = useDraggable({
     id: rigRowId(index),
@@ -741,10 +947,18 @@ function RigRow({
   })
   if (slotIndex === tiles.length) cells.push(<RigDropSlot key="drop-slot" compact={compact} />)
 
+  const style = { gridColumn: `span ${span} / span ${span}` } as CSSProperties
+
   return (
     <>
       {editing && draggingRow && !isDragging && inDocument && <RowGap index={index} />}
-      <div ref={setRowRef} className={cn('flex flex-col gap-1', isDragging && 'opacity-40')}>
+      <div
+        ref={setRowRef}
+        data-rig-line={line}
+        data-rig-row-flow={flow}
+        style={style}
+        className={cn('flex min-w-0 flex-col gap-1', isDragging && 'opacity-40')}
+      >
         <div className="flex min-h-5 items-center gap-2">
           {editable && (
             <button
@@ -763,27 +977,24 @@ function RigRow({
               label="Row name"
               placeholder="Row"
               onSave={(name) => commit((rig) => renameRow(rig, index, name))}
-              className="max-w-[16rem] flex-1"
+              className="min-w-[6rem] max-w-[16rem] flex-1"
             />
           ) : (
             <span className="truncate text-[11px] font-semibold text-muted-foreground">{row.name}</span>
           )}
           {editable && (
-            <button
-              type="button"
-              onClick={() => commit((rig) => removeRow(rig, index))}
-              aria-label={`Remove row ${row.name || 'row'}`}
-              className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
+            <RowMenu
+              row={row}
+              onLayout={(patch) => commit((rig) => setRowLayout(rig, index, patch))}
+              onRemove={() => commit((rig) => removeRow(rig, index))}
+            />
           )}
         </div>
         <div
           ref={setBodyRef}
-          data-rig-row-body={stacked ? 'stacked' : 'row'}
+          data-rig-row-body={stacked ? 'stacked' : flow.toLowerCase()}
           className={cn(
-            stacked ? 'grid grid-cols-2 gap-2 pb-1' : 'flex gap-2 overflow-x-auto pb-1',
+            rowBodyClass(flow, stacked),
             isOver && editable && !draggingRow && !foreign && 'rounded-lg bg-primary/5 ring-1 ring-inset ring-primary/40',
           )}
         >
@@ -802,6 +1013,64 @@ function RigRow({
   )
 }
 
+/**
+ * The row's menu while editing — the bank's own, on the row: its **width** share, its **flow**,
+ * and *Remove row* last. The width and flow are the row's rather than a column's here, because a
+ * rig has no columns: a row *is* the box, and its width says how much of a line it takes.
+ */
+function RowMenu({
+  row,
+  onLayout,
+  onRemove,
+}: {
+  row: BuskRigRow
+  onLayout: (patch: { flow?: BuskFlow; width?: number }) => void
+  onRemove: () => void
+}) {
+  const width = rowWidth(row)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Options for row ${row.name || 'row'}`}
+          className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <MoreHorizontal className="size-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Row width</DropdownMenuLabel>
+        <div className="flex gap-0.5 px-1 pb-1" role="group" aria-label="Row width">
+          {BUSK_WIDTHS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={option === width}
+              onClick={() => onLayout({ width: option })}
+              className={cn('rounded px-2 py-1 text-xs hover:bg-accent', option === width && 'bg-muted font-semibold')}
+            >
+              {BUSK_WIDTH_LABELS[option]}
+            </button>
+          ))}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={rowFlow(row)} onValueChange={(flow) => onLayout({ flow: flow as BuskFlow })}>
+          {BUSK_FLOWS.map((flow) => (
+            <DropdownMenuRadioItem key={flow} value={flow}>
+              Flow: {BUSK_FLOW_LABELS[flow]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+          Remove row
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /** The strip a lifted row lands on — before row `index`, or after the last for `rows.length`. */
 function RowGap({ index }: { index: number }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -812,7 +1081,8 @@ function RowGap({ index }: { index: number }) {
     <div
       ref={setNodeRef}
       className={cn(
-        'grid h-[22px] place-items-center rounded-lg border-2 border-dashed text-[10px] font-semibold transition-colors',
+        // A whole line of the band's grid, whatever the rows around it span.
+        'col-span-12 grid h-[22px] place-items-center rounded-lg border-2 border-dashed text-[10px] font-semibold transition-colors',
         isOver ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground',
       )}
     >

@@ -809,7 +809,8 @@ function TargetBody({
     return (
       <p className="text-xs text-muted-foreground">
         Steps the whole desk selection one place along rig order, wrapping — one cell when only cells
-        are selected. The Cells chip&rsquo;s {kind === "selectionNext" ? "Next" : "Prev"} on a button.
+        are selected. The rig band&rsquo;s {kind === "selectionNext" ? "Next" : "Prev"} step button, on a
+        surface button.
       </p>
     )
   }
@@ -828,7 +829,7 @@ function TargetBody({
           </Select>
         </div>
         <p className="text-xs text-muted-foreground">
-          Rewrites the desk selection&rsquo;s targets over rig order — the Cells chip on a button.
+          Rewrites the desk selection&rsquo;s targets over rig order — the rig band&rsquo;s Cells menu on a button.
           Not a state the desk keeps, so there is no LED.
         </p>
       </div>

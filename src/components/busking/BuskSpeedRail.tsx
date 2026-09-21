@@ -8,7 +8,7 @@ import { SpeedMasterDetailSheet } from '@/components/speedMasters/SpeedMasterDet
 import { formatBpm, useBpmDraft } from '@/hooks/useBpmDraft'
 import { useLivePush } from '@/hooks/useLivePush'
 import { useLongPress } from '@/hooks/useLongPress'
-import { BuskLabel, BUSK_LABEL_CLASS } from './BuskLabel'
+import { BUSK_LABEL_CLASS } from './BuskLabel'
 import {
   setSpeedMasterBpm,
   tapSpeedMaster,
@@ -63,8 +63,16 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * from master 1 is offered neither, because the server refuses both (`SPEED_MASTER_FOLLOWER`) and
  * nothing on a desk should be a button that cannot work.
  *
- * Not rendered below `md`. The ShowBar above it already carries `SpeedMastersChip`, which reaches
+ * Mounted only on the desk board, by `SideSheet` — the overlay form off it carries no Speed tab. The
+ * ShowBar above it already carries `SpeedMastersChip`, which reaches
  * every master in a popover; a 288px rail at phone width would be the pads' whole width.
+ *
+ * **It fills whatever width the sheet gives it** (2026-09-21), where it was a fixed 288px column
+ * inside a sheet the operator drags to width — so the cards stopped at 288 in a 480px sheet. And
+ * it draws **no heading and no caption**: the tab strip names the tab, and the sentence about
+ * what a usage badge means is on each badge's own title instead. The caption's one rule — the
+ * badge names the family whose effect templates default to this master, and nothing here stamps
+ * one — still holds; it just is not printed at the top of every visit.
  */
 export function BuskSpeedRail() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -94,20 +102,7 @@ export function BuskSpeedRail() {
     sheetMasterId == null ? null : ((rows ?? []).find((r) => r.id === sheetMasterId) ?? null)
 
   return (
-    <div className="hidden w-72 shrink-0 flex-col gap-2.5 overflow-y-auto border-l p-3 md:flex">
-      <div>
-        <BuskLabel>Speed</BuskLabel>
-        {/* Still states what a usage badge *means* rather than what a press here does — the pads on
-            this page stamp nothing, and the old "effects busked with no explicit master follow the
-            master matching their family" promised otherwise. What changed is that the rule has a
-            caller again: an effect template is stamped with the usage-matching master when its
-            effect is chosen in `TemplateEditor`, so the badge can name that rather than a routing
-            nobody performs. */}
-        <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
-          A usage badge names the family whose effect templates default to this master.
-        </p>
-      </div>
-
+    <div data-busk-speed-rail className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-y-auto border-l p-3">
       {(live ?? []).map((master) => {
         const row = master.uuid == null ? undefined : rowByUuid.get(master.uuid)
         return (
@@ -349,7 +344,12 @@ function MasterCard({
           {/* Master 1 never carries one: it is the fallback for every category no other master
             claims, so "routes dimmer" would understate it and any single label would be wrong. */}
           {!isMaster1 && usage && (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[9px] font-bold tracking-[0.06em]">
+            <span
+              className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[9px] font-bold tracking-[0.06em]"
+              // The rail's old caption, on the badge it was about: what a usage *means*, not what a
+              // press here does — nothing on this page stamps a master; `TemplateEditor` does.
+              title="Usage: effect templates of this family default to this master"
+            >
               {usage}
             </span>
           )}

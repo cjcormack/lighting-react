@@ -13,7 +13,7 @@ import { buskApi, resetBuskCommitState } from '@/store/busk'
 import { restApi } from '@/store/restApi'
 import type { BuskPad, BuskPage } from '@/api/buskApi'
 import { BuskEditContext, BuskEditProvider } from './BuskEditProvider'
-import { BuskPageBody, STACK_BELOW_PX } from './BuskPage'
+import { BuskPageBody, EDIT_COLUMN_MIN_PX, STACK_BELOW_PX } from './BuskPage'
 import type { PadBehaviour } from './padBehaviour'
 import type { BuskDragData } from './buskDnd'
 
@@ -76,7 +76,7 @@ const page: BuskPage = {
           id: 3,
           uuid: 'c3',
           width: 12,
-          banks: [{ id: 4, uuid: 'b4', name: 'Texture', solo: false, flow: 'WRAP', pads: [pad('Disco')] }],
+          banks: [{ id: 4, uuid: 'b4', name: 'Texture', solo: false, flow: 'SCROLL', pads: [pad('Disco')] }],
         },
       ],
     },
@@ -143,12 +143,17 @@ describe('a page', () => {
     expect(screen.getAllByText('solo')).toHaveLength(1)
   })
 
-  it('lays a COLUMN bank out one pad per line and a WRAP bank as a grid', () => {
+  it('lays a COLUMN bank out one pad per line, a WRAP bank as a grid, and a SCROLL bank as one sideways line of fixed-width pads', () => {
     const { container } = draw()
     const colBank = screen.getByText('Colour').closest('div')!.parentElement!
     expect(within(colBank).getByText('Amber')).toBeTruthy()
     expect(colBank.querySelector('.grid-cols-1')).toBeTruthy()
     expect(container.querySelector('.grid-cols-\\[repeat\\(auto-fill\\,minmax\\(110px\\,1fr\\)\\)\\]')).toBeTruthy()
+    // SCROLL — the rig row's own flow, offered to banks too.
+    const scroll = container.querySelector('[data-bank-flow="SCROLL"]')!
+    expect(scroll.className).toContain('overflow-x-auto')
+    expect(scroll.className).toContain('*:shrink-0')
+    expect(within(scroll as HTMLElement).getByText('Disco')).toBeTruthy()
   })
 
   it('renders an empty bank rather than dropping it', () => {
@@ -167,9 +172,11 @@ describe('a page', () => {
     expect(screen.getByText('Row')).toBeTruthy()
     expect(screen.getAllByText('Bank').length).toBeGreaterThan(0)
     expect(screen.getAllByLabelText('Bank name')).toHaveLength(4)
-    // The gutters are in the DOM for the whole of edit mode, not only during a drag.
+    // The gutters are in the DOM for the whole of edit mode, not only during a drag — and every
+    // editing column has a floor under its share, so a bank header's controls cannot run past the
+    // bank's border in a quarter-width column (`EDIT_COLUMN_MIN_PX`).
     expect(screen.getByTestId('busk-row-0').style.getPropertyValue('--busk-tracks')).toBe(
-      '20px 6fr 20px 3fr 20px 3fr',
+      `20px minmax(${EDIT_COLUMN_MIN_PX}px, 6fr) 20px minmax(${EDIT_COLUMN_MIN_PX}px, 3fr) 20px 3fr`,
     )
   })
 })

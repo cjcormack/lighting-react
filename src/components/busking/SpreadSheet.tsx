@@ -3,7 +3,6 @@ import { ArrowLeftRight, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CueTarget } from '@/api/cuesApi'
 import type { TemplateSummary } from '@/api/templatesApi'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -15,7 +14,7 @@ import { RecordLookSheet } from '@/components/programmer/RecordLookSheet'
 import { useCellEditorCramped } from '@/components/sheet/cells/CellEditorSurface'
 import { useLivePush } from '@/hooks/useLivePush'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { selectedCells } from '@/lib/cellsSubSelection'
@@ -35,13 +34,11 @@ import {
 import {
   WHITE_POLICIES,
   WHITE_POLICY_LABELS,
-  parseTemplateIntent,
   templatePropertyFor,
   type TemplateProperty,
   type WhitePolicy,
 } from '@/lib/templateIntent'
 import { cn } from '@/lib/utils'
-import type { Fixture } from '@/store/fixtures'
 import {
   useSpreadMutation,
   type SpreadCurve,
@@ -55,7 +52,7 @@ import { useTemplateListQuery } from '@/store/templates'
 import { templateSwatch } from './padFace'
 import { BuskLabel } from './BuskLabel'
 import { writeTargetsOf } from './ColourSheet'
-import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskingTypes'
+import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
 /**
  * The side sheet's **Spread** tab — fan, resolved on the desk (busk-further plan D9, D10;
@@ -68,13 +65,17 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * member order, each head's range, which cells a fixture has and what a colour means on a head with
  * amber — the rule that keeps `templateIntent.ts` a serialiser, and the reason this file imports
  * nothing from `sheet/fanMath.ts`, the client fan that lerps bytes over rows it can see. The
- * **preview strip is drawn from the answer**: one bar per head, the written heads in the order the
- * desk wrote them (rig order) and then any it skipped, dimmed with the reason on its title, a
- * multi-head fixture's cells folded into its bar. A skipped head is drawn after the written ones
- * rather than in its rig position because the answer carries no position — `written` and
- * `skipped` are two lists — and recovering one here would be a second copy of an order the desk
- * owns. It is empty until the desk has answered, and it never shows what this side thinks the
- * desk *would* do.
+ * desk's answer is read for one thing only, its `skippedFamilies`: there was a **preview strip**
+ * drawn from `written[]` and `skipped[]` — one bar per head in the desk's order — and it went on
+ * 2026-09-21, because it cost the tab its height and the rig itself is the preview. The rule it
+ * embodied still holds and is why nothing replaced it client-side: this tab never shows what it
+ * thinks the desk *would* do, only what the desk did, and the rig shows that better.
+ *
+ * **There is no heading** (2026-09-21): the tab strip names the tab and the rig band's label row
+ * already says what is selected and under which mask. **The verbs are a footer, static at the
+ * bottom of the tab** — *Save as Look…* first, then *Apply* — the Colour tab's footer's shape with
+ * its own save first, so both tabs keep their save in one place; the body above them is the tab's
+ * one scroller. The picker is `fluid`, so it takes the width the sheet is dragged to.
  *
  * **A spread is a result, not a template** (D10). *Save as Look…* opens `RecordLookSheet` over
  * the selection — `record-look`, the same gesture every busked state is kept by — and nothing here
@@ -85,12 +86,12 @@ import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskin
  * the whole request — the tempo fader's discipline, because a fan is judged by eye against the rig.
  * The release is read from the **window**, as the Colour tab reads it: the picker binds its own
  * release to the document. Off, only *Apply* writes. Under an empty selection nothing is sent and
- * the strip's own sentence is toasted; the desk would answer `SPREAD_NEEDS_SELECTION` otherwise,
+ * the tab's own sentence is toasted; the desk would answer `SPREAD_NEEDS_SELECTION` otherwise,
  * which `errorToastMiddleware` renders, and the tab must not say it twice.
  *
  * **The mask is honoured by the desk, not pre-refused here.** A property outside the selection's
  * families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape — which is
- * toasted in `skippedRowsMessage`'s vocabulary. The header reads the family pill so the operator
+ * toasted in `skippedRowsMessage`'s vocabulary; the rig band's family pill is where the operator
  * sees the mask before pressing.
  *
  * **The colour picker is seeded, never fed its own writes.** `ColourPickerBody`'s `combinedCss`
@@ -194,44 +195,6 @@ export function spreadRequestOf(
   }
 }
 
-/** One bar of the preview strip: a head, its cells folded in. */
-export interface PreviewBar {
-  key: string
-  name: string
-  /** One per write on this head — one for a whole fixture, one per cell over CELLS. */
-  values: string[]
-  /** The desk's reason, for a head it could not resolve. */
-  skipped?: string
-}
-
-/**
- * The strip, folded from the desk's answer: one bar per written head in the order the desk wrote
- * them, then one per skipped head, a cell's write folded into its parent's bar. Never computed from
- * the request — only from `written` and `skipped`.
- */
-export function previewBarsOf(response: SpreadResponse | null, fixtures: readonly Fixture[] | undefined): PreviewBar[] {
-  if (response == null) return []
-  const bars = new Map<string, PreviewBar>()
-  const headOf = (key: string): { key: string; name: string } => {
-    const own = fixtures?.find((fixture) => fixture.key === key)
-    if (own != null) return { key: own.key, name: own.name }
-    const parent = fixtures?.find((fixture) => fixture.elements?.some((element) => element.key === key))
-    return parent != null ? { key: parent.key, name: parent.name } : { key, name: key }
-  }
-  for (const write of response.written ?? []) {
-    const head = headOf(write.target.key)
-    const bar = bars.get(head.key) ?? { ...head, values: [] }
-    bar.values.push(write.value)
-    bars.set(head.key, bar)
-  }
-  for (const skip of response.skipped ?? []) {
-    const head = headOf(skip.target.key)
-    if (bars.has(head.key)) continue
-    bars.set(head.key, { ...head, values: [], skipped: skip.reason })
-  }
-  return [...bars.values()]
-}
-
 /**
  * A template a colour endpoint may name: the FX colour parameter's own offer rule (generic, value,
  * COLOUR — one statement, in `FxColourTemplates.tsx`), **and** a `rgbColour` row. The desk's
@@ -254,18 +217,6 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   const { data: templates } = useTemplateListQuery({ projectId })
   const [spread] = useSpreadMutation()
 
-  const headCount = selectedHeadCount(selected)
-  const names = useMemo(
-    () =>
-      selected.map((target) =>
-        target.type === 'group'
-          ? target.name
-          : target.element != null
-            ? `${target.fixture.name} · ${target.element.displayName}`
-            : target.fixture.name,
-      ),
-    [selected],
-  )
   const writeTargets = useMemo(() => writeTargetsOf(selected, fixtures), [selected, fixtures])
   const available = useMemo(() => targetFamilies(writeTargets), [writeTargets])
   const layerTargets = useMemo(() => selected.map(lookLayerTarget), [selected])
@@ -289,12 +240,11 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   const liveRef = useRef(live)
   liveRef.current = live
   const [editing, setEditing] = useState<'from' | 'to'>('from')
-  const [response, setResponse] = useState<SpreadResponse | null>(null)
   /**
-   * The strip draws the answer to the **latest** request and nothing older. Live keeps several
-   * requests in flight at the floor's spacing and their answers can land out of order; a property
-   * or selection change clears the strip and must not have an in-flight answer repaint it under
-   * the new kind. Each send takes a number, and an answer is applied only if it is still the last.
+   * Only the **latest** request's answer is reported. Live keeps several requests in flight at the
+   * floor's spacing and their answers can land out of order; a property or selection change
+   * disowns whatever is in flight so a stale skip is not toasted under the new kind. Each send takes
+   * a number, and an answer is read only if it is still the last.
    */
   const requestSeq = useRef(0)
   const [saving, setSaving] = useState(false)
@@ -313,27 +263,20 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
       const seq = ++requestSeq.current
       void spread({ ...request, fadeMs: getProgrammerFadeMs() })
         .unwrap()
-        .then((answer) => {
+        .then((answer: SpreadResponse) => {
           if (seq !== requestSeq.current) return
-          setResponse(answer)
           const message = skippedRowsMessage(answer.skippedFamilies ?? [], families)
           if (message != null) toast.warning(message, { id: SKIPPED_FAMILIES_TOAST })
         })
-        .catch(() => {
-          // The refusal is toasted by `errorToastMiddleware`. A refused request wrote nothing, so
-          // the strip — which says it is the desk's answer to *this* spread — must not keep drawing
-          // the last one that landed; the same rule a property change applies.
-          if (seq === requestSeq.current) setResponse(null)
-          ignoreReportedError()
-        })
+        // The refusal is toasted by `errorToastMiddleware`; nothing landed, so there is nothing here to undo.
+        .catch(ignoreReportedError)
     },
     { equals: sameRequest },
   )
 
-  /** Drop the strip and disown any answer still in flight. */
+  /** Disown any answer still in flight. */
   const clearAnswer = useCallback(() => {
     requestSeq.current += 1
-    setResponse(null)
   }, [])
 
   /** A request for the form as it stands, or null — with the empty-selection refusal said once. */
@@ -391,7 +334,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   }, [requestFor, flush])
 
   // A fresh selection is a fresh gesture: nothing the last one sent says where these heads are,
-  // and the strip described the heads that are no longer under the header.
+  // and an answer in flight describes heads that are no longer selected.
   const selectionKey = useMemo(() => [...selectedTargets.keys()].join('|'), [selectedTargets])
   useEffect(() => {
     gestureRef.current = false
@@ -399,7 +342,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
     clearAnswer()
   }, [selectionKey, reset, clearAnswer])
 
-  /** Change the property (and family): fresh endpoints, and the last answer no longer describes this property. */
+  /** Change the property (and family): fresh endpoints, and an answer in flight no longer describes this property. */
   const chooseProperty = useCallback(
     (property: TemplateProperty) => {
       const next: SpreadForm = { ...formRef.current, family: property.family, property, ...defaultSpreadEndpoints(property), over: formRef.current.over }
@@ -484,30 +427,14 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   const editorKind = spreadEditorKind(form.property)
   const properties = spreadPropertiesFor(form.family)
   const familiesShown = available.length > 0 ? available : ATTRIBUTE_FAMILIES
-  const bars = useMemo(() => previewBarsOf(response, fixtures), [response, fixtures])
   const editingEndpoint = editing === 'from' ? form.from : form.to
   const setEndpoint = (which: 'from' | 'to', endpoint: SpreadEndpoint) => commit({ [which]: endpoint })
 
   return (
-    <div data-spread-sheet={isCompact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col overflow-y-auto border-l">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-2.5 pb-2">
-        <span data-spread-heading className="text-[11px] font-semibold">
-          Spread over {headCount} {headCount === 1 ? 'head' : 'heads'}
-          {names.length > 0 && <span className="font-normal text-muted-foreground"> · {names.join(', ')}</span>}
-          <span className="font-normal text-muted-foreground"> · writes to Local</span>
-        </span>
-        {families != null && families.length > 0 && (
-          <Badge
-            variant="outline"
-            className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-            title="The selection’s attribute mask — the desk skips a property outside it and the strip says so"
-          >
-            {formatFamilyList(families, ' · ')}
-          </Badge>
-        )}
-      </div>
-
-      <div className={cn('flex flex-col gap-2 px-3', isCompact ? 'pb-2' : 'pb-3')}>
+    <div data-spread-sheet={isCompact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col border-l">
+      {/* The tab's one scroller. `px-3.5`, the knob's half-width, so a picker knob at 0% is not
+          clipped at the scroller's edge — the Colour tab's reason. */}
+      <div data-spread-sheet-body className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3.5 pt-3', isCompact ? 'pb-2' : 'pb-3')}>
         <ToggleGroup
           type="single"
           size="sm"
@@ -591,6 +518,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
               }}
               channelFields
               compact
+              fluid
               open
             />
           </ColourEndpoints>
@@ -693,13 +621,37 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
           </div>
         </div>
 
+      </div>
+
+      {/* The footer, static at the bottom; the Colour tab's has the same shape with its save first.
+          **Live sits beside Apply** (2026-09-21): they are the two ways a spread reaches the desk.
+          While Live is on, Apply reads as **Send again** and stays pressable rather than being
+          disabled: Live sends a request once and `useLivePush` dedupes a repeat, so an explicit
+          press is the one un-deduped resend after a write the desk refused or a socket dropped
+          (`apply` resets the dedupe for exactly this), and turning Live on sends nothing by itself
+          — the form lands on its next adjustment or on this button. One line at the sheet's 320px
+          floor without folding: *Save as Look… · Live · Apply* fits, so Live keeps its word. */}
+      <div data-spread-sheet-footer className="flex shrink-0 items-center gap-1.5 border-t px-3 py-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 min-w-0 text-xs"
+          disabled={selected.length === 0}
+          title="Record the selection’s Local values as a Look — a spread is a result, not a template"
+          onClick={() => setSaving(true)}
+        >
+          <Save className="size-3.5" /> <span className="truncate">Save as Look…</span>
+        </Button>
+        <span className="flex-1" />
         <Button
           type="button"
           role="switch"
           aria-checked={live}
+          aria-label="Live — apply as I adjust"
           variant={live ? 'default' : 'outline'}
           size="sm"
-          className="h-7 justify-start text-xs"
+          className="h-7 gap-1.5 text-xs"
           title="Send every adjustment to the desk as it is made; off, only Apply writes"
           onClick={() => {
             setLive((on) => !on)
@@ -707,35 +659,18 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
             reset()
           }}
         >
-          Live — apply as I adjust
+          <span aria-hidden className={cn('size-2 rounded-full', live ? 'bg-primary-foreground' : 'bg-muted-foreground/60')} />
+          Live
         </Button>
-      </div>
-
-      <div className="border-t px-3 pt-2 pb-2">
-        <BuskLabel>Preview</BuskLabel>
-        <PreviewStrip bars={bars} kind={editorKind} compact={isCompact} />
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          {bars.length === 0
-            ? 'One bar per head as the desk wrote them, cells folded, skipped heads last — drawn from the desk’s answer once it has written'
-            : 'One bar per head as the desk wrote them, cells folded, skipped heads last. Redrawn from the desk’s answer, not computed here.'}
-        </p>
-      </div>
-
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t px-3 py-2">
         <Button
           type="button"
-          variant="outline"
           size="sm"
+          variant={live ? 'outline' : 'default'}
           className="h-7 text-xs"
-          disabled={selected.length === 0}
-          title="Record the selection’s Local values as a Look — a spread is a result, not a template"
-          onClick={() => setSaving(true)}
+          onClick={apply}
+          title={live ? 'Live is on — every adjustment is sent as it is made; press to send the spread again as it stands' : 'Send the spread to the desk'}
         >
-          <Save className="size-3.5" /> Save as Look…
-        </Button>
-        <span className="flex-1" />
-        <Button type="button" size="sm" className="h-7 text-xs" onClick={apply} title="Send the spread to the desk">
-          Apply
+          {live ? 'Send again' : 'Apply'}
         </Button>
       </div>
 
@@ -1007,110 +942,48 @@ function NumericEndpoint({
 
 // ─── The curve pictures ─────────────────────────────────────────────────────
 
-/** The four shapes drawn as the tab draws them: eight heads, From at the baseline, To at the top. */
+/**
+ * The four shapes drawn as the tab draws them: eight heads, From at the baseline, To at the top.
+ *
+ * **Wings is two lines, not a V** (2026-09-21). Its fractions are Mirror's over eight heads — To
+ * at each outer end, From at the centre — so one polyline through them *is* Mirror's V, and the
+ * two pictures were told apart by nothing. What differs is the mechanism (`SpreadPlan.wings`): two
+ * fans, each from the centre to its own outer end, an odd run's centre head in both. So Wings is
+ * drawn as its two wings — two strokes meeting at a marked centre, each fanning outward — where
+ * Mirror stays one stroke reflected about the middle.
+ */
 function CurvePicture({ curve }: { curve: SpreadCurve }) {
   const heads = 8
+  const x = (i: number): number => 2 + i * 4
+  const y = (t: number): number => 13 - t * 11
+  if (curve === 'WINGS') {
+    const half = heads / 2
+    const left = Array.from({ length: half }, (_, i) => `${x(i)},${y(1 - i / (half - 1))}`).join(' ')
+    const right = Array.from({ length: half }, (_, i) => `${x(half + i)},${y(i / (half - 1))}`).join(' ')
+    const centre = (x(half - 1) + x(half)) / 2
+    return (
+      <svg aria-hidden data-curve-picture="WINGS" viewBox="0 0 32 14" className="h-3.5 w-8">
+        <polyline points={left} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={right} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <line x1={centre} y1={y(0) - 1} x2={centre} y2={y(0) + 1} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    )
+  }
   const t = (i: number): number => {
-    const x = i / (heads - 1)
+    const p = i / (heads - 1)
     switch (curve) {
       case 'LINE':
-        return x
+        return p
       case 'MIRROR':
-        return Math.abs(2 * x - 1)
+        return Math.abs(2 * p - 1)
       case 'ARROW':
-        return 1 - Math.abs(2 * x - 1)
-      case 'WINGS': {
-        // Two fans meeting at the centre: To at each outer end, From in the middle.
-        const half = heads / 2
-        return i < half ? 1 - i / (half - 1) : (i - half) / (half - 1)
-      }
+        return 1 - Math.abs(2 * p - 1)
     }
   }
-  const points = Array.from({ length: heads }, (_, i) => `${2 + i * 4},${13 - t(i) * 11}`).join(' ')
+  const points = Array.from({ length: heads }, (_, i) => `${x(i)},${y(t(i))}`).join(' ')
   return (
-    <svg aria-hidden viewBox="0 0 32 14" className="h-3.5 w-8">
+    <svg aria-hidden data-curve-picture={curve} viewBox="0 0 32 14" className="h-3.5 w-8">
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
-  )
-}
-
-// ─── The preview strip ──────────────────────────────────────────────────────
-
-/** How full a bar is for a written value of this editor's kind, 0–1, or null for a shape a fill cannot say (a position). */
-function fillOf(value: string, kind: 'colour' | 'percent' | 'position' | 'level'): number | null {
-  const intent = parseTemplateIntent(value)
-  if (intent == null) return null
-  if (kind === 'percent' && intent.kind === 'percent') return intent.value / 100
-  if (kind === 'level' && intent.kind === 'level') return intent.value / 255
-  return null
-}
-
-function barLabel(value: string): string {
-  const intent = parseTemplateIntent(value)
-  if (intent == null) return value
-  switch (intent.kind) {
-    case 'colour':
-      return intent.hex.toUpperCase()
-    case 'percent':
-      return `${Math.round(intent.value)}`
-    case 'level':
-      return String(intent.value)
-    case 'position':
-      return `${Math.round(intent.panDeg)}/${Math.round(intent.tiltDeg)}`
-    case 'switch':
-      return intent.on ? 'on' : 'off'
-  }
-}
-
-function PreviewStrip({ bars, kind, compact }: { bars: PreviewBar[]; kind: 'colour' | 'percent' | 'position' | 'level'; compact: boolean }) {
-  return (
-    <div data-spread-preview className={cn('mt-1 flex items-end gap-0.5 overflow-x-auto', compact ? 'h-12' : 'h-16')}>
-      {bars.map((bar) => (
-        <div
-          key={bar.key}
-          data-spread-bar={bar.key}
-          data-spread-skipped={bar.skipped != null ? 'true' : undefined}
-          title={bar.skipped != null ? `${bar.name}: ${bar.skipped}` : `${bar.name}: ${bar.values.map(barLabel).join(' · ')}`}
-          className={cn('flex h-full min-w-4 flex-1 flex-col justify-end', bar.skipped != null && 'opacity-30')}
-        >
-          <div className="flex h-full items-end gap-px">
-            {bar.skipped != null ? (
-              <div className="h-full w-full rounded-sm border border-dashed border-border" />
-            ) : (
-              bar.values.map((value, index) => {
-                const intent = parseTemplateIntent(value)
-                const fill = fillOf(value, kind)
-                const colour = intent?.kind === 'colour' ? intent.hex : null
-                return (
-                  <div
-                    key={index}
-                    data-spread-segment
-                    className={cn('w-full rounded-sm', colour == null && 'bg-primary/70')}
-                    style={{ height: `${Math.round((colour != null ? 1 : (fill ?? 0.5)) * 100)}%`, background: colour ?? undefined }}
-                  />
-                )
-              })
-            )}
-          </div>
-          {/* The value, then the head's name under it (`Spread.dc.html`: `245` over `L1`). A bar folding
-              several cells has no one value to state and carries its name alone; the values are on
-              its title. A skipped head reads a dash where the value would be. */}
-          {bar.values.length === 1 || bar.skipped != null ? (
-            <>
-              <span data-spread-bar-value className="truncate text-center text-[9px] leading-tight tabular-nums">
-                {bar.skipped != null ? '—' : barLabel(bar.values[0])}
-              </span>
-              <span data-spread-bar-name className="truncate text-center text-[9px] leading-tight text-muted-foreground">
-                {bar.name}
-              </span>
-            </>
-          ) : (
-            <span data-spread-bar-name className="truncate text-center text-[9px] leading-tight text-muted-foreground">
-              {bar.name}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
   )
 }

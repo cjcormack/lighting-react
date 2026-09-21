@@ -58,6 +58,12 @@ export interface ColourPickerBodyProps {
   channelFields?: boolean
   /** Spend less height: a shorter picker and the emitter rows beside it. See `ColourPickerPopover`. */
   compact?: boolean
+  /**
+   * Let the picker take the row's width rather than `index.css`'s fixed 200px — the busk view's
+   * side sheet, which is dragged to width and whose picker used to sit at 200px in a 480px
+   * column. The height stays pinned: a taller square is not a better one.
+   */
+  fluid?: boolean
   /** The character a keyboard-opened editor lands in the R box. See `ColourPickerPopover`. */
   keyboardOpen?: string | null
   /**
@@ -106,6 +112,7 @@ export function ColourPickerBody({
   notice,
   channelFields = false,
   compact = false,
+  fluid = false,
   keyboardOpen = null,
   open,
   seedKey = 0,
@@ -255,7 +262,16 @@ export function ColourPickerBody({
           The title sits here for the same reason, and reads better for it — it is about the picker
           *and* the boxes beside it, which is precisely this row. */}
       <div
-        className={cn('flex items-start gap-3', compact && 'colour-picker-compact')}
+        // Fluid *and* compact: the compact wrapper above is a wrapping flex row, so this row is a
+        // content-sized flex item there, and a picker told to take the row's width had a row the
+        // width of the R/G/B boxes to take — 0px of square. `flex-1` with a 16rem basis gives the
+        // row the wrapper's width to fill (the emitter column wraps under it when there is not
+        // room for both), and is inert in the non-compact block layout.
+        className={cn(
+          'flex items-start gap-3',
+          compact && 'colour-picker-compact',
+          fluid && 'colour-picker-fluid min-w-0 flex-1 basis-[16rem]',
+        )}
         title={
           channelFields && hasWhiteChannel
             ? 'Pure white in the picker drives the white LED; the boxes set one channel each.'

@@ -34,10 +34,11 @@ import type { BuskingTarget } from './buskingTypes'
  * The busk view's **side sheet** — one rail, three tabs, one fold, one fact (busk-further plan
  * D7; `Sheets.dc.html` is the authority on layout).
  *
- * **Speed is `BuskSpeedRail` unchanged**, mounted here and nowhere else in play mode. **Colour is
- * `ColourSheet`** (D8): the colour editor's body hosted here, writing literals to Local for the
- * selection. **Spread is `SpreadSheet`** (D9, D10): two intents the desk resolves per head, and a
- * preview drawn from its answer. `LIVE_SHEET_TABS` in `lib/buskWindow.ts` is still the one list —
+ * **Speed is `BuskSpeedRail`**, mounted here and nowhere else in play mode — filling the sheet's
+ * width and drawing no heading since 2026-09-21. **Colour is `ColourSheet`** (D8): the colour
+ * editor's body hosted here, writing literals to Local for the selection. **Spread is
+ * `SpreadSheet`** (D9, D10): two intents the desk resolves per head; its preview strip went the same
+ * day, the rig being the preview. `LIVE_SHEET_TABS` in `lib/buskWindow.ts` is still the one list —
  * a fourth tab would be hidden there until it landed, because a tab that opens onto nothing is a
  * promise the desk cannot keep.
  *

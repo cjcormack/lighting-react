@@ -11,8 +11,9 @@ import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditor
 /**
  * The Spread tab (busk-further plan D9, D10): the request per family — a `TemplateIntent` per
  * endpoint, or a `tmpl:` reference for a colour — sent with the selection pair; Live throttled
- * through the live push with the release landing; the preview strip drawn from the desk's answer
- * and never computed here; Over: Cells gated on the selection's cells; skips and `skippedFamilies`
+ * through the live push with the release landing; the desk's answer read for its skipped
+ * families and nothing drawn from it (the preview strip is gone, and this file still reaches
+ * nothing that interpolates); Over: Cells gated on the selection's cells; skips and `skippedFamilies`
  * reported the way a press reports them; nothing sent under an empty selection; Save as Look…
  * opening `RecordLookSheet` over the selection, never a template.
  */
@@ -70,7 +71,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures, fixtureTypes: [], fixtureByKey: new Map(fixtures.map((f) => [f.key, f])), typeByKey: new Map() }),
 }))
 
-import { SpreadSheet, previewBarsOf } from './SpreadSheet'
+import { SpreadSheet } from './SpreadSheet'
 import { selectedCells } from '@/lib/cellsSubSelection'
 import { lookLayerTarget } from './buskingTypes'
 
@@ -98,13 +99,6 @@ const radio = (group: string, name: string | RegExp) => within(screen.getByRole(
 async function answer(value: SpreadResponse = response, index = pending.length - 1) {
   await act(async () => {
     pending[index]?.resolve(value)
-    await Promise.resolve()
-  })
-}
-async function refuse(index = pending.length - 1) {
-  await act(async () => {
-    pending[index]?.reject({ status: 400, data: { error: 'bad', code: 'SPREAD_INVALID' } })
-    await Promise.resolve()
     await Promise.resolve()
   })
 }
@@ -343,8 +337,8 @@ describe('Live', () => {
   })
 })
 
-describe('the preview strip', () => {
-  it('is drawn from the desk’s answer and never from a client lerp — the strip is empty until the desk has written', async () => {
+describe('the desk’s answer', () => {
+  it('is never anticipated here — this file reaches nothing that interpolates, and draws no preview of its own', () => {
     // The rule in one line: this file reaches nothing that interpolates.
     const imports = [...spreadSheetSrc.matchAll(/from '([^']+)'/g)].map((m) => m[1])
     expect(imports.some((name) => /fanMath|colourMath\b.*fan|fanValues/.test(name))).toBe(false)
@@ -352,50 +346,29 @@ describe('the preview strip', () => {
 
     draw([group, barTarget])
     apply()
-    // Sent, not answered: nothing to draw yet, whatever this side could guess.
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(0)
-    await answer({
-      written: [
-        { target: { type: 'fixture', key: 'par-1' }, propertyName: 'rgbColour', value: '#F5B342;policy=extract' },
-        { target: { type: 'fixture', key: 'bar.c1' }, propertyName: 'rgbColour', value: '#8C8590;policy=extract' },
-        { target: { type: 'fixture', key: 'bar.c2' }, propertyName: 'rgbColour', value: '#2456FF;policy=extract' },
-      ],
-      skipped: [{ target: { type: 'fixture', key: 'par-2' }, reason: 'no colour on this head' }],
-    })
-    const bars = [...document.querySelectorAll('[data-spread-bar]')]
-    // One bar per head in the desk's order, the bar's two cells folded into one bar with two segments.
-    expect(bars.map((b) => b.getAttribute('data-spread-bar'))).toEqual(['par-1', 'bar', 'par-2'])
-    expect(bars[1]).toHaveAttribute('title', 'Bar L: #8C8590 · #2456FF')
-    expect(bars[1].querySelectorAll('[data-spread-segment]')).toHaveLength(2)
-    // A skipped head is dimmed with the reason on its title.
-    expect(bars[2]).toHaveAttribute('data-spread-skipped', 'true')
-    expect(bars[2]).toHaveAttribute('title', 'PAR 2: no colour on this head')
-    // A single-head bar carries the value with the head's name under it, as the board draws it; a
-    // bar folding several cells has no one value and carries its name alone; a skipped head a dash.
-    expect(bars[0].querySelector('[data-spread-bar-value]')).toHaveTextContent('#F5B342')
-    expect(bars[0].querySelector('[data-spread-bar-name]')).toHaveTextContent('PAR 1')
-    expect(bars[1].querySelector('[data-spread-bar-value]')).toBeNull()
-    expect(bars[1].querySelector('[data-spread-bar-name]')).toHaveTextContent('Bar L')
-    expect(bars[2].querySelector('[data-spread-bar-value]')).toHaveTextContent('—')
-    expect(bars[2].querySelector('[data-spread-bar-name]')).toHaveTextContent('PAR 2')
+    // The preview strip went on 2026-09-21: the rig is the preview. Nothing here draws `written[]`.
+    expect(document.querySelector('[data-spread-preview]')).toBeNull()
+    expect(screen.queryByText('Preview')).toBeNull()
   })
 
-  it('folds cells to their parent and keeps the desk’s order, as a pure function', () => {
-    const bars = previewBarsOf(
-      {
-        written: [
-          { target: { type: 'fixture', key: 'bar.c2' }, propertyName: 'dimmer', value: 'pct:100' },
-          { target: { type: 'fixture', key: 'par-2' }, propertyName: 'dimmer', value: 'pct:50' },
-          { target: { type: 'fixture', key: 'bar.c1' }, propertyName: 'dimmer', value: 'pct:0' },
-        ],
-      },
-      fixtures,
-    )
-    expect(bars).toEqual([
-      { key: 'bar', name: 'Bar L', values: ['pct:100', 'pct:0'] },
-      { key: 'par-2', name: 'PAR 2', values: ['pct:50'] },
-    ])
-    expect(previewBarsOf(null, fixtures)).toEqual([])
+  it('draws no heading and no mask pill — the tab strip names the tab and the band says what is selected', () => {
+    draw([group], { families: ['POSITION'] })
+    expect(document.querySelector('[data-spread-heading]')).toBeNull()
+    expect(screen.queryByText(/writes to Local/)).toBeNull()
+    // The footer is static under the tab's one scroller, the save first — the Colour tab's shape.
+    const footer = document.querySelector('[data-spread-sheet-footer]')!
+    expect(footer.className).toContain('shrink-0')
+    expect(document.querySelector('[data-spread-sheet-body]')!.className).toContain('overflow-y-auto')
+    // Live sits beside Apply; while it is on, Apply reads as the resend it is and stays pressable —
+    // the one un-deduped send after a refused Live write.
+    expect([...footer.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Save as Look…', 'Live', 'Apply'])
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
+    expect(spread).not.toHaveBeenCalled()
+    const resend = screen.getByRole('button', { name: 'Send again' })
+    expect(resend).toBeEnabled()
+    fireEvent.click(resend)
+    expect(spread).toHaveBeenCalledTimes(1)
   })
 
   it('toasts skipped families in the press’s vocabulary — rows, naming the mask — keyed so a Live burst replaces one toast', async () => {
@@ -404,37 +377,34 @@ describe('the preview strip', () => {
     apply()
     await answer({ skippedFamilies: ['COLOUR'] })
     expect(toast.warning).toHaveBeenCalledWith('Colour rows skipped — the selection is Position', { id: expect.any(String) })
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(0)
   })
 
-  it('draws the answer to the latest request only, and clears on a refusal, a property change and a selection change', async () => {
-    const written = (key: string, value: string) => ({ target: { type: 'fixture' as const, key }, propertyName: 'dimmer', value })
-    const { rerender } = draw([group])
+  it('reads the latest request’s answer only: an older answer landing late, or one from before a property change, is not toasted', async () => {
+    draw([group], { families: ['POSITION'] })
     fireEvent.click(radio('Family', 'Intensity'))
     apply()
     fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '80' } })
     apply()
     expect(pending).toHaveLength(2)
-    // The second answer lands first; the first, older answer must not repaint over it.
-    await answer({ written: [written('par-1', 'pct:80')] }, 1)
-    expect(document.querySelector('[data-spread-bar="par-1"]')).toHaveAttribute('title', 'PAR 1: 80')
-    await answer({ written: [written('par-1', 'pct:100')] }, 0)
-    expect(document.querySelector('[data-spread-bar="par-1"]')).toHaveAttribute('title', 'PAR 1: 80')
-    // A refused request wrote nothing: the strip does not keep saying the last one did.
-    apply()
-    await refuse()
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(0)
-    // A property change clears it, and an answer still in flight from before does not repaint it.
+    // The second answer lands first, clean; the first, older answer must not report a skip over it.
+    await answer({ skippedFamilies: [] }, 1)
+    await answer({ skippedFamilies: ['INTENSITY'] }, 0)
+    expect(toast.warning).not.toHaveBeenCalled()
+    // A property change disowns an answer still in flight from before it.
     apply()
     fireEvent.click(radio('Family', 'Colour'))
-    await answer({ written: [written('par-1', 'pct:100')] })
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(0)
-    // So does a selection change: the bars described heads no longer under the header.
-    apply()
-    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'rgbColour', value: '#F5B342;policy=extract' }] })
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(1)
-    rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(moverTarget)} families={null} />)
-    expect(document.querySelectorAll('[data-spread-bar]')).toHaveLength(0)
+    await answer({ skippedFamilies: ['INTENSITY'] })
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it('draws Wings as two fans meeting at the centre, so it is not Mirror’s V', () => {
+    draw([group])
+    const wings = document.querySelector('[data-curve-picture="WINGS"]')!
+    const mirror = document.querySelector('[data-curve-picture="MIRROR"]')!
+    expect(wings.querySelectorAll('polyline')).toHaveLength(2)
+    expect(wings.querySelector('line')).not.toBeNull()
+    expect(mirror.querySelectorAll('polyline')).toHaveLength(1)
+    expect(wings.innerHTML).not.toBe(mirror.innerHTML)
   })
 })
 

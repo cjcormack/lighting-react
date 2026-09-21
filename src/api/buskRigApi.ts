@@ -1,3 +1,4 @@
+import type { BuskFlow } from './buskApi'
 import type { GroupSummary } from './groupsApi'
 
 /**
@@ -71,6 +72,14 @@ export interface BuskRigRow {
   uuid?: string
   localKey?: string
   name: string
+  /**
+   * How the row lays its tiles out — the bank's vocabulary. **Absent is `SCROLL`**: the REST
+   * converter states it, but a desk that predates the field serves none at all, and this side
+   * must not crash on a desk mid-upgrade; `rowFlow` in `lib/buskRig.ts` is the one reader.
+   */
+  flow?: BuskFlow
+  /** The row's width share in twelfths, one of `BUSK_WIDTHS`. **Absent is 12** — see `rowWidth`. */
+  width?: number
   /** Omitted by the server when empty — which it never is on a served rig, since the write refuses one. */
   tiles?: BuskRigTile[]
 }
@@ -96,6 +105,13 @@ export interface BuskRigTileInput {
 export interface BuskRigRowInput {
   rowId?: number
   name: string
+  /**
+   * Sent only when they differ from the defaults (`SCROLL`, 12): the desk's Json is bare, so a
+   * key it does not know fails the whole body, and a desk mid-upgrade — handler bodies hot-swapped,
+   * the two columns not yet added — must go on accepting a rig nobody has re-laid-out.
+   */
+  flow?: BuskFlow
+  width?: number
   tiles: BuskRigTileInput[]
 }
 
