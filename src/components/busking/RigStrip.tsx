@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DeskChip } from '@/components/desk/DeskChip'
+import { BlindPill } from './BlindMarks'
+import { COMPACT_FOCUS_WORD_CLASS } from './RigBand'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { BuskLabel } from './BuskLabel'
@@ -45,7 +47,7 @@ export function RigStrip({ className, ...content }: RigStripProps) {
   )
 }
 
-/** The strip's pieces — label, summary, family pill, desk chip, chevron — without a row. */
+/** The strip's pieces — label, summary, family pill, blind pill, desk chip, chevron — without a row. */
 export function RigStripContent({ selectedTargets, families, onUnfold, controls }: Omit<RigStripProps, 'className'>) {
   const summary = summariseSelection([...selectedTargets.values()])
   return (
@@ -60,6 +62,10 @@ export function RigStripContent({ selectedTargets, families, onUnfold, controls 
           {formatFamilyList(families, ' · ')}
         </Badge>
       )}
+      {/* Blind, beside the mask: off the desk board this strip and the short board's merged row
+          are the only rig chrome in Pads — the resting focus there — and the sheet is an overlay
+          with no fold, so without it a blind programmer was reported nowhere (`BlindMarks.tsx`). */}
+      <BlindPill wordClass={COMPACT_FOCUS_WORD_CLASS} />
       <DeskChip showSubject />
       <button
         type="button"

@@ -819,9 +819,24 @@ per row on a phone defeats the point of a list; Split there keeps the one sidewa
 row chip. **The band's chrome is one row, the same row in Split and Rig, and the Focus control and
 *Edit layout* / *Done* end whichever row is the body's top row** (busk-chrome plan D13, D17,
 2026-09-21): on the desk board the band draws the `RIG` label, the Cells menu and its steps, the
-verbs, then the family pill and the desk chip **left-anchored after the verbs**, the gap, and the
-host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by `BuskingView` —
-right-anchored, in Split and Rig. **In Pads the band is not drawn**: its controls act on tiles —
+verbs, then the family pill, the **`BLIND` pill** and the desk chip **left-anchored after the
+verbs**, the gap, and the host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by
+`BuskingView` — right-anchored, in Split and Rig. The blind pill (`busking/BlindMarks.tsx`) is a
+**reporter, never a toggle** — Blind is switched on the programmer's action bar and nowhere else —
+drawn in the indicator's amber only while `ProgrammerSummary.blind` holds, on the family pill's
+terms (absent means nothing to say), read through `hooks/useProgrammerBlind.ts`'s narrowed
+subscription so the band does not re-render on the programmer's entry churn; in Pads the pad row
+carries it in the same place, and off the desk board `RigStripContent` — the compact strip and the
+short board's merged row — does, since Pads is the resting focus there and the sheet is an overlay
+with no fold. The pill is the eye-off glyph plus the word, and **the word folds on a rung of the
+host's** — the rig row's own `BLIND_WORD_CLASS` (1020, above every other rung, since that row's
+ladder has no slack for it beside a mask pill), the pad row's and the compact rows' Focus-words
+rung (their summaries are `min-w-0 flex-1 truncate` and absorb it) — with `min-w-0 shrink` as the
+last resort, because the ladders were measured without it and the rig row is `flex-nowrap` above
+its floor; `RigBand.tsx`'s ladder note names the four narrow bands where, blind *and* masked, the
+pill squashes to a sliver rather than moving a control. It exists because D10 put the programmer report on the Show tab's
+strip, which is invisible with the sheet folded or another tab open, and an immersive window has no
+app header to carry `ProgrammerIndicator` — while on a busk page every press is a programmer write. **In Pads the band is not drawn**: its controls act on tiles —
 the Cells menu, the steps and Clear narrow, move or release a selection made on them — and there
 are none on screen, so the **pad row** (`BuskPageStrip` with `pads`, §The rig) is the top row and
 takes the host's controls instead; the band's `focus="pads"` arm and its chevron pill lasted one
@@ -932,7 +947,14 @@ DBO — fits at 320 with the stack name shrunk to its minimum (`RunMobile` makes
 item that gives) and clipped DBO at 288. **The fold shows the live cue number under the Show glyph** (D4) — green, an
 em-dash with nothing on stage — from the **server** cursor (`transport.serverActiveCueId`, which
 holds on the outgoing cue mid-fade), derived in `SideSheet` and handed in as `liveCue`; the strip
-subscribes to nothing.
+subscribes to nothing for it. **The Show glyph also carries an amber dot while the programmer is
+blind** (`BlindDot` in `busking/BlindMarks.tsx`), in the tab strip — docked and overlay — and on
+the fold: the sheet's one programmer report is the Show tab's strip, so the glyph says there is
+something to open it for. A mark only, `aria-hidden`, never a control — the word rides the tab's
+and the fold button's accessible names (*Show — programmer blind*), because an `sr-only` span inside
+those buttons was silent on the fold, whose `aria-label` wins the name, and *became* the name in the
+strip below 400px of sheet, where a non-open tab's word is `display: none`; the pill on the band
+(§The rig) is the louder half of the same answer.
 Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upright phone, a
 right-hand sheet where the viewport is short, through `useCellEditorForm`'s forms — opened from
 the page strip's *Sheet* button onto Colour, carrying **Colour · Spread · Show** and **still no
@@ -2997,7 +3019,9 @@ red *Offline* chip on the `ShowHeader`, drawn only while immersive *and* the soc
 below `md` the mobile drawer's **button** at the header's left edge while immersive, since the
 hamburger in the app header was the only navigation there (the drawer and its open state stay
 `Layout`'s, and `components/mobileDrawerContext.ts` lends the opener); the blind report and value
-count on the busk Show tab's strip; theme, full screen and Screens… through ⌘K — the theme had no
+count on the busk Show tab's strip — and, since that strip is invisible with the sheet folded or
+another tab open, the band's amber `BLIND` pill and the Show glyph's dot (§The rig, §Focus and the
+side sheet); theme, full screen and Screens… through ⌘K — the theme had no
 command until this, so `lib/theme.ts` became a module-level store (bare string, not `syncStore`'s
 JSON — `getInitialTheme` reads it before React exists) that the user menu's row and the new
 *Switch to dark mode* / *Switch to light mode* command both read. The four overview panels' ⌘K
@@ -3242,8 +3266,10 @@ do not know it is a decision:
   faded by the programmer's own fade — and session 5 leaving the programmer with no press was the
   one failed check of the desk pass (`PD-BLIND-ON-PROGRAMMER`). The control is the action bar's, in
   row A's Stage zone beside Clear and the fade picker; `useShowBarProps` supplies no `onBlind` **for
-  any host**, so no bar draws a tile, and Show, Busk and the Prompt Book *report* it through the
-  `ProgrammerIndicator` their bar already mounts. That is session 2b's arrangement exactly inverted,
+  any host**, so no bar draws a tile; Show and the Prompt Book *report* it through the
+  `ProgrammerIndicator` their bar mounts, and Busk — which has no bar — through the band's `BLIND`
+  pill, the Show glyph's dot and the Show tab's own `ProgrammerIndicator` (§The rig, §Focus and the
+  side sheet). That is session 2b's arrangement exactly inverted,
   and the rule it was written for still holds: one control, one place. The drift to refuse now is
   the reverse one — a Blind tile back in the bar for one host. Do **not** make `ProgrammerIndicator`
   the toggle either: it is also the link to the programmer, and one control cannot be both without

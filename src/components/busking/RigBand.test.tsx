@@ -18,8 +18,7 @@ import {
   SECOND_ROW_CLASS,
   TWO_ROWS_CLASS,
   VERB_WORD_CLASS,
-  snapRigRows,
-} from './RigBand'
+  snapRigRows, COMPACT_FOCUS_WORD_CLASS, BLIND_WORD_CLASS } from './RigBand'
 import { useSelectionVerbs, type SelectionVerbs } from './selectionVerbs'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
@@ -84,6 +83,10 @@ vi.mock('@/components/fixtures/fixtureAppearance', () => ({
 let snapshot: DeskSelectionSnapshot = { targets: [], families: null, source: null }
 vi.mock('@/store/selection', () => ({ useDeskSelectionSnapshot: () => snapshot }))
 vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 2' }))
+// The programmer's blind flag, behind the one seam the band's marks read it through: the band's
+// tests render with no store, and the pill must be flippable per test.
+const programmer = { blind: false }
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => programmer.blind }))
 vi.mock('@/store/windows', () => ({ useDeskWindows: () => [], thisWindowRow: () => null }))
 
 import { RigBand } from './RigBand'
@@ -433,6 +436,56 @@ describe('the rig band', () => {
     expect(state.className).toContain('flex-1')
     // Above the floor the row does not wrap on its own: the folds decide, not `flex-wrap`.
     expect(row.className).not.toMatch(/(^| )flex-wrap( |$)/)
+  })
+
+  it('draws an amber BLIND pill in the state group, right after the family pill, only while the programmer is blind — in Split and in Rig', () => {
+    const controls = <button type="button">Focus here</button>
+    // Not blind: nothing — absent means nothing to say, the family pill's own rule (D14).
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, ['COLOUR'])
+    expect(document.querySelector('[data-busk-blind]')).toBeNull()
+    cleanup()
+
+    programmer.blind = true
+    try {
+      for (const focus of ['split', 'rig'] as const) {
+        draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls, focus }, ['COLOUR'])
+        const state = document.querySelector('[data-rig-row-state]') as HTMLElement
+        const pill = state.querySelector('[data-busk-blind]') as HTMLElement
+        expect(pill, focus).not.toBeNull()
+        expect(pill).toHaveTextContent('Blind')
+        expect(pill.title).toMatch(/not reaching the stage/)
+        // A reporter, never a control.
+        expect(pill.tagName).not.toBe('BUTTON')
+        expect(pill.className).toContain('amber')
+        // The glyph stays and the word folds on the pill's own rung, above every other (the row's
+        // ladder has no room for it beside a mask pill); the pill itself may give
+        // (`min-w-0 shrink`, never `shrink-0`) so at the extreme it truncates rather than pushing
+        // the Focus control under the sheet.
+        expect(pill.querySelector('svg')).not.toBeNull()
+        expect(pill.querySelector('[data-busk-blind-word]')!.className).toContain(BLIND_WORD_CLASS)
+        expect(pill.className).toMatch(/(^| )shrink( |$)/)
+        expect(pill.className).not.toMatch(/(^| )shrink-0( |$)/)
+        expect(pill.className).toContain('min-w-0')
+        // After the family pill, before the host's controls.
+        const order = [...state.querySelectorAll('button, [data-rig-family], [data-busk-blind]')].map(
+          (el) => el.getAttribute('aria-label') ?? el.textContent,
+        )
+        expect(order, focus).toEqual(['Colour', 'Blind', 'Focus here'])
+        cleanup()
+      }
+      // With no mask the pill stands alone at the front of the group.
+      draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, null)
+      const state = document.querySelector('[data-rig-row-state]') as HTMLElement
+      expect(state.firstElementChild).toHaveAttribute('data-busk-blind')
+      cleanup()
+      // The compact board's row carries it too, its word on the compact rung.
+      draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls, compact: true }, ['COLOUR'])
+      const compactPill = document.querySelector('[data-rig-row="compact"] [data-busk-blind]') as HTMLElement
+      expect(compactPill).not.toBeNull()
+      expect(compactPill.querySelector('[data-busk-blind-word]')!.className).toContain(COMPACT_FOCUS_WORD_CLASS)
+    } finally {
+      programmer.blind = false
+    }
   })
 
   it('draws the desk chip only while this window is unlinked, right after the pill, and lets it truncate first (D18)', () => {
@@ -1068,8 +1121,23 @@ describe('the folded rig strip', () => {
     expect(screen.getByText('Focus here')).toBeInTheDocument()
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Targets:/ })).toBeNull()
+    // No blind pill while the programmer is not blind…
+    expect(document.querySelector('[data-busk-blind]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Unfold the rig' }))
     expect(onUnfold).toHaveBeenCalledTimes(1)
+    cleanup()
+    // …and one after the family pill while it is: off the desk board this strip (and the short
+    // board's merged row, which mounts the same pieces) is the only rig chrome in Pads.
+    programmer.blind = true
+    try {
+      render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} />)
+      const pill = document.querySelector('[data-busk-blind]') as HTMLElement
+      expect(pill).toHaveTextContent('Blind')
+      expect(pill.previousElementSibling).toHaveTextContent('Colour')
+      expect(pill.querySelector('[data-busk-blind-word]')!.className).toContain(COMPACT_FOCUS_WORD_CLASS)
+    } finally {
+      programmer.blind = false
+    }
     cleanup()
     unlinkFromDesk({ targets: [], families: null })
     render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} />)

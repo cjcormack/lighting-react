@@ -37,9 +37,12 @@ const NO_REQUEUE = () => {}
  *    that also fired GO would be two effects from one press on a live rig. GO is the footer, a
  *    MIDI `go` binding, or the Show view one pill away. Nothing here calls `useTransportKeys`.
  * 5. **The strip carries what the bar carried and nothing more**: stack picker, cue list, the
- *    programmer chip (`ProgrammerIndicator` — the view's blind report and value count, through
+ *    programmer chip (`ProgrammerIndicator` — the tab's blind report and value count, through
  *    `RunMobile`'s `strip` slot), the tempo chip, DBO. DBO is still inert (`FU-FE-DBO-INERT`);
- *    moving it does not wire it up.
+ *    moving it does not wire it up. The band's `BLIND` pill and the Show glyph's dot
+ *    (`BlindMarks.tsx`) report blind beside this, a region apart — the strip is invisible with
+ *    the sheet folded or another tab open — and this chip keeps the count; two reporters, no
+ *    control.
  * 6. **Show is a live tab from the day it lands**: `show` is in `LIVE_SHEET_TABS`, so `?sheet=show`,
  *    the Screens sheet and a MIDI `buskSheetToggle` reach it by the same door as the other three.
  *

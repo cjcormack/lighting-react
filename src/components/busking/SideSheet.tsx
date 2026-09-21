@@ -28,6 +28,8 @@ import { BuskSpeedRail } from './BuskSpeedRail'
 import { ColourSheet } from './ColourSheet'
 import { ShowTab, type ShowTabSource } from './ShowTab'
 import { SideSheetFold } from './SideSheetFold'
+import { BLIND_NAME_SUFFIX, BlindDot } from './BlindMarks'
+import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { SpreadSheet, type SpreadSeed } from './SpreadSheet'
 import type { BuskingTarget } from './buskingTypes'
 
@@ -166,6 +168,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
   const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs('docked')
   const open = tabs.find((tab) => tab.id === sheet)
+  const blind = useProgrammerBlind()
   // Latched here rather than inside the panel below: the fold and the panel are two subtrees of
   // this component and only one is ever mounted, so a hook in either would see every appearance
   // as its first render and animate on arrival at the route as readily as on an unfold.
@@ -193,6 +196,10 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
                 type="button"
                 role="tab"
                 aria-selected={tab.id === open.id}
+                // The name is the label whatever the width (below 400 a non-open tab's word is
+                // `display: none`, which would leave the name to whatever else is inside), and
+                // on Show it carries blind — the dot is aria-hidden (`BlindMarks.tsx`).
+                aria-label={tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label}
                 onClick={() => setBuskSheet(tab.id)}
                 // `px-2`, not the 10px it was: at 10px the row came to more than the column has,
                 // which the browser pays for by eating the gutter.
@@ -201,7 +208,10 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
                   tab.id === open.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <tab.icon className="size-3.5" />
+                <span className="relative inline-flex">
+                  <tab.icon className="size-3.5" />
+                  {tab.id === 'show' && <BlindDot />}
+                </span>
                 <span className={tabWordClass(tab.id === open.id)}>{tab.label}</span>
               </button>
             ))}
@@ -336,6 +346,7 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
   const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs(form)
   const open = tabs.find((tab) => tab.id === sheet)
+  const blind = useProgrammerBlind()
   return (
     <Sheet open={open != null} onOpenChange={(next) => !next && setBuskSheet('none')}>
       <SheetContent
@@ -371,13 +382,17 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
                   type="button"
                   role="tab"
                   aria-selected={tab.id === open?.id}
+                  aria-label={tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label}
                   onClick={() => setBuskSheet(tab.id)}
                   className={cn(
                     'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-semibold',
                     tab.id === open?.id ? 'bg-muted text-foreground' : 'text-muted-foreground',
                   )}
                 >
-                  <tab.icon className="size-4" />
+                  <span className="relative inline-flex">
+                    <tab.icon className="size-4" />
+                    {tab.id === 'show' && <BlindDot />}
+                  </span>
                   <span className={tabWordClass(tab.id === open?.id)}>{tab.label}</span>
                 </button>
               ))}

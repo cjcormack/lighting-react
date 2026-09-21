@@ -42,6 +42,8 @@ vi.mock('@/components/BeatIndicator', () => ({
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: () => ({ data: [{ uuid: 'm1', index: 1, name: 'Global', bpm: 120.04 }] }),
 }))
+const programmer = { blind: false }
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => programmer.blind }))
 vi.mock('@/store/patches', () => ({
   usePatchListQuery: () => ({ data: [{ id: 1, key: 'par-1', displayName: 'PAR 1' }] }),
 }))
@@ -230,6 +232,41 @@ describe('docked, on the desk board', () => {
     expect(dark.className).not.toContain('text-green-500')
   })
 
+  it('marks the Show tab’s glyph with an amber dot only while the programmer is blind — in the strip and on the fold', () => {
+    setBuskSheet('speed')
+    render(<SideSheet {...props} />)
+    expect(document.querySelector('[data-busk-blind-dot]')).toBeNull()
+    cleanup()
+
+    programmer.blind = true
+    try {
+      render(<SideSheet {...props} />)
+      const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
+      // On Show's glyph and no other tab's; the dot is aria-hidden and the word is the tab's
+      // name — never an sr-only span, which was silent on the fold and *was* the name below 400.
+      const show = screen.getByRole('tab', { name: 'Show — programmer blind' })
+      expect(show.querySelector('[data-busk-blind-dot]')).not.toBeNull()
+      expect(show.querySelector('[data-busk-blind-dot]')).toHaveAttribute('aria-hidden')
+      expect(show.textContent).toBe('Show')
+      expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Speed', 'Colour', 'Spread', 'Show — programmer blind'])
+      // A mark, not a control: the dot is inert and the tab still opens Show.
+      fireEvent.click(show)
+      expect(getBuskSheet()).toBe('show')
+      cleanup()
+
+      setBuskSheet('none')
+      render(<SideSheet {...props} />)
+      const glyph = screen.getByRole('button', { name: 'Open the Show tab — programmer blind' })
+      expect(glyph.querySelector('[data-busk-blind-dot]')).not.toBeNull()
+      expect(screen.getByRole('button', { name: 'Open the Colour tab' }).querySelector('[data-busk-blind-dot]')).toBeNull()
+      // The cue number under the glyph is untouched.
+      expect(document.querySelector('[data-fold-cue]')).toHaveTextContent('12')
+    } finally {
+      programmer.blind = false
+    }
+  })
+
   it('unfolds onto a tab from the chevron', () => {
     setBuskSheet('none')
     render(<SideSheet {...props} />)
@@ -324,6 +361,23 @@ describe('the overlay, off the desk board', () => {
     // `popover` is what a 640–767px window answers, where the rail is still not drawn: an overlay
     // with a Speed tab there would open onto nothing.
     expect(sideSheetTabs('popover').map((t) => t.id)).toEqual(['colour', 'spread', 'show'])
+  })
+
+  it('marks the overlay strip’s Show tab the same way while blind', () => {
+    surface({ narrow: true })
+    setBuskSheet('colour')
+    programmer.blind = true
+    try {
+      render(<SideSheetOverlay {...props} />)
+      const tabs = screen.getAllByRole('tab')
+      const show = screen.getByRole('tab', { name: 'Show — programmer blind' })
+      expect(show.querySelector('[data-busk-blind-dot]')).not.toBeNull()
+      expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
+      // The other tabs keep their plain names, and every tab is named whatever the width.
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Colour', 'Spread', 'Show — programmer blind'])
+    } finally {
+      programmer.blind = false
+    }
   })
 
   it('opens onto Show as a bottom sheet below md, over the route’s transport', () => {

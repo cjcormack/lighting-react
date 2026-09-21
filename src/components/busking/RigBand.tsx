@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DeskChip } from '@/components/desk/DeskChip'
+import { BlindPill } from './BlindMarks'
 import { HandPlaceStrip } from '@/components/hand/HandTarget'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
@@ -95,7 +96,7 @@ import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selecti
  * a drag across them is a run (`RigTile`). **One row of chrome, then the rows** (busk-chrome plan
  * D13, `Band.dc.html`): the `RIG` label, the **Cells menu** with its two step buttons, the verbs
  * (*Spread…*, Locate, Highlight, Clear, each an icon with a word beside it where the band is wide
- * and the icon alone where it is not — `VERB_WORD_CLASS`), then the family pill and the desk chip
+ * and the icon alone where it is not — `VERB_WORD_CLASS`), then the family pill, the `BLIND` pill and the desk chip
  * **left-anchored after the verbs**, the gap, and whatever the host hands in as [controls] —
  * the Focus control and *Edit layout* / *Done* — right-anchored. The same DOM order in **Split and
  * Rig**, which are the two shapes this band is drawn in on the desk board: **in Pads the rig row is
@@ -237,6 +238,18 @@ export interface RigBandProps {
  * word returns from **370** and the Focus words and the chip's subject, with it iconic (291), from
  * **300**. They were 1100 / 820 / 700 with the chip on the row, and 860 / 680 while the summary
  * had a row of its own.
+ *
+ * **The blind pill is not in those numbers, by design.** `BlindPill` (`BlindMarks.tsx`) is drawn
+ * only while the programmer is blind — 63px worded, 26 iconic, plus a gap — so the ladder is
+ * measured without it, as it is measured with a one-family pill: the row must hold for the state
+ * that lasts all night, not for the one that is an operator's mistake. Its word therefore has a
+ * rung of its own above every other (`BLIND_WORD_CLASS`, 1020, and 440 on the state line under the
+ * floor), and the pill is `min-w-0 shrink` — the one thing on the row besides the chip that may
+ * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 960
+ * (17 spare), 700 (25), 580 (26) and 540 (13) — so in the bands 960–977, 700–709, 580–588 and
+ * 540–561 the pill squashes to an amber sliver rather than pushing the Focus control under the
+ * sheet. Measured 2026-09-21: the pill on the desk row at 738 of band is 62.5 worded and 26 iconic,
+ * and the row's `scrollWidth` equalled its `clientWidth` at 738, 616, 540 and 496 with no mask.
  */
 
 export { snapRigRows } from './RigHandle'
@@ -268,6 +281,13 @@ const CELLS_FULL_CLASS = CELLS_PREFIX_CLASS
 
 /** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 300. */
 export const FOCUS_WORD_CLASS = 'hidden @[700px]:inline @min-[300px]:@max-[540px]:inline'
+/**
+ * The blind pill's word (`BlindMarks.tsx`): worded only where the fully-worded row has room for
+ * its 71 (63 + a gap) — from **1020**, above every other rung — and, under the floor, on the state
+ * line from **440** (362 worded + 71). Its glyph stays at every width; see the ladder note above
+ * for the four bands where the pill itself gives.
+ */
+export const BLIND_WORD_CLASS = 'hidden @[1020px]:inline @min-[440px]:@max-[540px]:inline'
 /** The desk chip's *Targets:* subject — the chip's second part to go (D19), at the prefix's rung. */
 export const CHIP_SUBJECT_CLASS = 'hidden @[700px]:inline @min-[300px]:@max-[540px]:inline'
 
@@ -516,6 +536,7 @@ function RigBandBody({
             </span>
           )}
           <FamilyPill families={families} />
+          <BlindPill wordClass={COMPACT_FOCUS_WORD_CLASS} />
           {!editing && <DeskChip showSubject />}
           {!editing && (
             <CompactVerbs
@@ -530,7 +551,7 @@ function RigBandBody({
         </div>
       ) : (
         // **One row, the same order in Split and Rig** (busk-chrome plan D13, D17): the label, the
-        // Cells menu and its steps, the four verbs; then the family pill and the desk chip
+        // Cells menu and its steps, the four verbs; then the family pill, the blind pill and the desk chip
         // *left-anchored after the verbs*; the gap; the Focus control and *Edit layout* / *Done*
         // right-anchored. No summary: the lit tiles say it, and in Pads — where nothing would — the
         // pad row carries it. Two groups rather than one flat list, so the floor can break the row
@@ -568,6 +589,9 @@ function RigBandBody({
           </div>
           <div data-rig-row-state className={cn('flex min-w-0 flex-1 items-center gap-2', SECOND_ROW_CLASS)}>
             <FamilyPill families={families} />
+            {/* Blind, beside the mask and drawn on the same terms — only while it holds
+                (`BlindMarks.tsx`): the pads' own row is where a press that reaches nothing is made. */}
+            <BlindPill wordClass={BLIND_WORD_CLASS} />
             {/* `showSubject`: the pad row below carries the same pill for the page, and two bare
                 chips a row apart would be worse than either alone. Nothing while following (D18). */}
             {!editing && <DeskChip showSubject subjectClass={CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />}

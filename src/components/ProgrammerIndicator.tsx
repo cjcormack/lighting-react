@@ -15,12 +15,14 @@ import { useCurrentProjectQuery } from '../store/projects'
  * shouting about, because a blind programmer looks *exactly* like a working one until you
  * notice the stage never changed.
  *
- * **This badge is the reporter, everywhere, and it is not the toggle.** Blind is a programmer fact:
- * the one control that flips it is in the programmer's action bar (`PD-BLIND-ON-PROGRAMMER`), and
- * every other view learns the state from this badge — the app header's mount on every page, the
- * `ShowBar`'s on Show and the Prompt Book, and the busk view's Show tab's strip. Do not make it the toggle: it is also the link
- * to the programmer, and one control cannot be both without one of the two jobs becoming a
- * surprise.
+ * **This badge is a reporter, and it is not the toggle.** Blind is a programmer fact: the one
+ * control that flips it is in the programmer's action bar (`PD-BLIND-ON-PROGRAMMER`), and every
+ * other view learns the state from this badge — the app header's mount on every page, the
+ * `ShowBar`'s on Show and the Prompt Book, and the busk view's Show tab's strip — or from a
+ * reporter of its own reading the same field: the busk band's `BLIND` pill and the sheet's Show
+ * glyph dot (`busking/BlindMarks.tsx`), which a folded sheet and an immersive window need and this
+ * badge cannot reach. Do not make it the toggle: it is also the link to the programmer, and one
+ * control cannot be both without one of the two jobs becoming a surprise.
  *
  * There used to be a `blindShownSeparately` prop, for the one host that drew its own amber BLIND
  * tile a couple of elements away — the `ShowBar`, from session 2b until the tile moved to the
@@ -28,7 +30,11 @@ import { useCurrentProjectQuery } from '../store/projects'
  * that could be told to stay quiet is a badge that could be silenced by a host with nothing else
  * saying it, and the app header's mount on the programmer is the case that had to stay loud. On
  * `/programmer` this badge and the action bar's toggle both show amber — that is the reporter and
- * the control, one row apart, which is the arrangement the programmer had before session 2b.
+ * the control, one row apart, which is the arrangement the programmer had before session 2b. On
+ * the busk view in Split with the Show tab open, the band's pill and this badge both show amber
+ * too: two reporters a region apart, deliberate — the pill says it where the press is made and
+ * this badge carries the count — and neither may be given a `shownSeparately` arm, for the reason
+ * that prop was deleted.
  */
 export function ProgrammerIndicator({ className }: { className?: string }) {
   const { data: summary } = useProgrammerSummaryQuery()

@@ -24,6 +24,9 @@ import type { BuskingTarget } from './buskingTypes'
 import type { SelectionVerbs } from './selectionVerbs'
 import type { Fixture } from '@/store/fixtures'
 
+const programmer = { blind: false }
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => programmer.blind }))
+
 /**
  * The pad row (busk-chrome plan session A.5, D17–D20): in Pads on the desk board the body's top
  * row, carrying the `PADS` label, the tabs at the rig row's control size, the three selection verbs
@@ -117,6 +120,41 @@ describe('the pad row', () => {
     const state = row.querySelector('[data-pad-row-state]') as HTMLElement
     expect(state.lastElementChild).toHaveTextContent('Focus here')
     expect(state.className).toContain('flex-1')
+  })
+
+  it('draws the amber BLIND pill after the family pill in Pads only while the programmer is blind, and never in Split', () => {
+    unlinkBuskPage(4)
+    unlinkFromDesk({ targets: [], families: null })
+    draw({ pads: padsOf(verbs().v, ['COLOUR']), controls: <button type="button">Focus here</button> })
+    expect(document.querySelector('[data-busk-blind]')).toBeNull()
+    cleanup()
+
+    programmer.blind = true
+    try {
+      draw({ pads: padsOf(verbs().v, ['COLOUR']), controls: <button type="button">Focus here</button> })
+      const row = document.querySelector('[data-pad-row="pads"]') as HTMLElement
+      const pill = row.querySelector('[data-busk-blind]') as HTMLElement
+      expect(pill).toHaveTextContent('Blind')
+      expect(pill.tagName).not.toBe('BUTTON')
+      // Its word folds on the pad row's Focus-words rung, and it may give before a control moves.
+      expect(pill.querySelector('[data-busk-blind-word]')!.className).toContain(PAD_FOCUS_WORD_CLASS)
+      expect(pill.className).toMatch(/(^| )shrink( |$)/)
+      const order = [...row.querySelectorAll('button, [data-pad-summary], [data-pad-family], [data-busk-blind]')].map(
+        (el) => el.getAttribute('aria-label') ?? el.textContent,
+      )
+      expect(order).toEqual([
+        'Ballads', 'Dance',
+        'Spread…', 'Locate', 'Highlight',
+        'PAR 1 · 1 head', 'Colour', 'Blind', 'Targets: This window', 'Page: This window', 'Focus here',
+      ])
+      cleanup()
+      // In Split and Rig the rig row carries it; the pad row does not repeat it.
+      draw({ controls: <button type="button">Focus here</button> })
+      expect(document.querySelector('[data-pad-row="split"]')).not.toBeNull()
+      expect(document.querySelector('[data-busk-blind]')).toBeNull()
+    } finally {
+      programmer.blind = false
+    }
   })
 
   it('in Split is the tabs and the page chip only — no label, no verbs, no summary, no desk chip, and the host’s controls still at the end', () => {

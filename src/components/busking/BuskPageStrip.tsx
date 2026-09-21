@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { DeskChip } from '@/components/desk/DeskChip'
 import { BuskLabel } from './BuskLabel'
 import { BuskPageChip } from './BuskPageChip'
+import { BlindPill } from './BlindMarks'
 import { summariseSelection, type BuskingTarget } from './buskingTypes'
 import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
 
@@ -106,6 +107,13 @@ import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
  * 671, so the floor is **680**. Under it the tabs-and-verbs line is 452 worded, so the words
  * return from **460**; the state line is 370 worded beside the summary's 150, so *Edit layout*'s
  * word returns from **530** and the Focus words and the subject, with it iconic, from **460**.
+ *
+ * **The blind pill is not in those numbers** (`BlindPill`, `BlindMarks.tsx`: 63px worded, 26
+ * iconic, drawn only while the programmer is blind, its word on the Focus words' rung here). This
+ * row can afford that where the rig row cannot: the summary is `min-w-0 flex-1 truncate` and its
+ * 150 is a reservation, not a floor, so the pill comes out of the summary's width — 71 worded
+ * between 800 and 1040, 34 iconic below — and never moves a control. The pill is `min-w-0 shrink`
+ * besides, the same last resort as on the rig row.
  */
 export const PAD_ROW_FLOOR_PX = 680
 
@@ -526,6 +534,9 @@ export function BuskPageStrip({
                 {formatFamilyList(pads.families, ' · ')}
               </Badge>
             )}
+            {/* Blind beside the mask, in Pads only: in Split and Rig the rig row carries it
+                (`BlindMarks.tsx`). */}
+            {pads != null && <BlindPill wordClass={PAD_FOCUS_WORD_CLASS} />}
             {/* The desk chip too, in Pads (D17: "the chips of D18"): there is no rig row here
                 to carry it, and an unlinked window pressing onto its own selection must say so.
                 Nothing while following, like its sibling. */}

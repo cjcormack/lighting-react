@@ -13,6 +13,8 @@ import { setBuskSheet, toggleBuskSheet, type BuskSheetTab } from '@/lib/buskWind
 import { cn } from '@/lib/utils'
 import { usePatchListQuery } from '@/store/patches'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
+import { BLIND_NAME_SUFFIX, BlindDot } from './BlindMarks'
+import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
 
 /**
@@ -40,7 +42,9 @@ import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
  * **The live cue number sits under the Show glyph** (busk-chrome plan D4): green, an em-dash with
  * nothing on stage, read from the **server cursor** — `transport.serverActiveCueId`, the cue on
  * stage, which holds on the outgoing cue mid-fade — not the animating one, so the fold says what
- * the rig is doing. `SideSheet` derives it and hands in [liveCue]; the strip subscribes to nothing.
+ * the rig is doing. `SideSheet` derives it and hands in [liveCue]; the strip subscribes to nothing
+ * for it — the blind dot on the same glyph is its own narrowed read (`BlindMarks.tsx`), and the
+ * word rides the glyph's `aria-label`, since that label wins the accessible name over contents.
  */
 export function SideSheetFold({
   projectId,
@@ -54,6 +58,7 @@ export function SideSheetFold({
   /** The cue on stage — its number, or its name where it has none — or null with nothing on stage. */
   liveCue: string | null
 }) {
+  const blind = useProgrammerBlind()
   const { data: live } = useSpeedMasterLiveQuery()
   const master1 = live?.find((master) => master.index === 1) ?? null
   const heads = selectedHeadCount([...selectedTargets.values()])
@@ -92,11 +97,16 @@ export function SideSheetFold({
               <button
                 type="button"
                 onClick={() => setBuskSheet(tab.id)}
-                aria-label={`Open the ${tab.label} tab`}
-                title={tab.label}
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                // The label wins the accessible name over the button's contents, so the blind
+                // word rides here rather than as an `sr-only` span the dot would carry silently.
+                aria-label={`Open the ${tab.label} tab${tab.id === 'show' && blind ? BLIND_NAME_SUFFIX : ''}`}
+                title={tab.id === 'show' && blind ? `${tab.label}${BLIND_NAME_SUFFIX}` : tab.label}
+                className="relative rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <tab.icon className="size-4" />
+                {/* Blind on the Show glyph, as the cue number is under it: the sheet's one report
+                    of the programmer lives on that tab (`BlindMarks.tsx`). */}
+                {tab.id === 'show' && <BlindDot />}
               </button>
               {tab.id === 'show' && (
                 <span
