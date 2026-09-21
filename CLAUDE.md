@@ -2115,7 +2115,8 @@ is the one redirect decision, called by all four cards routes (`ViewSwitcher.tes
 ### List shell
 
 **Every list view is one column, stated once.** Fixtures › List, Groups › List, the programmer,
-Show › Table, Channels › Table and the patch list share one anatomy — a 48px header row, any
+Show › Table, Channels › Table and the patch list share one anatomy — a 48px header row (the
+programmer's is the `ShowHeader`, a 40px chrome row since the busk-chrome plan's session B), any
 number of 40px chrome rows, the 40px `SelectionBar`, the sheet, a 22px footer — and the whole of it
 is two files: `components/sheet/sheetFrame.ts` holds the class strings (`PAGE_HEADER_CLASS`,
 `CHROME_ROW_CLASS`, `SHEET_SCROLLER_CLASS`, the sheet header row and cell, the sticky cell, the row,
