@@ -38,7 +38,7 @@ const { SelectionBar } = await import('./SelectionBar')
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import { resetDeskFollowStores } from '@/lib/deskFollow'
+import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 
 const CELLS: CellRef<ColumnKey>[] = [
   { rowId: 'fixture:a', col: 'colour' },
@@ -135,8 +135,8 @@ describe('SelectionBar', () => {
 
     it('reads the marquee’s own families once unlinked', () => {
       desk.snapshot = { targets: [], families: ['POSITION'], source: null }
+      unlinkFromDesk({ targets: [], families: null })
       render(bar())
-      fireEvent.click(screen.getByRole('button', { name: 'Desk' }))
       expect(screen.getByText('Colour')).toBeInTheDocument()
       expect(screen.queryByText('Position')).not.toBeInTheDocument()
     })
@@ -149,54 +149,52 @@ describe('SelectionBar', () => {
   })
 
   /**
-   * The desk chip (multi-screen plan §4, D7): between the family pill and the strip, on the
-   * programmer only — the plain lists never bridge to the desk (D1), so a chip there would name a
-   * link that does not exist. Four readings, the last mover never being this window.
+   * The desk chip (multi-screen plan §4, D7; busk-chrome plan D18): between the family pill and
+   * the strip, on the programmer only — the plain lists never bridge to the desk (D1), so a chip
+   * there would name a link that does not exist — and **only while this window is unlinked**:
+   * *Desk* is the resting state, and the chip saying so all night was noise. The unlink is ⌘K's
+   * *Stop following the desk selection in this window*; the chip's press is the way back.
    */
   describe('the desk chip', () => {
-    it('sits between the family pill and the strip', () => {
-      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
+    it('is not drawn while following — whoever moved the selection last', () => {
+      desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
+      const first = render(bar())
+      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
+      first.unmount()
+      desk.snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
       render(bar())
-      const chip = screen.getByRole('button', { name: 'Desk' })
+      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
+    })
+
+    it('sits between the family pill and the strip, dashed, once unlinked', () => {
+      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
+      unlinkFromDesk({ targets: [], families: ['COLOUR'] })
+      render(bar())
+      const chip = screen.getByRole('button', { name: 'This window' })
+      expect(chip.className).toContain('border-dashed')
       const pill = screen.getByText('Colour')
       const strip = screen.getByTestId('strip')
       expect(pill.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(chip.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 
-    it('is drawn with nothing selected too, so a window can unlink before it selects', () => {
+    it('is drawn with nothing selected too', () => {
+      unlinkFromDesk({ targets: [], families: null })
       render(bar({ cells: [], templateTargets: [] }))
-      expect(screen.getByRole('button', { name: 'Desk' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
     })
 
     it('is not drawn on the plain lists', () => {
+      unlinkFromDesk({ targets: [], families: null })
       render(bar({ projectId: undefined }))
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
     })
 
-    it('reads `Desk` when this window moved the selection last', () => {
-      desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 1' } }
+    it('follows the desk again on a click, and is then gone', () => {
+      unlinkFromDesk({ targets: [], families: null })
       render(bar())
-      expect(screen.getByRole('button', { name: 'Desk' })).toBeInTheDocument()
-    })
-
-    it('names the other window, or the desk, that moved it last', () => {
-      desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
-      const first = render(bar())
-      expect(screen.getByRole('button', { name: 'Desk · from Screen 2' })).toBeInTheDocument()
-      first.unmount()
-      desk.snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
-      render(bar())
-      expect(screen.getByRole('button', { name: 'Desk · from the desk' })).toBeInTheDocument()
-    })
-
-    it('flips to a dashed `This window` on a click, and back', () => {
-      render(bar())
-      fireEvent.click(screen.getByRole('button', { name: 'Desk' }))
-      const local = screen.getByRole('button', { name: 'This window' })
-      expect(local.className).toContain('border-dashed')
-      fireEvent.click(local)
-      expect(screen.getByRole('button', { name: 'Desk' })).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'This window' }))
+      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
     })
   })
 

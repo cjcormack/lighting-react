@@ -133,7 +133,7 @@ swallowed as an echo; and its `enabled` is gated on the tab's follow/local flag
 (`lib/deskFollow.ts`) in both directions, re-enabling as a fresh mount. `source` is stamped by the
 desk from the window this socket announced (`api/windowsApi.ts` — the name and the row id, so the
 chip matches by id); a MIDI write stamps
-`{kind: "surface"}`, which the desk chip reads as *Desk · from the desk*. The long form is
+`{kind: "surface"}`, which no chip draws any more — the desk chip is drawn only while its window is unlinked (busk-chrome plan D18) and names no mover. The long form is
 CLAUDE.md §"One selection, two shapes" and §"The desk selection has a mask".
 
 ## Records on buttons

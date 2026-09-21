@@ -739,11 +739,13 @@ falls back on its own.
 
 **Two flags, two chips, and neither may drive the other.** A single flag cannot express the flow:
 following would pin both screens to one page, and unlinking to get two pages would take the shared
-selection with it, so the operator would select twice. `DeskChip` on the band's one row governs the
-selection, `BuskPageChip` beside the page tabs governs the page — the same pill, the same link /
-unlink glyph, and on this view both name their subject (*Targets:* / *Page:*) so neither reads as
-governing the whole view. On the programmer's row C the selection chip is alone and stays bare; there
-is **no page chip there**. A window that has unlinked its page has not unlinked its selection and
+selection with it, so the operator would select twice. `DeskChip` on the rig row governs the
+selection, `BuskPageChip` on the pad row governs the page — the same pill, **each drawn only while
+its window is unlinked** (busk-chrome plan D18: following is the resting state, and the chip's
+press is the way back; the ways *in* are ⌘K, the Screens sheet, a `?page=` arrival and a tab click
+that never reached the desk), and on this view both name their subject (*Targets:* / *Page:*) so
+neither reads as governing the whole view. On the programmer's row C the selection chip is alone
+and stays bare; there is **no page chip there**. A window that has unlinked its page has not unlinked its selection and
 still presses onto the desk's targets and mask.
 
 **The flag is tri-state, and `?page=` is what the third state is for.** Arriving with a `?page=`
@@ -796,42 +798,48 @@ nothing here reads the selection's follow flag or the page's. The reason is the 
 exists: two screens at one desk showing two shapes of one view, pressed onto one selection.
 
 **Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
-folds the rig to `RigStrip` (the summary, the family pill, the desk chip — what a press needs to
-be honest about — and a chevron that unfolds Split) **off the desk board**, and on it to the band's own
-one row plus a chevron pill back to Split, and the page fills the body; **Rig** fills the
+folds the rig to `RigStrip` (the summary, the family pill, the desk chip while unlinked — what a
+press needs to be honest about — and a chevron that unfolds Split) **off the desk board**, and on it draws **no rig
+row at all** (busk-chrome plan D17, session A.5): the **pad row** is the body's top row and the page
+fills the rest; **Rig** fills the
 body with every row and folds the page to `BuskPageStrip`'s **40px folded arm** at the bottom —
 the page's name and its bank count, **not the tab strip drawn folded**
 (`Phones.dc.html` note 8, busk-further plan §11): Rig focus exists to give the band the height,
 the full tab strip wraps on a phone and takes it back, and a page is chosen in Split. **The Cells
 menu is not on the folded rig strip** — the compact boards' fold — by decision (session 8): `Focus`
 and `Phones` draw the strip without it and `Cells` draws it with, and the strip carries what a press
-must be *honest* about, where the menu is a *write*. On the desk board the fold is the band's own
-row, which carries it in every shape by the 2026-09-21 decision that no control moves. **Below `md` Rig focus stacks every row two tiles across, scrolling
+must be *honest* about, where the menu is a *write*. On the desk board there is no fold: Pads draws
+the pad row instead (§The rig), which carries the three selection verbs and not the Cells menu, for
+the same reason. **Below `md` Rig focus stacks every row two tiles across, scrolling
 vertically with the band** (`Phones` note 6, `RigBand`'s `stackRows`, which `BuskingView` sets
 for the **narrow board only** — the short board is compact too but wider than `md`, and keeps its
 sideways rows): it is D15's replacement for the narrow-width target sheet, and a sideways scroll
 per row on a phone defeats the point of a list; Split there keeps the one sideways row with the
-row chip. **The band's chrome is one row, the same row in every shape, and the Focus control and
-*Edit layout* / *Done* end it** (busk-chrome plan D13, 2026-09-21): on the desk board the band draws
-the `RIG` label, the Cells menu and its steps, the verbs, then the family pill and the desk chip
-**left-anchored after the verbs**, the gap, and the host's `controls` — `BuskFocusControl` and
-`EditLayoutToggle`, filled by `BuskingView` — right-anchored, in Split, Rig **and Pads**, where the
-band is `focus="pads"`: the one row and the grip, no rows, in place of `RigStrip`, which is the
-compact boards' fold. The **selection summary is drawn only in Pads**, in the gap; in Split and Rig
-the lit tiles say it (§The rig). The page strip below is tabs and the page chip and nothing else.
+row chip. **The band's chrome is one row, the same row in Split and Rig, and the Focus control and
+*Edit layout* / *Done* end whichever row is the body's top row** (busk-chrome plan D13, D17,
+2026-09-21): on the desk board the band draws the `RIG` label, the Cells menu and its steps, the
+verbs, then the family pill and the desk chip **left-anchored after the verbs**, the gap, and the
+host's `controls` — `BuskFocusControl` and `EditLayoutToggle`, filled by `BuskingView` —
+right-anchored, in Split and Rig. **In Pads the band is not drawn**: its controls act on tiles —
+the Cells menu, the steps and Clear narrow, move or release a selection made on them — and there
+are none on screen, so the **pad row** (`BuskPageStrip` with `pads`, §The rig) is the top row and
+takes the host's controls instead; the band's `focus="pads"` arm and its chevron pill lasted one
+day. The **selection summary is drawn only in Pads**, on the pad row; in Split and Rig the lit
+tiles say it. Under the band the pad row is tabs and the page chip and nothing else.
 The row was two — a label row over a controls row — from the morning of 2026-09-21 to the evening,
 and the merge cost 32px in every shape; before that the Focus control was on the page strip and
 moved with the fold, and then briefly on the band's one label row, which a desk width with the
 sidebar open filled to wrapping. **The handle is `RigHandle`,
-one grip in three shapes**: in Split a drag (a focusable `role="separator"`) that snaps to whole
+one grip in two shapes**: in Split a drag (a focusable `role="separator"`) that snaps to whole
 lines on release — every line is drawn while it is held and **the clip is the snap**: dragged into
 the Pads region the rows clip to nothing, into the Rig region the clip lifts and the rows stretch to
 take the page body's room, and between them the rows' bottom edge follows the pointer — cut at it
 above the tiles, extended to it below, so a drag past the last line visibly pushes the page down —
 so the band already has the shape the release will give it (a badge naming the shape was tried and read as a status box; there is none);
-`snapRigRows` is the pure rule and the arrow keys step it one line at a time — and in Pads and Rig
+`snapRigRows` is the pure rule and the arrow keys step it one line at a time — and in Rig
 a **chevron pill** drawn where the drag would be, a press on it returning to Split, pointing the way
-the rows will come; it replaced the strip's *Unfold the rig* chevron on the desk board. There is **no count caption**: *1 of 2 rows*
+the page will come; it replaced the strip's *Unfold the rig* chevron on the desk board, and its Pads
+twin went with the Pads row (D17: the pad row's Focus control is the way back). There is **no count caption**: *1 of 2 rows*
 said nothing the rows did not and made the snap to Pads or Rig a caption change the eye missed. The
 handle and the segmented control are **one setting** (D6): past the last line **or within 40px of
 the column's bottom** (`data-busk-column`, read as the drag's floor) is Rig focus, above the first
@@ -1327,24 +1335,26 @@ edit mode shows every row, since a hidden one cannot take a drop. **The one row 
 order, and its floor is two rows by design** (busk-chrome plan D15, `Band.dc.html`; the thresholds
 are re-measured in the app and are `RigBand.tsx`'s to move): the band is its own `@container` and
 carries `data-focus`, and the row gives up its words in this order — the **verbs' words first**
-(`verbWordClass(focus)`: every verb is the desk's outline button with its icon, and the words go
-**earlier in Pads** than in Split or Rig, because there the summary sits in the gap and matters
-more than the verbs' words); then the ***Cells:* prefix and the Focus words** at one width in
-every shape (`CELLS_PREFIX_CLASS`, `FOCUS_WORD_CLASS`) — **the Cells control keeps its mode word**
+(`VERB_WORD_CLASS`: every verb is the desk's outline button with its icon; *Edit layout*'s word
+goes with them, `EDIT_WORD_CLASS` — one ladder for Split and Rig, the two shapes the row is drawn
+in since session A.5); then the ***Cells:* prefix and the Focus words** at one width in
+both (`CELLS_PREFIX_CLASS`, `FOCUS_WORD_CLASS`) — **the Cells control keeps its mode word**
 in its short form, All · Odd · Even · 1st · 2nd · Invert · Masters (`CELLS_SHORT_LABELS`), and is
-never a bare glyph, since *All* is the state an operator most needs to be sure of; then the
-**summary truncates** (Pads only, `min-w-0`, its whole text on the title); and **below the floor
+never a bare glyph, since *All* is the state an operator most needs to be sure of; then the `RIG`
+**label folds to nothing** (D20, `RIG_LABEL_CLASS`; `data-rig-row` is the handle a test reaches the
+row by, since the label no longer is); and **below the floor
 the row wraps at exactly one place** — the verbs group on the first row, the state group (pill,
-chip, summary, Focus, Edit layout) taking the second whole — through `TWO_ROWS_CLASS` /
+chip, Focus, Edit layout) taking the second whole — through `TWO_ROWS_CLASS` /
 `SECOND_ROW_CLASS`, **not `flex-wrap`'s own choice of break**: above the floor the row is
 `flex-nowrap`, so a control never lands mid-row; only under it may the verbs group wrap within its
 own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the ~330px the iconic verbs
 need, which the desk board reaches with the sidebar open and the sheet at its 480 ceiling, and
 which a size-contained `@container` would otherwise paint over the sheet. The desk chip is given
-`min-w-0 shrink` on this row — both words, because `FollowPill`'s base is `shrink-0` — so a long
-*· from <window>* suffix truncates before any control moves. They were 860 / 680 while the summary
-had a row of its own, and 1150 / 1000 before that, when the verbs shared the label row with the
-summary and the chips. The compact boards keep their one `flex-wrap` row — the row chip, the
+`min-w-0 shrink` on this row — both words, because `FollowPill`'s base is `shrink-0` — so its value
+truncates before any control moves. The rungs are **960 / 700 / 580 / 540** since session A.5
+(`RigBand.tsx`'s docblock has the measurements); they were 1100 / 820 / 700 with a chip on the
+resting row, 860 / 680 while the summary had a row of its own, and 1150 / 1000 before that, when
+the verbs shared the label row with the summary and the chips. The compact boards keep their one `flex-wrap` row — the row chip, the
 summary, the verbs menu — and their Focus words fold at that row's own measure
 (`COMPACT_FOCUS_WORD_CLASS`, 680), not the desk row's. **A
 tile's cross and menu sit inside its top-right corner**: hanging 7px off the corners they were
@@ -1354,6 +1364,63 @@ sits inside the tile's border and is transparent at zero intensity, where a 15% 
 faint line over a dark spot's bottom edge. Below `md` the band is one row with a row chip and the verbs in a menu,
 and there is no editing there; in Rig focus below `md` every row is stacked two tiles across
 (§Focus and the side sheet).
+
+**In Pads the pad row is the body's top row, and the rig row is not drawn** (busk-chrome plan D17,
+session A.5; `BuskPageStrip` with `pads`, `data-pad-row="pads"`). It carries, in order: the `PADS`
+label, the page tabs **at the rig row's control size** (an `h-7 p-0.5` group of `h-6 px-2 text-xs`
+items — the Focus control's segmented look; they were larger and rounder than everything beside
+them), **Spread · Locate · Highlight** as icon verbs, the selection summary in the gap (`min-w-0`,
+truncating, its whole text on the title — nothing else says it in Pads), the family pill while a
+mask is set, **both chips** while their window is unlinked (D17: "the chips of D18" — the desk
+chip too, since there is no rig row here to carry it and an unlinked window pressing onto its own
+selection must say so), then the host's Focus control and *Edit layout* / *Done*. **No Cells menu, no steps, no Clear**: those act on a selection made on the tiles, and the
+use this view is built for is a two-screen desk with the rig on one screen, so a rig operation is
+reached there; the three verbs act on the rig from either screen. In Split and Rig the same row
+(`data-pad-row="split"`) is the tabs and the page chip only, and it wraps as it always did for edit
+mode's name field. **The three verbs are one hook instance**, `useSelectionVerbs` in
+`components/busking/selectionVerbs.tsx`, called once by `BuskingView` and handed to whichever row is
+drawn — `RigBand`'s `verbs` prop in Split and Rig, the pad row's in Pads — so a window has one
+Highlight capture and one locate fold and the two rows cannot answer a press two ways;
+`SelectionVerbButtons` draws the three with the band's `aria-label`s, and the band adds Clear after
+them. **A held Highlight releases when those buttons unmount**: `useHighlight` releases on its own
+host's unmount, and its host is the view now, which outlives a focus change — so a MIDI
+`buskFocusSet` mid-hold would otherwise take the band and the held button away with the dimmers
+pinned at full. `RigStrip` and the short board's merged row are unchanged, and `RigHandle` has no
+Pads arm. **The pad row's `@container` is a wrapper and the row is its child**, as the band's is:
+a query container is the nearest *ancestor* and never the element itself, so a floor class on the
+container element has nothing to match — the first cut did that, and below 680 the first group
+took `w-full` in a row that never wrapped and pushed the Focus control under the docked sheet.
+jsdom evaluates no container query, so `BuskPageStrip.test.tsx` pins the *structure* — and that
+the 12px gutter is the wrapper's, so the container's content box is the row's and the rungs are
+numbers on that box, as the band's are.
+
+**A chip is drawn only while its window is unlinked** (D18). `DeskChip` and `BuskPageChip` render
+nothing while following — *Desk* is the resting state and a pill saying so all night is noise — and
+the dashed *This window* once unlinked, whose press relinks. The *· from <window>* readout went
+with the following state: an operator at a two-screen desk knows which screen they are selecting
+from, and `deskReading` is deleted. `FollowPill` keeps the solid form and a `from` part all the
+same, each part under a class of its own (D19: the host's rung for the suffix and for the subject),
+with the **whole reading as `aria-label`** — `Targets: This window`, `Page: This window` — so the
+name a test or a screen reader gets never changes with the width. The desk chip is on the rig
+row in Split and Rig (`CHIP_SUBJECT_CLASS`, the Focus words' rung) and on the pad row in Pads
+beside the page chip (`PAD_CHIP_SUBJECT_CLASS`, both). The way *out* of following is ⌘K's *Stop
+following the desk selection in this window* and nothing else — the Screens sheet reports the flag
+and no MIDI target sets it — so a touch-only screen cannot unlink its selection; whether a second
+door is owed is Chris's call.
+
+**The words come back under the floor, as closed ranges** (D19). Below the floor each row has its
+whole line, so what the ladder took returns while the line holds it and folds again at a second
+measured rung — every re-expansion a **stacked `@min-[…]:@max-[floor]:` variant**, which overlaps
+no rung above the floor, so no rung depends on the order Tailwind emits the rules in. On the rig
+row the verbs line without its label is 546px fully worded, six wider than the 540 floor, so the
+verbs' words return (from 520) only with the *Cells:* prefix folded, and the prefix's range (from
+350) ends at 520 where the words take its place; on the state line *Edit layout*'s word returns
+from 370 and the Focus words and the chip's subject from 300. **The pad row has a ladder of the
+same shape and its own numbers** (`BuskPageStrip.tsx`'s docblock: 1040 / 800 / 720 / 680, then 460
+· 530 · 460 under the floor) — measured on the dev rig's two page names, since the tabs have no
+ceiling and a longer name moves every rung by its width. **The labels fold last before each floor**
+(D20): `RIG` at 580 and `PADS` at 720, to nothing, and neither comes back under it. Both ladders
+are pinned as orderings, not numbers, by `RigBand.test.tsx` and `BuskPageStrip.test.tsx`.
 
 ### The hand
 
@@ -2419,16 +2486,14 @@ id** (lighting7 d774fd9). No selection write names this window any more — sess
 on `selection.set` / `selection.toggle` is gone from this side, and the desk's fallback arm for it is
 `FU-WINDOWS-RETIRE-SOURCENAME`, ready to delete.
 
-**The chip resolves "this window" through `windows.state`, not through `sessionStorage`**
-(`deskReading` in `components/desk/DeskChip.tsx`). `source.id` is the mover's *row* id, which a tab
-never sees except in its own registry row, so *my* row is the one whose `windowId` is this tab's
-(`thisWindowRow`, first match), and the chip reads *Desk* when `source.id` equals that row's id,
-*Desk · from <name>* when it names another row — the row's *current* name, so a rename shows without
-a new write — and *Desk · from the desk* for kind `surface`. `source.id` is absent for a surface
-write and for a socket that never announced; there the chip falls back to comparing names, which is
-what a pre-registry client still gets. A duplicated tab copies its `sessionStorage`, so two rows can
-share one `windowId` and neither the tab nor the chip can tell them apart: the twin's write can read
-as this window's own. Cosmetic, accepted by D9, and left; `FU-WINDOWS-OWN-ROW-ID` is the exact fix.
+**Nothing on this side draws `source` any more** (busk-chrome plan D18). The desk still stamps it
+— the mover's *row* id, which a tab never sees except in its own registry row, and the name — and
+`decodeSelectionState` still carries it into the cache; `deskReading`, which resolved *my* row as
+the one whose `windowId` is this tab's (`thisWindowRow`, first match) and read *Desk · from <name>*
+for another row's id, went with the following chip. `thisWindowRow` stays the Screens sheet's, for
+its *this window* badge, and the caveat it carried stays with it: a duplicated tab copies its
+`sessionStorage`, so two rows can share one `windowId` and cannot be told apart from this side.
+Cosmetic, accepted by D9, and left; `FU-WINDOWS-OWN-ROW-ID` is the exact fix.
 
 **Follow / local is a per-tab `sessionStorage` fact, default on** (`lib/deskFollow.ts`, D8), and it
 gates **both** directions of the bridge, since one bridge is both. `localStorage` is one value per
@@ -2439,17 +2504,22 @@ into the tab's copy and leaves the desk's alone; re-linking adopts the desk's an
 not clear what another screen has selected). On the programmer the local selection *is* the list's
 own row selection — an unlinked window records and presses what it shows; on the busk view it is
 the copy in `deskFollow.ts`, read through `useSelectionPair`. **The desk chip**
-(`components/desk/DeskChip.tsx`) is the control and the readout: `Desk` when nobody has moved the
-selection or this window did, `Desk · from <name>` for another window, `Desk · from the desk` for
-a control surface, dashed `This window` when local; a click flips it. It sits on the programmer's
-row C between the family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only
-with a `projectId`) and on the busk band's one row beside the family pill, and nowhere else —
-the plain lists never bridge (D1), so a chip there would name a link that does not exist. **On the
-busk band it takes `showSubject` and reads `Targets: Desk`**, because there it has a sibling — the
-page chip (§The busk layout) — and two bare `Desk` chips a row apart would be worse than either
-alone; on row C it is alone and stays bare, that row being budgeted to the pixel. The pill itself is
+(`components/desk/DeskChip.tsx`) is drawn **only while this window is unlinked** (busk-chrome plan
+D18): the dashed `This window`, whose click follows the desk again. While following it renders
+nothing — *Desk* is the resting state, and the four readings it used to carry (`Desk`, `Desk · from
+<name>`, `Desk · from the desk`) are gone with `deskReading`: an operator at a two-screen desk knows
+which screen they are selecting from. The way *out* of following is therefore not a press on the
+chip: ⌘K's *Stop following the desk selection in this window* (`buildWindowCommands`) is the door,
+and it lands on a chip that says where you are. It sits on the programmer's row C between the
+family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only with a
+`projectId`) and on the busk rig row beside the family pill, and nowhere else — the plain lists
+never bridge (D1), so a chip there would name a link that does not exist. **On the busk band it
+takes `showSubject` and reads `Targets: This window`**, because there it has a sibling — the page
+chip (§The busk layout) — and two bare chips a row apart would be worse than either alone; on row
+C it is alone and stays bare, that row being budgeted to the pixel. The pill itself is
 `components/desk/FollowPill.tsx`, shared by both chips so they cannot drift apart visually while
-their flags stay entirely separate.
+their flags stay entirely separate; its parts fold under the host's classes with the whole reading
+as `aria-label` (§The rig).
 
 **The checkbox column is gone, and a drag from the name column selects rows** — the same
 `useCellMarquee`, which decides at the press which side of the first value column it landed on and

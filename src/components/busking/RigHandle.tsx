@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronUp } from 'lucide-react'
 import { setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
 import { cn } from '@/lib/utils'
 
 /**
- * The rig's **handle** — one grip in three shapes (busk-further plan D6, revised 2026-09-21 twice).
+ * The rig's **handle** — one grip in two shapes (busk-further plan D6, revised 2026-09-21 three times).
  *
  * In **Split** it is a drag: the rows above it are clipped at the pointer while it is held, and on
  * release the band snaps to whole lines — a half line of tiles is useless — writing the window's
@@ -25,11 +25,11 @@ import { cn } from '@/lib/utils'
  * tiles visibly pushes the page down rather than doing nothing until an invisible threshold. The
  * arrow keys step it one line at a time and past both ends, for the keyboard.
  *
- * In **Pads** and **Rig** the way back is drawn where the drag handle would be — under the band's
- * one row in Pads, under the rows at the bottom of the band in Rig — as a **chevron
- * pill**, not the bar: the bar reads as something to drag, and this is a press, so it says so with
- * a glyph pointing the way the rows will come (down in Pads, up in Rig). It replaced the strip's
- * *Unfold the rig* chevron on the desk board: the way back to Split is in the place you left it.
+ * In **Rig** the way back is drawn where the drag handle would be — under the rows at the bottom
+ * of the band — as a **chevron pill**, not the bar: the bar reads as something to drag, and this
+ * is a press, so it says so with a glyph pointing the way the page will come. It had a twin in
+ * Pads, under the band's one row, until busk-chrome plan D17 took the rig row out of Pads on the
+ * desk board: there the Focus control is on the pad row, and that is the way back.
  *
  * `snapRigRows` is the pure rule, pinned by table in `RigBand.test.tsx`.
  */
@@ -75,8 +75,8 @@ const GRIP_CLASS =
   'h-1.5 w-16 rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50'
 
 export interface RigHandleProps {
-  /** Which shape the band is in — a drag in Split, a press back to Split in the other two. */
-  mode: 'split' | 'pads' | 'rig'
+  /** Which shape the band is in — a drag in Split, a press back to Split in Rig. */
+  mode: 'split' | 'rig'
   /** Lines shown (Split) — `aria-valuenow`. */
   shown: number
   /** Lines on the rig (`rigLines`), the unit the handle counts. */
@@ -188,11 +188,10 @@ export function RigHandle({ mode, shown, total, rowsRef, dragging = false, onDra
     }
   }, [dragging, mode, measure, clip, floor, onDragging, total])
 
-  if (mode !== 'split') {
+  if (mode === 'rig') {
     // The way back: a chevron pill where the drag handle would be — a press, and drawn as one,
-    // pointing the way the rows will come.
-    const title = mode === 'pads' ? 'Show the rig rows again: Split' : 'Show the page again: Split'
-    const Glyph = mode === 'pads' ? ChevronDown : ChevronUp
+    // pointing the way the page will come.
+    const title = 'Show the page again: Split'
     return (
       <div className="flex h-5 shrink-0 items-center justify-center">
         <button
@@ -203,7 +202,7 @@ export function RigHandle({ mode, shown, total, rowsRef, dragging = false, onDra
           onClick={() => setBuskFocus('split')}
           className="flex h-4 w-16 cursor-pointer items-center justify-center rounded-full border bg-card text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <Glyph className="size-3" strokeWidth={2.5} />
+          <ChevronUp className="size-3" strokeWidth={2.5} />
         </button>
       </div>
     )

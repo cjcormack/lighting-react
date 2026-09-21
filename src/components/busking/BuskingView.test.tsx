@@ -23,10 +23,12 @@ vi.mock('./RigBand', async () => {
   return {
     FOCUS_WORD_CLASS: real.FOCUS_WORD_CLASS,
     COMPACT_FOCUS_WORD_CLASS: real.COMPACT_FOCUS_WORD_CLASS,
-    verbWordClass: real.verbWordClass,
-    // The band draws the host's `controls` at its one row's end — the Focus control lives there.
-    RigBand: ({ selectedTargets, focus, compact, controls }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean; controls?: React.ReactNode }) => (
-      <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'}>
+    VERB_WORD_CLASS: real.VERB_WORD_CLASS,
+    EDIT_WORD_CLASS: real.EDIT_WORD_CLASS,
+    // The band draws the host's `controls` at its one row's end — the Focus control lives there
+    // in Split and Rig. The verbs it is handed are the host's one instance, echoed for the test.
+    RigBand: ({ selectedTargets, focus, compact, controls, verbs }: { selectedTargets: Map<string, unknown>; focus: string; compact: boolean; controls?: React.ReactNode; verbs: unknown }) => (
+      <div data-testid="target-band" data-focus={focus} data-compact={compact ? 'true' : 'false'} data-verbs={verbs != null ? 'true' : 'false'}>
         <span data-testid="target-band-selection">{[...selectedTargets.keys()].join(' ') || 'none'}</span>
         {controls}
       </div>
@@ -343,6 +345,7 @@ describe('the busk view', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
+      // Unlinked, the page chip is drawn — it is drawn only then (D18).
       expect(await screen.findByRole('button', { name: 'Page: This window' })).toBeTruthy()
     })
 
@@ -350,7 +353,8 @@ describe('the busk view', () => {
       draw([emptyPage, second], '/projects/1/busk?page=999')
       await screen.findByRole('button', { name: 'Ballads' })
       await waitFor(() => expect(window.sessionStorage.getItem(BUSK_PAGE_FOLLOW_KEY)).toBe('true'))
-      expect(screen.getByRole('button', { name: 'Page: Desk' })).toBeTruthy()
+      // Following: no page chip at all (D18).
+      expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
     })
 
     it('does not read a bare `/busk` as an arrival — `Number(null)` is 0, not a page id', async () => {
@@ -359,7 +363,7 @@ describe('the busk view', () => {
       draw([{ ...emptyPage, id: 0 }, second], '/projects/1/busk')
       await screen.findByRole('button', { name: 'Ballads' })
       await waitFor(() => expect(window.sessionStorage.getItem(BUSK_PAGE_FOLLOW_KEY)).toBe('true'))
-      expect(screen.getByRole('button', { name: 'Page: Desk' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
     })
 
     it('mirrors the arrival page into `?page=`, never the desk page it is unlinking from', async () => {
@@ -377,7 +381,9 @@ describe('the busk view', () => {
 
     it('draws no page chip before the pages arrive, so a click cannot spend the arrival decision', async () => {
       // Unlinking *is* a decision, so a click on a chip drawn over an empty list would leave a
-      // window launched at `?page=` never landing on it.
+      // window launched at `?page=` never landing on it — and an unlinked tab with no pages has
+      // nothing to draw the chip beside.
+      unlinkBuskPage(null)
       draw([], '/projects/1/busk')
       await screen.findByText('Start from your library')
       expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
@@ -403,14 +409,17 @@ describe('the busk view', () => {
       expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBeNull()
     })
 
-    it('keeps the page it is showing when the chip unlinks it, rather than jumping to the first', async () => {
+    it('keeps the page it is showing when unlinked, rather than jumping to the first', async () => {
       buskPageWs.last = second.id
       keepFollowingBuskPage()
       draw([emptyPage, second])
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
-      fireEvent.click(screen.getByRole('button', { name: 'Page: Desk' }))
+      // No chip to press while following (D18): the unlink is ⌘K's, the Screens sheet's or a
+      // `?page=` arrival's, and it snapshots the page this window is showing.
+      expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+      act(() => unlinkBuskPage(second.id))
       // Unlinked, still on Dance — and the desk moving no longer reaches this window.
       expect(screen.getByRole('button', { name: 'Page: This window' })).toBeTruthy()
       act(() => buskPageWs.fire(emptyPage.id))
@@ -418,7 +427,7 @@ describe('the busk view', () => {
       expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page')
     })
 
-    it('adopts the desk’s page again on re-link, and sends nothing', async () => {
+    it('adopts the desk’s page again on the chip’s press, and sends nothing — and the chip then goes', async () => {
       unlinkBuskPage(emptyPage.id)
       buskPageWs.last = second.id
       draw([emptyPage, second])
@@ -428,6 +437,7 @@ describe('the busk view', () => {
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
       expect(buskPageWs.sent).toEqual([])
+      expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
     })
 
     it('writes the desk on a tab click while following, and only this window once unlinked', async () => {
@@ -487,18 +497,33 @@ describe('the busk view', () => {
       expect(document.querySelector('[data-busk-page-strip="open"]')).not.toBeNull()
     })
 
-    it('folds the band in Pads focus on the desk board — the band itself, with its controls, and no strip', async () => {
+    it('draws the pad row and no band in Pads focus on the desk board, with the Focus control and Edit layout on the pad row (D17)', async () => {
       setBuskFocus('pads')
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
-      // The desk board's Pads is the band folded (`focus="pads"`), so its one row is the same row
-      // in every shape; the 36px strip is the compact boards' fold.
-      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
+      // No band and no strip: the pad row is the body's top row, and carries the selection's
+      // verbs, the summary and the host's controls.
+      expect(screen.queryByTestId('target-band')).toBeNull()
       expect(screen.queryByTestId('rig-strip')).toBeNull()
-      expect(screen.getByTestId('target-band').querySelector('[aria-label="Focus"]')).not.toBeNull()
-      expect(document.querySelector('[data-busk-page-strip="open"]')!.querySelector('[aria-label="Focus"]')).toBeNull()
+      const padRow = document.querySelector('[data-pad-row="pads"]') as HTMLElement
+      expect(padRow).not.toBeNull()
+      expect(padRow.querySelector('[aria-label="Focus"]')).not.toBeNull()
+      expect(within(padRow).getByRole('button', { name: 'Edit layout' })).toBeInTheDocument()
+      expect(within(padRow).getByRole('button', { name: 'Spread…' })).toBeInTheDocument()
+      expect(within(padRow).getByRole('button', { name: 'Locate' })).toBeInTheDocument()
+      expect(within(padRow).getByRole('button', { name: 'Highlight' })).toBeInTheDocument()
+      expect(padRow.querySelector('[data-pad-summary]')).toHaveTextContent('nothing selected')
+      // No Cells menu, no steps, no Clear: those act on tiles, which are on the rig screen.
+      expect(within(padRow).queryByRole('button', { name: /^Cells:/ })).toBeNull()
+      expect(within(padRow).queryByRole('button', { name: 'Clear' })).toBeNull()
+      // Back in Split the band carries the Focus control and the pad row is tabs only.
       act(() => setBuskFocus('split'))
       expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-verbs', 'true')
+      const splitRow = document.querySelector('[data-pad-row="split"]') as HTMLElement
+      expect(splitRow.querySelector('[aria-label="Focus"]')).toBeNull()
+      expect(within(splitRow).queryByRole('button', { name: 'Spread…' })).toBeNull()
+      expect(splitRow.querySelector('[data-pad-summary]')).toBeNull()
     })
 
     it('fills the body with the band in Rig focus and folds the page to the board’s 40px strip at the bottom — name and bank count', async () => {
@@ -541,14 +566,15 @@ describe('the busk view', () => {
       setBuskFocus('pads')
       draw([emptyPage])
       await screen.findByRole('button', { name: 'Ballads' })
-      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
+      expect(screen.queryByTestId('target-band')).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Edit layout' }))
       expect(await screen.findByTestId('target-band')).toHaveAttribute('data-focus', 'split')
       expect(screen.getByRole('radio', { name: 'Split' })).toBeDisabled()
       // The fact itself is untouched: Done reads it back.
       expect(getBuskFocus()).toBe('pads')
       fireEvent.click(screen.getByText('Done'))
-      await waitFor(() => expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads'))
+      await waitFor(() => expect(screen.queryByTestId('target-band')).toBeNull())
+      expect(document.querySelector('[data-pad-row="pads"]')).not.toBeNull()
     })
 
     it('forces Split on a project with no pages, so the first-open screen is never folded away', async () => {
@@ -566,7 +592,8 @@ describe('the busk view', () => {
       await screen.findByRole('button', { name: 'Ballads' })
       expect(getBuskFocus()).toBe('pads')
       expect(getBuskSheet()).toBe('none')
-      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'pads')
+      expect(screen.queryByTestId('target-band')).toBeNull()
+      expect(document.querySelector('[data-pad-row="pads"]')).not.toBeNull()
       // No transient: the mirror waited for the decision to render, so the URL never held the
       // defaults the window was arriving from.
       expect(shapeSeen).toEqual(['pads/none'])
@@ -606,7 +633,7 @@ describe('the busk view', () => {
       // One row: the strip's pieces lead the page strip; there is no strip row of its own.
       const strip = document.querySelector('[data-busk-page-strip="open"]')!
       expect(strip).toHaveAttribute('data-busk-page-strip-dense', 'true')
-      expect(strip.className).toContain('h-8')
+      expect(strip.querySelector('[data-pad-row]')!.className).toContain('h-8')
       expect(strip.querySelector('[data-testid="rig-strip-content"]')).not.toBeNull()
       expect(screen.queryByTestId('rig-strip')).toBeNull()
       expect(screen.queryByTestId('target-band')).toBeNull()
@@ -634,7 +661,7 @@ describe('the busk view', () => {
       const strip = document.querySelector('[data-busk-page-strip="open"]')!
       expect(strip).toHaveAttribute('data-busk-page-strip-dense', 'true')
       expect(strip.querySelector('[data-testid="rig-strip-content"]')).toBeNull()
-      expect(strip.querySelector(':scope > .flex-1')).not.toBeNull()
+      expect(strip.querySelector('[data-pad-row] > .flex-1')).not.toBeNull()
       expect(screen.queryByTestId('side-sheet')).toBeNull()
     })
 

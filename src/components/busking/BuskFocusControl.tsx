@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
  */
 const FOCUSES: readonly { id: BuskFocus; label: string; icon: LucideIcon; title: string }[] = [
   { id: 'split', label: 'Split', icon: Rows2, title: 'Split: rig rows above, the page below' },
-  { id: 'pads', label: 'Pads', icon: LayoutGrid, title: 'Pads: the page fills the body, the rig folds to a strip' },
+  { id: 'pads', label: 'Pads', icon: LayoutGrid, title: 'Pads: the page fills the body and the rig rows are put away' },
   { id: 'rig', label: 'Rig', icon: Lightbulb, title: 'Rig: every row at full size, the page folds to its strip' },
 ]
 

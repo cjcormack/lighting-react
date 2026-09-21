@@ -49,17 +49,18 @@ import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
-import { COMPACT_FOCUS_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, verbWordClass } from './RigBand'
+import { COMPACT_FOCUS_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, VERB_WORD_CLASS } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
 import type { ShowTabSource } from './ShowTab'
 import { BuskFocusControl } from './BuskFocusControl'
 import { BuskEditProvider } from './BuskEditProvider'
 import { BuskPageBody } from './BuskPage'
-import { BuskPageStrip, EditLayoutToggle } from './BuskPageStrip'
+import { BuskPageStrip, EditLayoutToggle, PAD_EDIT_WORD_CLASS, PAD_FOCUS_WORD_CLASS } from './BuskPageStrip'
 import { BuskFirstOpen } from './BuskFirstOpen'
 import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
+import { useSelectionVerbs } from './selectionVerbs'
 import type { PadBehaviour } from './padBehaviour'
 import { type EffectPresence } from './buskingTypes'
 
@@ -79,16 +80,24 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  *
  * **The view has three shapes, and which one is this window's fact** (busk-further plan D5–D7,
  * `lib/buskWindow.ts`): **Split** — the band showing `busk.rigRows` lines over the page, the
- * handle between; **Pads** — the page fills the body and the rig folds: on the desk board to the
- * band's own one row plus a chevron pill back to Split (`RigBand focus="pads"`),
- * off it to `RigStrip`, whose chevron unfolds Split; **Rig** — the band fills the body with every
- * row and the page folds to its strip at the bottom, name and bank count only. **The band's
- * row is the same row in every shape** (busk-chrome plan D13), and the Focus control and *Edit
- * layout* / *Done* end it — so neither moves as the shape changes; both used to be on the page
- * strip, below the band in Split and Pads and at the bottom of the body in Rig. Edit mode **forces Split** for its
- * duration, because a palette drag needs both regions on screen, and restores the window's focus
- * on Done by never having written it; so does a project with no pages, whose first-open screen
- * lives in the page column. The side sheet is `busk.sheet`'s: a tab, or `none` for the fold.
+ * handle between; **Pads** — the page fills the body: on the desk board the rig band is **not
+ * drawn** and the **pad row** is the body's top row (busk-chrome plan D17 — `BuskPageStrip` with
+ * [pads]: the three selection verbs, the summary, the pill, and the Focus control and *Edit
+ * layout* / *Done* at its end), off it the rig folds to `RigStrip`, whose chevron unfolds Split;
+ * **Rig** — the band fills the body with every row and the page folds to its strip at the bottom,
+ * name and bank count only. In Split and Rig the band's one row (D13) ends with the Focus control
+ * and the edit toggle, and in Pads the pad row does: `bandControls` is mounted on whichever row is
+ * the body's top row. The band drew itself in Pads too, folded to its one row and a chevron, from
+ * the morning of 2026-09-21 to the evening — a row of tile controls with no tiles on screen. Edit
+ * mode **forces Split** for its duration, because a palette drag needs both regions on screen, and
+ * restores the window's focus on Done by never having written it; so does a project with no
+ * pages, whose first-open screen lives in the page column. The side sheet is `busk.sheet`'s: a
+ * tab, or `none` for the fold.
+ *
+ * **The three selection verbs are one instance** (`useSelectionVerbs`, `selectionVerbs.tsx`),
+ * called here and handed to whichever row is drawn — the band in Split and Rig, the pad row in
+ * Pads — so a window has one Highlight capture and one locate fold, and the two rows cannot
+ * answer a press two ways.
  *
  * **`?focus=` and `?sheet=` are this window's on arrival**, latched once per tab exactly as
  * `?page=` is below — the raw strings read at mount, applied through `applyBuskArrival`, which
@@ -160,6 +169,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     programmerApplied,
   } = useBuskingState(projectId)
 
+  const verbs = useSelectionVerbs(selectedTargets)
   const { data: pages, isLoading } = useBuskPagesQuery(projectId)
   const { data: rig } = useBuskRigQuery(projectId)
   const { data: templates } = useTemplateListQuery({ projectId })
@@ -452,28 +462,34 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   // The short board's merged row: the rig strip's pieces lead the page strip while the rig is
   // folded. In Split and Rig focus the band carries them itself, so the row holds only the page.
   const merged = board === 'short' && shape === 'pads'
+  // The desk board's Pads: the pad row is the body's top row and the band is not drawn (D17).
+  const padRow = docked && shape === 'pads'
 
-  // The Focus words fold by the row they sit on: the desk board's one row at its measured fold,
-  // the compact boards' strip at the fold that row was measured for (`COMPACT_FOCUS_WORD_CLASS`).
+  // The Focus words fold by the row they sit on: the desk board's rig row at its measured fold,
+  // the pad row at its own in Pads, the compact boards' strip at the fold that row was measured
+  // for (`COMPACT_FOCUS_WORD_CLASS`).
   const focusControl = (
-    <BuskFocusControl disabled={editing} labelClass={docked ? FOCUS_WORD_CLASS : COMPACT_FOCUS_WORD_CLASS} />
+    <BuskFocusControl
+      disabled={editing}
+      labelClass={padRow ? PAD_FOCUS_WORD_CLASS : docked ? FOCUS_WORD_CLASS : COMPACT_FOCUS_WORD_CLASS}
+    />
   )
-  // Its word folds with the band's verbs — by the shape's threshold, since the band's row is where
-  // it sits on the desk board (`verbWordClass`); the compact boards never draw it unfolded.
+  // Its word folds with the verbs' on whichever row it sits on — the rig row's rung in Split and
+  // Rig, the pad row's in Pads; the compact boards never draw it unfolded.
   const editToggle = (
     <EditLayoutToggle
       editing={editing}
       editable={docked}
       hasPages={(pages?.length ?? 0) > 0}
-      labelClass={verbWordClass(shape)}
+      labelClass={padRow ? PAD_EDIT_WORD_CLASS : docked ? EDIT_WORD_CLASS : VERB_WORD_CLASS}
       onToggle={() => {
         if (editing) dispatch(exitBuskEdit())
         else if (activePage != null) dispatch(enterBuskEdit(activePage.id))
       }}
     />
   )
-  // The band's one row (the compact board's too) ends with these two, in every shape — the Focus
-  // control and *Edit layout* / *Done* — so neither moves as the shape changes.
+  // The body's top row ends with these two — the Focus control and *Edit layout* / *Done*: the
+  // band's one row in Split and Rig (the compact board's too), the pad row in Pads.
   const bandControls = (
     <>
       {focusControl}
@@ -491,6 +507,8 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       // shortened mid-edit keeps `editing` until Done. `merged` is already false there, since edit
       // mode forces Split.
       dense={board === 'short' && !folded && !editing}
+      // Pads on the desk board: the row carries the selection's verbs, summary and mask (D17).
+      pads={padRow && !folded ? { selectedTargets, families, verbs } : undefined}
       leading={
         merged ? (
           <RigStripContent
@@ -536,9 +554,10 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
               <PanelBottomOpen className="size-3.5" /> Sheet
             </Button>
           )}
-          {/* On the merged row this *is* the body's top row, so the Focus control and the edit
-              toggle are here; every other shape puts them on the band. */}
-          {merged && bandControls}
+          {/* Where this *is* the body's top row — the merged row, and the desk board's pad row in
+              Pads — the Focus control and the edit toggle are here; Split and Rig put them on
+              the band. */}
+          {(merged || (padRow && !folded)) && bandControls}
         </>
       }
     />
@@ -562,11 +581,11 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           {/* Not dimmed while editing any more: the band is being *edited* then — its tiles are
               drag handles and take drops — and a dim over a drop target reads as "not here". Pads
               do not press in edit mode and tiles do not select; both say so by their cursors. */}
-          {shape === 'pads' && !docked ? (
+          {shape === 'pads' ? (
             // Off the desk board the fold is the 36px strip; on the short board its pieces lead the
-            // merged page row instead (`merged`). On the desk board Pads is the band itself, folded
-            // to its one row and the grip — so the row is the same row in every shape.
-            !merged && (
+            // merged page row instead (`merged`). On the desk board nothing is drawn here: the pad
+            // row below is the body's top row (D17).
+            !merged && !docked && (
               <RigStrip
                 selectedTargets={selectedTargets}
                 families={families}
@@ -581,6 +600,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
               families={families}
               onToggle={toggleTarget}
               onClear={clearSelection}
+              verbs={verbs}
               onSubselect={subselect}
               editing={editing}
               compact={!docked}

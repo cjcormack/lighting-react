@@ -1,5 +1,4 @@
 import { Link2, Unlink2 } from 'lucide-react'
-import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -11,35 +10,57 @@ import { cn } from '@/lib/utils'
  * desk's selection while holding a page of your own is the whole point of the pair existing.
  *
  * So the split is: this owns the shape — height, pill, the link / unlink glyph, the solid-following
- * and dashed-local treatments, the optional muted subject — and each chip owns its own flag, its
- * own label and its own click. The visual promise is then kept by the type system rather than by
- * two developers remembering to edit both files; the two flags stay as independent as they were.
+ * and dashed-local treatments, the optional muted subject and the optional *· from* suffix — and
+ * each chip owns its own flag, its own label and its own click. The visual promise is then kept by
+ * the type system rather than by two developers remembering to edit both files; the two flags stay
+ * as independent as they were.
  *
- * `subject` is a word like *Targets* or *Page*, drawn muted before the value. It is shown where the
- * pair is on screen together and omitted where a chip is alone (the programmer's row C), which is
- * both a legibility call and a width one — that row is a 40px chrome row budgeted to the pixel.
- * The space after it is a whitespace-only text node, which makes no flex item, so the gap still
- * governs the layout while the accessible name reads `Targets: Desk`.
+ * **A chip is drawn only while its window is unlinked** (busk-chrome plan D18) — *Desk* is the
+ * resting state and a pill saying so all night is noise — so what this draws today is the dashed
+ * form. The solid form and the suffix are kept on the primitive: a chip that comes back to say
+ * *Desk* would draw them, and the parts' folds below are written for both.
+ *
+ * `subject` is a word like *Targets* or *Page*, drawn muted before the value, where the pair is on
+ * screen together and omitted where a chip is alone (the programmer's row C). `from` is the mover's
+ * name, drawn muted after it. **Each part takes a class of its own** (D19): a chip gives up the
+ * suffix first, then its subject, then the value truncates — each at a rung the *host* measures
+ * for the row the chip sits on, which is why the classes come in rather than being chosen here.
+ * The width may hide a part; the accessible name may not change with it, so the button carries the
+ * whole reading as `aria-label` — `Targets: This window`, `Page: Desk · from Screen 2` — and a
+ * test or a screen reader gets the same name at every width. The pill's base is `shrink-0`; a host
+ * that wants the value to truncate hands `min-w-0 shrink`, both words, since `twMerge` keeps
+ * `shrink-0` beside a bare `min-w-0`.
  */
 export function FollowPill({
   following,
   subject,
+  subjectClass,
+  from,
+  fromClass,
+  label,
   title,
   onClick,
   className,
-  children,
 }: {
   following: boolean
   subject?: string
+  /** The subject's fold — the host's rung. Drawn always when absent. */
+  subjectClass?: string
+  from?: string
+  /** The suffix's fold — the host's rung, and the first part to go. Drawn always when absent. */
+  fromClass?: string
+  /** The value: *Desk* or *This window*. */
+  label: string
   title: string
   onClick: () => void
   className?: string
-  children: ReactNode
 }) {
+  const name = `${subject != null ? `${subject}: ` : ''}${label}${from != null ? ` · from ${from}` : ''}`
   return (
     <button
       type="button"
       aria-pressed={following}
+      aria-label={name}
       title={title}
       onClick={onClick}
       className={cn(
@@ -51,9 +72,17 @@ export function FollowPill({
       )}
     >
       {following ? <Link2 className="size-[11px]" /> : <Unlink2 className="size-[11px]" />}
-      {subject != null && <span className="text-muted-foreground">{subject}:</span>}
-      {subject != null && ' '}
-      {children}
+      {subject != null && (
+        <span data-pill-subject className={cn('text-muted-foreground', subjectClass)}>
+          {subject}:
+        </span>
+      )}
+      <span data-pill-label className="min-w-0 truncate">{label}</span>
+      {from != null && (
+        <span data-pill-from className={cn('min-w-0 truncate text-muted-foreground', fromClass)}>
+          · from {from}
+        </span>
+      )}
     </button>
   )
 }

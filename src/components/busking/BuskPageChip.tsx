@@ -1,59 +1,38 @@
-import {
-  relinkBuskPage,
-  unlinkBuskPage,
-  useBuskPageFollow,
-} from '@/lib/buskPageFollow'
-import { useBuskShowingPageQuery } from '@/store/busk'
+import { relinkBuskPage, useBuskPageFollow } from '@/lib/buskPageFollow'
 import { FollowPill } from '@/components/desk/FollowPill'
 
 /**
- * The **page chip** — whether this window's busk page is the desk's, and a click to flip it.
+ * The **page chip** — this window is on a busk page of its own, and a click follows the desk's
+ * page again.
  *
  * `DeskChip`'s sibling, and its twin in shape because both draw `FollowPill` — same height, same
- * pill, same link / unlink glyph, same solid-following / dashed-local treatment, so the pair reads
- * as one system and cannot drift by one file being edited and not the other. What they do **not**
- * share is state: each carries its own flag, because following the desk's *selection* while holding
- * a page of your own is the whole point (§The busk layout), so neither chip may drive the other.
+ * pill, same link / unlink glyph, same dashed-local treatment, so the pair reads as one system and
+ * cannot drift by one file being edited and not the other. What they do **not** share is state:
+ * each carries its own flag, because following the desk's *selection* while holding a page of your
+ * own is the whole point (§The busk layout), so neither chip may drive the other.
  *
- * **Both chips name their subject where the pair is on screen together**, and neither does where it
- * is alone. This one sits in the page strip, in a row whose other content is a list of page *names*
- * — nothing there says the word "page" — so it always says *Page:*; the band's `DeskChip` is given
- * `showSubject` to match. On the programmer's row C, which has no page chip and is a 40px chrome
- * row budgeted to the pixel, `DeskChip` stays bare.
+ * **Drawn only while the page is unlinked** (busk-chrome plan D18), like its sibling: *Desk* is the
+ * resting state, and a pill saying so on every page strip was noise. The ways *into* a page of
+ * your own are the ones that were never a press on this chip — arriving with `?page=`, a Screens
+ * row's page control or a `windows.viewOptions {page}`, and a tab click that never reached the
+ * desk (`BuskingView`'s `onPageSelect`) — and each lands on this chip, whose press is the way back.
  *
- * **Unlinking snapshots what this window is showing**, which is why it takes `activePageId` rather
- * than reading the desk's value: the desk's may be null while this window sits on its `?page=` or
- * on the first page, and "keep what I have" must keep that, not drop to the first page.
- *
- * There is no *from &lt;name&gt;* reading. The desk's showing page carries no mover — `busk.pageState`
- * is a bare page id — and inventing one would mean a second registry lookup for a fact the wire
- * does not have.
+ * It always says *Page:*: it sits on the pad row, whose other content is a list of page *names*,
+ * and nothing there says the word. `subjectClass` is the host's rung for that subject's fold
+ * (D19); the accessible name stays *Page: This window* whatever the width hides.
  */
-export function BuskPageChip({
-  activePageId,
-  className,
-}: {
-  activePageId: number | null
-  className?: string
-}) {
+export function BuskPageChip({ subjectClass, className }: { subjectClass?: string; className?: string }) {
   const following = useBuskPageFollow()
-  const { data: deskPageId } = useBuskShowingPageQuery()
-
-  const title = following
-    ? deskPageId == null
-      ? 'This window follows the desk’s page, and nothing has moved it yet — click to keep a page of your own in this window'
-      : 'This window follows the desk’s page — click to keep a page of your own in this window'
-    : 'This window is on a page of its own — click to follow the desk’s page again'
-
+  if (following) return null
   return (
     <FollowPill
-      following={following}
+      following={false}
       subject="Page"
-      title={title}
-      onClick={() => (following ? unlinkBuskPage(activePageId) : relinkBuskPage())}
+      subjectClass={subjectClass}
+      label="This window"
+      title="This window is on a page of its own — click to follow the desk’s page again"
+      onClick={relinkBuskPage}
       className={className}
-    >
-      {following ? 'Desk' : 'This window'}
-    </FollowPill>
+    />
   )
 }

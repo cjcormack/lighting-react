@@ -12,13 +12,13 @@ import { summariseSelection, type BuskingTarget } from './buskingTypes'
  * 32 until the Focus control joined it, whose 28px segments want the 4px inset every chrome row has.
  *
  * It keeps what a press needs to be honest about: the selection summary, the family pill and the
- * desk chip — and whatever the host hands in as [controls]: on the compact boards, the Focus
+ * desk chip (drawn only while this window is unlinked, busk-chrome plan D18 — following says
+ * nothing) — and whatever the host hands in as [controls]: on the compact boards, the Focus
  * control and the edit toggle, which on the desk board live on the rig band's one row. It
  * cannot select — that is the other screen's job, or a tap on the chevron to unfold Split. Built
- * here so the band and its strip are one file apart and share one summary; since 2026-09-21
- * `BuskingView` mounts it **only off the desk board** while `busk.focus` is `pads` — on the desk
- * board Pads is the band itself folded to its one row and the grip (`RigBand focus="pads"`), so
- * that row is the same row in every shape.
+ * here so the band and its strip are one file apart and share one summary; `BuskingView` mounts it
+ * **only off the desk board** while `busk.focus` is `pads` — on the desk board Pads draws no rig
+ * row at all, and the pad row is the body's top row (D17, `BuskPageStrip`).
  *
  * **On the short board the strip has no row of its own** (`Phones.dc.html`, landscape): the rig
  * strip and the page strip merge into one 32px row, so the pieces are [RigStripContent] and the
