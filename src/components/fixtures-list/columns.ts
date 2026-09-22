@@ -62,7 +62,7 @@ const COLUMN_LABEL_BY_KEY = new Map(COLUMN_DEFS.map((d) => [d.key, d.label]))
 
 /**
  * A column's display name — the header's, and the title a cell editor takes when it draws itself
- * as a bottom sheet (`CellEditorSurface`). One lookup, so the two cannot disagree.
+ * as a bottom sheet (`EditorSurface`). One lookup, so the two cannot disagree.
  */
 export function columnLabel(col: ColumnKey): string {
   return COLUMN_LABEL_BY_KEY.get(col) ?? col

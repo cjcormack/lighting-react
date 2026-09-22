@@ -2,9 +2,10 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type Re
 import { Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { CellEditorSurface, useCellEditorForm } from './CellEditorSurface'
-import { useCellEditorKeyboard } from './useCellEditorKeyboard'
-import { useCellEditorOpen } from './useCellEditorOpen'
+import { EditorSurface, useEditorForm } from '../../editor/EditorSurface'
+import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 import type { SheetCellProps } from '../sheetModel'
 
 export interface SheetOption {
@@ -32,11 +33,15 @@ const FILTER_FROM_OPTIONS = 3
  * plain `{value, label}` options: the filter matches on the label, ↑/↓ move the highlight, and
  * Enter takes the highlighted option — the top match by default. An Enter that matches nothing is
  * swallowed rather than closing.
+ *
+ * The label line above the list is the editor kit's (D8); there is no skip read-out here, because
+ * a kit sheet's cell that cannot take the value is blank and never in the selection. The popover
+ * is 256px (D17). `w-64`, measured in the app at 256px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
 export const OptionCell = memo(function OptionCell({
   value,
   label,
-  batchCount,
+  batchLabel,
   disabled,
   autoOpen,
   autoClose,
@@ -56,7 +61,7 @@ export const OptionCell = memo(function OptionCell({
     setQuery('')
     setHighlight(0)
   }, [])
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
@@ -65,7 +70,7 @@ export const OptionCell = memo(function OptionCell({
     selectionEmpty,
     onOpen: resetFilter,
   })
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     onDone: () => setOpen(false),
   })
   useEffect(() => {
@@ -73,7 +78,7 @@ export const OptionCell = memo(function OptionCell({
   }, [keyboardOpen])
   // Both sheets are reached by a finger, so each option is a touch target there and not in the
   // popover — the form is what answers "is this a finger", never a width variant.
-  const touchTarget = useCellEditorForm() !== 'popover'
+  const touchTarget = useEditorForm() !== 'popover'
 
   const showFilter = options.length >= FILTER_FROM_OPTIONS
   const matches = useMemo(() => {
@@ -122,11 +127,11 @@ export const OptionCell = memo(function OptionCell({
   const current = options.find((option) => option.value === value)
 
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
       title={label}
-      contentClassName="w-56 p-1"
+      contentClassName="w-64 p-1"
       onOpenAutoFocus={onOpenAutoFocus}
       triggerOpens={false}
       anchorRef={atButton ? editorAnchorRef : undefined}
@@ -154,9 +159,7 @@ export const OptionCell = memo(function OptionCell({
       }
     >
       <div ref={contentRef} onKeyDown={onKeyDown}>
-        {batchCount > 1 && (
-          <p className="px-2 py-1.5 text-xs text-muted-foreground">Applying to {batchCount} rows</p>
-        )}
+        <EditorLabelLine subject={batchLabel} column={label} className="px-2 pt-1 pb-1.5" />
         {showFilter && (
           <Input
             type="text"
@@ -174,7 +177,7 @@ export const OptionCell = memo(function OptionCell({
               setHighlight(0)
             }}
             onKeyDown={onFilterKeyDown}
-            className="mb-1 h-8 text-xs"
+            className="mb-1 h-7 text-xs"
           />
         )}
         <div id={listId} ref={listRef} role="listbox" className="max-h-64 overflow-y-auto">
@@ -211,6 +214,6 @@ export const OptionCell = memo(function OptionCell({
           })}
         </div>
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 })

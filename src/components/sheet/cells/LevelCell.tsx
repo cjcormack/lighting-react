@@ -1,10 +1,12 @@
-import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { memo, useCallback, type ReactNode } from 'react'
 import { Slider } from '@/components/ui/slider'
-import { Input } from '@/components/ui/input'
-import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
-import { CellEditorSurface } from './CellEditorSurface'
-import { numericSeed, useCellEditorKeyboard } from './useCellEditorKeyboard'
-import { useCellEditorOpen } from './useCellEditorOpen'
+import { EditorSurface } from '../../editor/EditorSurface'
+import { EditorField } from '../../editor/EditorField'
+import { EditorLabel } from '../../editor/EditorLabel'
+import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { EditorReadout } from '../../editor/EditorReadout'
+import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 import type { SheetCellProps } from '../sheetModel'
 
 export interface LevelCellProps extends SheetCellProps<number> {
@@ -22,11 +24,16 @@ export interface LevelCellProps extends SheetCellProps<number> {
  * takes a `CellResolution` for its range and a `CellValue` for its face, and this takes a number
  * and a face the column draws. Committing live is the ChannelSlider convention — the value drives
  * a channel the operator judges against the rig.
+ *
+ * **The field stays in bytes** (editor-kit plan D13): the DMX sheet reads *204*, so its editor
+ * types 204, where the programmer's dimmer cell reads *80%* and types 80. One anatomy, the host
+ * names the unit; the percent is this editor's read-out. The popover is 288px (D17): `w-72`,
+ * measured in the app at 288px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
 export const LevelCell = memo(function LevelCell({
   value,
   label,
-  batchCount,
+  batchLabel,
   disabled,
   autoOpen,
   autoClose,
@@ -40,39 +47,29 @@ export const LevelCell = memo(function LevelCell({
   min = 0,
   max = 255,
 }: LevelCellProps) {
+  // The field parses (`EditorField`); the clamp stays here.
   const commit = useCallback(
     (raw: number) => onCommit(Math.max(min, Math.min(max, Math.round(raw)))),
     [max, min, onCommit],
   )
-  // `useNumberFieldDraft` owns the "an emptied box must not commit" rule; the clamp stays here.
-  const draft = useNumberFieldDraft(String(value), commit)
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
     keyboardSeed,
     disabled,
     selectionEmpty,
-    onOpen: draft.reset,
   })
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     onDone: () => setOpen(false),
   })
-  // The character that opened this editor lands in the field as though it had been typed there —
-  // which means it commits, because every field here writes as it is typed.
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-  useEffect(() => {
-    const seed = numericSeed(keyboardOpen)
-    if (seed) draftRef.current.onChange(seed)
-  }, [keyboardOpen])
 
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
       title={label}
-      contentClassName="w-64"
+      contentClassName="w-72"
       onOpenAutoFocus={onOpenAutoFocus}
       triggerOpens={false}
       anchorRef={atButton ? editorAnchorRef : undefined}
@@ -87,37 +84,36 @@ export const LevelCell = memo(function LevelCell({
         </button>
       }
     >
-      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
-        {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} channels</p>
-        )}
-        <div className="flex items-center gap-3">
-          <Slider
-            min={min}
-            max={max}
-            step={1}
-            value={[value]}
-            onValueChange={([next]) => commit(next)}
-            className="flex-1"
-          />
-          <Input
-            type="number"
-            min={min}
-            max={max}
-            aria-label={label}
-            className="h-8 w-20 tabular-nums"
-            value={draft.value}
-            onChange={(e) => draft.onChange(e.target.value)}
-            onBlur={draft.onBlur}
-          />
+      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-2">
+        <EditorLabelLine subject={batchLabel} column={label} />
+        <div className="space-y-1">
+          <EditorLabel>{label}</EditorLabel>
+          <div className="flex items-center gap-2.5">
+            <Slider
+              min={min}
+              max={max}
+              step={1}
+              value={[value]}
+              onValueChange={([next]) => commit(next)}
+              className="flex-1"
+            />
+            <EditorField
+              label={label}
+              min={min}
+              max={max}
+              value={value}
+              onCommit={commit}
+              seed={numericSeed(keyboardOpen)}
+              className="w-[72px] shrink-0"
+            />
+          </div>
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <EditorReadout>
           <span>
-            {min} – {max}
+            {min}–{max} · {Math.round(((value - min) / Math.max(1, max - min)) * 100)}%
           </span>
-          <span>{Math.round(((value - min) / Math.max(1, max - min)) * 100)}%</span>
-        </div>
+        </EditorReadout>
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 })

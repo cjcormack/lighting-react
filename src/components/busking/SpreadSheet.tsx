@@ -4,15 +4,14 @@ import { toast } from 'sonner'
 import type { CueTarget } from '@/api/cuesApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ColourPickerBody } from '@/components/fixtures/ColourPickerBody'
 import { targetFamilies } from '@/components/fixtures-list/rowModel'
 import { hexToRgb } from '@/components/fx/colourUtils'
 import { isOfferableColourTemplate } from '@/components/fx/FxColourTemplates'
 import { RecordLookSheet } from '@/components/programmer/RecordLookSheet'
-import { useCellEditorCramped } from '@/components/sheet/cells/CellEditorSurface'
-import { useLivePush } from '@/hooks/useLivePush'
+import { useEditorCramped } from '@/components/editor/EditorSurface'
+import { useLivePush } from '@/components/editor/useLivePush'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss } from '@/lib/colourMath'
@@ -50,7 +49,8 @@ import {
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useTemplateListQuery } from '@/store/templates'
 import { templateSwatch } from './padFace'
-import { BuskLabel } from './BuskLabel'
+import { EditorField } from '../editor/EditorField'
+import { EditorLabel } from '../editor/EditorLabel'
 import { writeTargetsOf } from './ColourSheet'
 import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
@@ -211,7 +211,7 @@ export function isSpreadColourTemplate(template: TemplateSummary): boolean {
 }
 
 export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeedConsumed, compact }: SpreadSheetProps) {
-  const cramped = useCellEditorCramped()
+  const cramped = useEditorCramped()
   const isCompact = compact ?? cramped
   const selected = useMemo(() => [...selectedTargets.values()], [selectedTargets])
   const { fixtures } = useFixtureLookup()
@@ -528,7 +528,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
         )}
 
         <div>
-          <BuskLabel>Curve</BuskLabel>
+          <EditorLabel>Curve</EditorLabel>
           <ToggleGroup
             type="single"
             aria-label="Curve"
@@ -546,7 +546,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
         </div>
 
         <div>
-          <BuskLabel>Order</BuskLabel>
+          <EditorLabel>Order</EditorLabel>
           <ToggleGroup
             type="single"
             size="sm"
@@ -579,7 +579,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
 
         <div className="flex items-end gap-3">
           <div className="min-w-0 flex-1">
-            <BuskLabel>Parts</BuskLabel>
+            <EditorLabel>Parts</EditorLabel>
             <div className="mt-1 flex items-center gap-1">
               <ToggleGroup
                 type="single"
@@ -594,11 +594,11 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
-              <NumberField label="Parts, N" value={form.parts} min={1} onCommit={(n) => commit({ parts: Math.round(n) })} className="h-7 w-14 px-1.5 text-xs" />
+              <EditorField label="Parts, N" value={form.parts} min={1} onCommit={(n) => commit({ parts: Math.max(1, Math.round(n)) })} className="w-14" />
             </div>
           </div>
           <div>
-            <BuskLabel>Over</BuskLabel>
+            <EditorLabel>Over</EditorLabel>
             <ToggleGroup
               type="single"
               size="sm"
@@ -840,60 +840,6 @@ function NumericEndpoints({
   )
 }
 
-/**
- * A typed number that commits only when it is one. The field keeps its own text: `Number('')` is
- * 0 and a browser reports a lone `-` as `''`, so a controlled number over the endpoint's value
- * would write 0 to a live rig the moment the operator cleared the field to retype it, and would
- * overwrite a leading minus before the digit after it could be typed — on the one editor whose
- * range runs both ways. The text follows the value when the value moves from outside (Swap, a
- * seed), and is left alone while it is only unfinished.
- */
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  onCommit,
-  className,
-}: {
-  label: string
-  value: number
-  min?: number
-  max?: number
-  onCommit: (value: number) => void
-  className?: string
-}) {
-  const [text, setText] = useState(String(value))
-  const committedRef = useRef(value)
-  useEffect(() => {
-    if (value !== committedRef.current) {
-      committedRef.current = value
-      setText(String(value))
-    }
-  }, [value])
-  return (
-    <Input
-      type="number"
-      min={min}
-      max={max}
-      step={1}
-      aria-label={label}
-      value={text}
-      onChange={(e) => {
-        const raw = e.target.value
-        setText(raw)
-        if (raw.trim() === '') return
-        const parsed = Number(raw)
-        if (!Number.isFinite(parsed)) return
-        const clamped = Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min ?? Number.NEGATIVE_INFINITY, parsed))
-        committedRef.current = clamped
-        onCommit(clamped)
-      }}
-      className={className}
-    />
-  )
-}
-
 function NumericEndpoint({
   which,
   kind,
@@ -906,17 +852,16 @@ function NumericEndpoint({
   onChange: (endpoint: SpreadEndpoint) => void
 }) {
   const label = which === 'from' ? 'From' : 'To'
-  const field = 'h-7 px-1.5 text-xs tabular-nums'
   if (kind === 'position') {
     const pan = endpoint.kind === 'position' ? endpoint.panDeg : 0
     const tilt = endpoint.kind === 'position' ? endpoint.tiltDeg : 0
     return (
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <BuskLabel>{label}</BuskLabel>
+        <EditorLabel>{label}</EditorLabel>
         <div className="flex items-center gap-1">
-          <NumberField label={`${label} pan, degrees`} value={pan} onCommit={(next) => onChange({ kind: 'position', panDeg: next, tiltDeg: tilt })} className={field} />
+          <EditorField label={`${label} pan, degrees`} unit="°" value={pan} onCommit={(next) => onChange({ kind: 'position', panDeg: next, tiltDeg: tilt })} />
           <span className="text-[10px] text-muted-foreground">/</span>
-          <NumberField label={`${label} tilt, degrees`} value={tilt} onCommit={(next) => onChange({ kind: 'position', panDeg: pan, tiltDeg: next })} className={field} />
+          <EditorField label={`${label} tilt, degrees`} unit="°" value={tilt} onCommit={(next) => onChange({ kind: 'position', panDeg: pan, tiltDeg: next })} />
         </div>
       </div>
     )
@@ -925,17 +870,20 @@ function NumericEndpoint({
   const value = endpoint.kind === 'percent' || endpoint.kind === 'level' ? endpoint.value : 0
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <BuskLabel>{label}</BuskLabel>
+      <EditorLabel>{label}</EditorLabel>
       <div className="flex items-center gap-1">
-        <NumberField
+        {/* The clamp is the endpoint's own — `EditorField` parses and leaves the range to its caller. */}
+        <EditorField
           label={kind === 'percent' ? `${label}, percent` : `${label}, 0–255`}
+          unit={kind === 'percent' ? '%' : undefined}
           value={value}
           min={0}
           max={max}
-          onCommit={(next) => onChange(kind === 'percent' ? { kind: 'percent', value: next } : { kind: 'level', value: Math.round(next) })}
-          className={field}
+          onCommit={(raw) => {
+            const next = Math.min(max, Math.max(0, raw))
+            onChange(kind === 'percent' ? { kind: 'percent', value: next } : { kind: 'level', value: Math.round(next) })
+          }}
         />
-        {kind === 'percent' && <span className="text-[10px] text-muted-foreground">%</span>}
       </div>
     </div>
   )

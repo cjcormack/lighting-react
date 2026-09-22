@@ -184,7 +184,8 @@ function Harness({
         onToggleExpand={() => {}}
         onBeginCellEdit={onBeginCellEdit}
         onCellCommit={() => {}}
-        batchCountFor={() => 1}
+        batchFor={() => ({ count: 1, skipped: 0, resolutions: [] })}
+        scopeLabel="Local"
         onShowInfo={() => {}}
         showOwnership
         cellSelection={cellSelection}
@@ -259,7 +260,7 @@ function dragWithinFirstColumn(cell: Element) {
 
 /**
  * Which cell's editor is open. `data-state` is Radix's on a `PopoverTrigger` and restored by hand
- * on the anchor this grid uses instead (`CellEditorSurface`), precisely so this stays answerable
+ * on the anchor this grid uses instead (`EditorSurface`), precisely so this stays answerable
  * once the panel itself is anchored at the Set button rather than at the cell.
  */
 function openCellRowId(): string | null {
@@ -506,7 +507,7 @@ describe('FixturesTable cell gesture', () => {
   })
 
   it('a double click on a cell opens that cell\'s editor', () => {
-    // The pointer's own way of saying Set. It never reaches the container — `CellEditorSurface`
+    // The pointer's own way of saying Set. It never reaches the container — `EditorSurface`
     // answers it — so the proof is that the cell the gesture landed on is the one marked open,
     // while the clicks that carried it still selected it.
     stubFlatLayout()
@@ -906,7 +907,8 @@ describe('FixturesTable neutral selection', () => {
         onToggleExpand={() => {}}
         onBeginCellEdit={onBeginCellEdit}
         onCellCommit={() => {}}
-        batchCountFor={() => 1}
+        batchFor={() => ({ count: 1, skipped: 0, resolutions: [] })}
+        scopeLabel="Local"
         onShowInfo={() => {}}
         showOwnership
         cellSelection={cellSelection}

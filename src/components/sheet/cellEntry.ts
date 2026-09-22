@@ -106,7 +106,7 @@ export interface CellActionCopy {
 /**
  * Which cell's editor is open, by the grid's own addressing contract.
  *
- * `data-state` is Radix's word, restored by hand on the cell's anchor (`CellEditorSurface`) because
+ * `data-state` is Radix's word, restored by hand on the cell's anchor (`EditorSurface`) because
  * an anchor does not carry one — and `[data-cell]` is what scopes the question to a *cell* editor,
  * so `FanPopover`'s panel, mounted from the toolbar and a cell editor in every other way, does not
  * answer it. Read with `data-row-id`, the same pair `marqueeOwnsKeyTarget` below walks.
@@ -115,7 +115,7 @@ export interface CellActionCopy {
  * that button is not the outside click that dismisses a popover — the button is that popover's own
  * anchor — so without an answer here the second press had nothing to do and the panel stayed open
  * with focus stranded on the button. The DOM rather than lifted state, for the reason
- * `cellEditorIsOpen` gives: this is one bit, and the state lives per cell, hundreds of instances
+ * `editorIsOpen` gives: this is one bit, and the state lives per cell, hundreds of instances
  * down.
  */
 export function openCellEditorTarget<C extends string = string>(): CellRef<C> | null {

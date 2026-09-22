@@ -70,7 +70,7 @@ describe('CellSelectionActions', () => {
 
   it('hands the Set button up as a ref — it is where the editor it opens is anchored', () => {
     // The panel opens at this button rather than at the cell, so the ref is not decoration: without
-    // it `CellEditorSurface` falls back to the cell anchor and the editor lands wherever in the grid
+    // it `EditorSurface` falls back to the cell anchor and the editor lands wherever in the grid
     // the first selected cell happens to be.
     const ref = { current: null as HTMLButtonElement | null }
     render(

@@ -81,25 +81,11 @@ export function rigEuler(
   return target
 }
 
-// Convert a raw DMX slider value into degrees using the descriptor's
-// degMin/degMax mapping. Returns null when the descriptor lacks both bounds
-// (we never invent ranges — the 3D view treats the head as static instead).
-//
-// The result is a position along the axis's *travel range* (a mover declares
-// pan 0–540, tilt 0–210), not a signed angle. Callers aiming a head want
-// `dmxToSignedDegrees`. Also reused verbatim for ZOOM sliders, where degMin /
-// degMax mean "full beam angle at DMX min / max".
-export function dmxToDegrees(
-  dmx: number,
-  slider: SliderPropertyDescriptor,
-): number | null {
-  if (slider.degMin == null || slider.degMax == null) return null
-  const span = slider.max - slider.min
-  if (span <= 0) return null
-  const t = Math.max(0, Math.min(1, (dmx - slider.min) / span))
-  const tt = slider.inverted ? 1 - t : t
-  return slider.degMin + tt * (slider.degMax - slider.degMin)
-}
+// `dmxToDegrees` lives in `lib/axisDegrees.ts` beside its inverse, so the position editor and
+// this view read one mapping; re-exported here for the 3D callers that always imported it from
+// this module.
+import { dmxToDegrees } from './axisDegrees'
+export { dmxToDegrees }
 
 // Mechanical centre of a pan/tilt axis, in travel degrees. Because degMin/degMax
 // describe travel rather than a signed angle, the DMX-centre position is the

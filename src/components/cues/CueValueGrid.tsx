@@ -210,14 +210,13 @@ function ReadOnlyCell({ cell, label, value }: { cell: RowCell; label: string; va
   const shared = {
     resolutions: cell.resolutions,
     label,
-    batchCount: 1,
     onCommit: () => {},
     onBeginEdit: () => {},
   }
   return (
     <div className="pointer-events-none h-full">
       {value.kind === 'slider' && <SliderCell {...shared} value={value} />}
-      {value.kind === 'colour' && <ColourCell {...shared} value={value} />}
+      {value.kind === 'colour' && <ColourCell {...shared} batchCount={1} value={value} />}
       {value.kind === 'position' && <PositionCell {...shared} value={value} />}
       {value.kind === 'setting' && <SettingCell {...shared} value={value} />}
     </div>

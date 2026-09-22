@@ -3,19 +3,25 @@ import { Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { CellResolution } from '../columns'
-import type { CellCommit } from '../rowModel'
+import type { CellBatch, CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { CellEditorSurface, useCellEditorForm, type CellClickBehaviour } from '../../sheet/cells/CellEditorSurface'
-import { UNSET_CELL_TITLE, UnsetCellMark } from '../../sheet/cells/UnsetCellMark'
-import { useCellEditorKeyboard } from '../../sheet/cells/useCellEditorKeyboard'
-import { useCellEditorOpen } from '../../sheet/cells/useCellEditorOpen'
+import { EditorSurface, useEditorForm, type CellClickBehaviour } from '../../editor/EditorSurface'
+import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { EditorReadout } from '../../editor/EditorReadout'
+import { headsLine, skippedLine } from '../../editor/editorCopy'
+import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
+import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 
 interface SettingCellOwnProps {
   value: Extract<CellValue, { kind: 'setting' }>
   resolutions: NonNullable<CellResolution>[]
   /** The column's name, titling the editor where it is a bottom sheet. See `SliderCell`. */
   label?: string
-  batchCount: number
+  /** What a commit lands on — see `SliderCell` and `CellBatch`. */
+  batch?: CellBatch
+  /** *Local*, or the focused Look's name — the label line's scope. */
+  scopeLabel?: string
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
   /**
@@ -26,22 +32,22 @@ interface SettingCellOwnProps {
   disabled?: boolean
   /**
    * A released single-column marquee named this cell: open the editor without a click.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   autoOpen?: boolean
-  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  /** The container asked this editor to close — Set pressed again. See `useEditorOpen`. */
   autoClose?: boolean
-  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  /** That open came from the bar's Set, so the editor is anchored there. See `useEditorOpen`. */
   anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which here is the first character of
    * the type-ahead. Focus is not its business — the filter is focused however the editor was
-   * opened. See `useCellEditorKeyboard`.
+   * opened. See `useEditorKeyboard`.
    */
   keyboardSeed?: string | null
   /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
@@ -60,16 +66,22 @@ const FILTER_FROM_OPTIONS = 3
 /**
  * Current option name (with colour chip when the option carries a preview —
  * colour wheels, some gobo wheels); edit via an option list in the shared
- * cell-editor surface. Option
+ * editor surface. Option
  * levels come from the *first* backing property — heterogeneous groups whose
  * members map options to different levels get the first member's mapping,
  * which is the same compromise the group setting hook makes.
+ *
+ * Unchanged by the editor kit but for the label line above the list and the skip read-out under
+ * it (editor-kit plan D8): a marquee over a par and a spot sweeps the par's empty Gobo cell, and
+ * *2 heads have no gobo · skipped* is where that is said. The popover is 256px (D17): `w-64`,
+ * measured in the app at 256px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
 export const SettingCell = memo(function SettingCell({
   value,
   resolutions,
   label = 'Setting',
-  batchCount,
+  batch,
+  scopeLabel = 'Local',
   placeholder,
   disabled = false,
   autoOpen,
@@ -93,7 +105,7 @@ export const SettingCell = memo(function SettingCell({
     setQuery('')
     setHighlight(0)
   }, [])
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
@@ -102,7 +114,7 @@ export const SettingCell = memo(function SettingCell({
     selectionEmpty,
     onOpen: resetFilter,
   })
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     onDone: () => setOpen(false),
   })
   // The character that opened the editor is the first character of the search — any character,
@@ -115,10 +127,10 @@ export const SettingCell = memo(function SettingCell({
   //
   // **Not a `sm:` variant**, which was the first attempt and was wrong in exactly the case it was
   // written for: `sm:` is `min-width: 640px`, and the side sheet is chosen by *height*. A landscape
-  // phone — 852x393, the reference case in `CellEditorSurface`'s own doc — is over 640px wide, so
+  // phone — 852x393, the reference case in `EditorSurface`'s own doc — is over 640px wide, so
   // the width variant fired and shrank the rows back on the touch surface that most needed them.
   // Width cannot answer "is this a finger" on this desk; the form can.
-  const touchTarget = useCellEditorForm() !== 'popover'
+  const touchTarget = useEditorForm() !== 'popover'
   const first = resolutions[0]
   // Memoised for its `[]` arm alone, which would otherwise hand `matches` below a fresh identity
   // every render — the `?? []` trap CLAUDE.md names. `first.property.options` is already stable.
@@ -146,7 +158,7 @@ export const SettingCell = memo(function SettingCell({
   )
 
   /**
-   * The type-ahead's own keys, which is why they are not `useCellEditorKeyboard`'s: Enter here
+   * The type-ahead's own keys, which is why they are not `useEditorKeyboard`'s: Enter here
    * means "take the highlighted option" rather than "that's the value", and the arrows move the
    * highlight rather than the caret. `preventDefault` is how the wrapper below is told to stand
    * aside — it steps back from any key a field has already answered.
@@ -183,12 +195,15 @@ export const SettingCell = memo(function SettingCell({
     listRef.current?.querySelector('[data-highlighted="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [active])
 
+  const heads = batch ?? { count: 1, skipped: 0, resolutions }
+  const skipped = skippedLine(heads.skipped, label.toLowerCase())
+
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
       title={label}
-      contentClassName="w-56 p-1"
+      contentClassName="w-64 p-1"
       onOpenAutoFocus={onOpenAutoFocus}
       triggerOpens={!clickSelects}
       // Only where the press was made — the bar's Set. Enter and a typed character are gestures
@@ -227,13 +242,9 @@ export const SettingCell = memo(function SettingCell({
       }
     >
       {/* The wrapper carries Enter and comma for every other editor; here the filter answers both
-          keys itself and this only catches what it leaves. See `useCellEditorKeyboard`. */}
+          keys itself and this only catches what it leaves. See `useEditorKeyboard`. */}
       <div ref={contentRef} onKeyDown={onKeyDown}>
-        {batchCount > 1 && (
-          <p className="px-2 py-1.5 text-xs text-muted-foreground">
-            Applying to {batchCount} targets
-          </p>
-        )}
+        <EditorLabelLine subject={headsLine(heads.count, scopeLabel)} column={label} className="px-2 pt-1 pb-1.5" />
         {showFilter && (
           <Input
             type="text"
@@ -252,7 +263,7 @@ export const SettingCell = memo(function SettingCell({
               setHighlight(0)
             }}
             onKeyDown={onFilterKeyDown}
-            className="mb-1 h-8 text-xs"
+            className="mb-1 h-7 text-xs"
           />
         )}
         <div id={listId} ref={listRef} role="listbox" className="max-h-64 overflow-y-auto">
@@ -294,7 +305,12 @@ export const SettingCell = memo(function SettingCell({
             )
           })}
         </div>
+        {skipped && (
+          <EditorReadout className="px-2 pt-1.5 pb-1">
+            <span>{skipped}</span>
+          </EditorReadout>
+        )}
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 })

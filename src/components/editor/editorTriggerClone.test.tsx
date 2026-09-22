@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { CellEditorSurface, resetCellEditorSurfaceMedia } from './CellEditorSurface'
+import { EditorSurface, resetEditorSurfaceMedia } from './EditorSurface'
 
 /**
  * **A file of its own, and that is the point.** React warns about an unknown DOM prop once per
@@ -17,7 +17,7 @@ import { CellEditorSurface, resetCellEditorSurfaceMedia } from './CellEditorSurf
  */
 
 afterEach(() => {
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
   vi.unstubAllGlobals()
 })
 
@@ -29,7 +29,7 @@ function Harness() {
       <button type="button" ref={anchorRef} onClick={() => setOpen(true)}>
         Set
       </button>
-      <CellEditorSurface
+      <EditorSurface
         open={open}
         onOpenChange={setOpen}
         title="Dimmer"
@@ -39,7 +39,7 @@ function Harness() {
         trigger={<button type="button">cell</button>}
       >
         <p>editor body</p>
-      </CellEditorSurface>
+      </EditorSurface>
     </>
   )
 }

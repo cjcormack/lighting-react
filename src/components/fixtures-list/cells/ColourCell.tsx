@@ -3,9 +3,9 @@ import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
 import type { CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { useCellEditorCramped, type CellClickBehaviour } from '../../sheet/cells/CellEditorSurface'
-import { UNSET_CELL_TITLE, UnsetCellMark } from '../../sheet/cells/UnsetCellMark'
-import { useCellEditorOpen } from '../../sheet/cells/useCellEditorOpen'
+import { useEditorCramped, type CellClickBehaviour } from '../../editor/EditorSurface'
+import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 
 interface ColourCellOwnProps {
   value: Extract<CellValue, { kind: 'colour' }>
@@ -23,22 +23,22 @@ interface ColourCellOwnProps {
   disabled?: boolean
   /**
    * A released single-column marquee named this cell: open the editor without a click.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   autoOpen?: boolean
-  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  /** The container asked this editor to close — Set pressed again. See `useEditorOpen`. */
   autoClose?: boolean
-  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  /** That open came from the bar's Set, so the editor is anchored there. See `useEditorOpen`. */
   anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which lands in the R box as its first
    * keystroke. Focus is not its business — R is focused however the editor was opened. See
-   * `useCellEditorKeyboard`.
+   * `useEditorKeyboard`.
    */
   keyboardSeed?: string | null
   /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
@@ -73,7 +73,7 @@ export const ColourCell = memo(function ColourCell({
   // Driven from here so the container's request (Enter over a selection, or the bar's Set) can
   // open it: the picker keeps its own state when no `open` is passed, and the other two call
   // sites still leave it to.
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
@@ -86,8 +86,8 @@ export const ColourCell = memo(function ColourCell({
   // short desktop window is still a popover, and there the full layout clips off the top of the
   // screen with nothing said. Asked here rather than inside the picker, because the picker has two
   // other callers that are not cell editors at all. It reads the same shared store
-  // `CellEditorSurface` uses, so this is a Set entry and not a second `matchMedia`.
-  const compact = useCellEditorCramped()
+  // `EditorSurface` uses, so this is a Set entry and not a second `matchMedia`.
+  const compact = useEditorCramped()
   // A member "has" an extended channel when any backing colour property does —
   // the picker then offers the slider, and members without the channel skip it
   // at write time.
@@ -119,7 +119,7 @@ export const ColourCell = memo(function ColourCell({
       title={label}
       compact={compact}
       // R is focused on open and Enter closes; a character typed at the grid arrives there as its
-      // first keystroke, which is all this carries. See `useCellEditorKeyboard`.
+      // first keystroke, which is all this carries. See `useEditorKeyboard`.
       keyboardOpen={keyboardOpen}
       // This cell's button already carried the click, so unlike the other three there is nothing
       // to add here beyond telling the surface to stop opening on it. See `CellClickBehaviour`.

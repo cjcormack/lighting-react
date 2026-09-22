@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import type { BuskingTarget } from './buskingTypes'
 import type { Fixture } from '@/store/fixtures'
 import { resetLiveAppearance } from '@/lib/liveAppearance'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 /**
  * The Colour tab (busk-further plan D8): literals to Local per selected target — a group as a
@@ -158,7 +158,7 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
   resetLiveAppearance()
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 
 describe('writes', () => {

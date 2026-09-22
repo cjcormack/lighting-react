@@ -22,6 +22,12 @@ export interface SheetCellProps<V> {
   label: string
   /** How many rows a commit from this cell lands on — the marquee's rows, or this row alone. */
   batchCount: number
+  /**
+   * The batch in the sheet's own noun — *4 cues*, *8 channels*, *1 fixture* — for the popover's
+   * label line (editor-kit plan D8). The noun is the sheet's (`SheetTableProps.batchNoun`), so a
+   * kit cell never has to know which sheet it is on.
+   */
+  batchLabel: string
   /** The rows that commit lands on, in visible order — for an editor that previews its landing. */
   batchRows: () => readonly SheetRow[]
   /** The surface has made this cell inert: a locked show, an offline desk. */
@@ -38,6 +44,11 @@ export interface SheetCellProps<V> {
 }
 
 const NO_ROWS: readonly SheetRow[] = []
+
+/** *4 cues*, *1 fixture*: the count in the sheet's noun, pluralised by an `s`. */
+export function batchLabelOf(count: number, noun: string): string {
+  return `${count} ${count === 1 ? noun : `${noun}s`}`
+}
 const noop = () => {}
 
 /**
@@ -55,11 +66,14 @@ const noop = () => {}
 export function firstColumnCellProps<V>({
   value,
   label,
+  noun = 'row',
   disabled = false,
   onCommit,
 }: {
   value: V
   label: string
+  /** The sheet's noun for its rows — see `SheetCellProps.batchLabel`. */
+  noun?: string
   disabled?: boolean
   onCommit: (value: V) => void
 }): SheetCellProps<V> {
@@ -67,6 +81,7 @@ export function firstColumnCellProps<V>({
     value,
     label,
     batchCount: 1,
+    batchLabel: batchLabelOf(1, noun),
     batchRows: () => NO_ROWS,
     disabled,
     autoOpen: false,

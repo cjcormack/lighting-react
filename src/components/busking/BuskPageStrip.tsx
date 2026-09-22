@@ -27,7 +27,7 @@ import { allBanks, buskPageTabId, parseBuskDragId } from '@/lib/buskLayout'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { Badge } from '@/components/ui/badge'
 import { DeskChip } from '@/components/desk/DeskChip'
-import { BuskLabel } from './BuskLabel'
+import { EditorLabel } from '../editor/EditorLabel'
 import { BuskPageChip } from './BuskPageChip'
 import { BlindPill } from './BlindMarks'
 import { summariseSelection, type BuskingTarget } from './buskingTypes'
@@ -345,7 +345,7 @@ export function BuskPageStrip({
     const bankCount = active == null ? 0 : allBanks(active).length
     return (
       <div data-busk-page-strip="folded" className="flex h-10 shrink-0 items-center gap-2.5 border-t px-4">
-        <BuskLabel className="shrink-0 whitespace-nowrap">Pages</BuskLabel>
+        <EditorLabel className="shrink-0 whitespace-nowrap">Pages</EditorLabel>
         <span className="min-w-0 truncate text-[13px] font-semibold">{active?.name ?? '—'}</span>
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {active == null ? '' : bankCount === 0 ? 'No banks' : `${bankCount} ${bankCount === 1 ? 'bank' : 'banks'}`}
@@ -525,7 +525,7 @@ export function BuskPageStrip({
               pads != null ? PAD_FIRST_ROW_CLASS : 'max-w-full flex-wrap',
             )}
           >
-            {pads != null && <BuskLabel className={PAD_LABEL_CLASS}>Pads</BuskLabel>}
+            {pads != null && <EditorLabel className={PAD_LABEL_CLASS}>Pads</EditorLabel>}
             {tabs}
             {nameField}
             {pads != null && !editing && <SelectionVerbButtons verbs={pads.verbs} wordClass={PAD_VERB_WORD_CLASS} />}

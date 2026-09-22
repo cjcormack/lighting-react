@@ -121,7 +121,7 @@ describe('HandChip', () => {
 
   it('leaves Escape alone while a cell editor is open — the key is the editor’s', async () => {
     const editor = document.createElement('div')
-    // The attribute `cellEditorIsOpen` looks for — spelled out here exactly as
+    // The attribute `editorIsOpen` looks for — spelled out here exactly as
     // `useEscapeEditorSnapshot.test.tsx` spells it, because it is a DOM contract rather than an
     // export, and a test that imported a constant could not catch the two drifting apart.
     editor.setAttribute('data-cell-editor-surface', 'popover')

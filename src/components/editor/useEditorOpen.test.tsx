@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderHook, act } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { useCellEditorOpen } from './useCellEditorOpen'
+import { useEditorOpen } from './useEditorOpen'
 
 /**
  * The two rules that open and close a cell editor without anybody clicking it — `PD-POPUP-AFTER-
@@ -9,9 +9,9 @@ import { useCellEditorOpen } from './useCellEditorOpen'
  * than four. That the first opens a real editor is asserted through a real cell in
  * `FixturesTable.test.tsx`.
  */
-describe('useCellEditorOpen', () => {
+describe('useEditorOpen', () => {
   it('opens when the signal arrives', () => {
-    const { result, rerender } = renderHook(({ autoOpen }) => useCellEditorOpen({ autoOpen }), {
+    const { result, rerender } = renderHook(({ autoOpen }) => useEditorOpen({ autoOpen }), {
       initialProps: { autoOpen: false },
     })
     expect(result.current.isOpen).toBe(false)
@@ -22,7 +22,7 @@ describe('useCellEditorOpen', () => {
   it('does not reopen when the operator has closed it', () => {
     // `FixturesTable` drops the signal as soon as it is delivered, so `autoOpen` goes false on its
     // own — but a re-render of the row while it is still true must not fight the operator either.
-    const { result, rerender } = renderHook(({ autoOpen }) => useCellEditorOpen({ autoOpen }), {
+    const { result, rerender } = renderHook(({ autoOpen }) => useEditorOpen({ autoOpen }), {
       initialProps: { autoOpen: true },
     })
     expect(result.current.isOpen).toBe(true)
@@ -37,7 +37,7 @@ describe('useCellEditorOpen', () => {
     // render instead of latched, the popover would re-anchor from the Set button to the cell a
     // frame after opening — the panel visibly jumping across the screen.
     const { result, rerender } = renderHook(
-      ({ autoOpen, anchorAtButton }) => useCellEditorOpen({ autoOpen, anchorAtButton }),
+      ({ autoOpen, anchorAtButton }) => useEditorOpen({ autoOpen, anchorAtButton }),
       { initialProps: { autoOpen: false, anchorAtButton: true } },
     )
     rerender({ autoOpen: true, anchorAtButton: true })
@@ -54,7 +54,7 @@ describe('useCellEditorOpen', () => {
   it('leaves the editor at its cell for a keyboard open', () => {
     // Enter and a typed character are made at the selection, so the panel opens beside the cell.
     const { result, rerender } = renderHook(
-      ({ autoOpen }) => useCellEditorOpen({ autoOpen, keyboardSeed: '' }),
+      ({ autoOpen }) => useEditorOpen({ autoOpen, keyboardSeed: '' }),
       { initialProps: { autoOpen: false } },
     )
     rerender({ autoOpen: true })
@@ -63,10 +63,10 @@ describe('useCellEditorOpen', () => {
   })
 
   it('leaves the editor at its cell, unseeded, for a bare open — the double click\'s call', () => {
-    // `CellEditorSurface` opens a double click straight through `onOpenChange`, which is this
+    // `EditorSurface` opens a double click straight through `onOpenChange`, which is this
     // `setOpen` with neither extra argument. That has to land in the click path: beside the cell
     // (the Set button's anchor is Set's alone) and with no typed character to seed a field with.
-    const { result } = renderHook(() => useCellEditorOpen({}))
+    const { result } = renderHook(() => useEditorOpen({}))
     act(() => result.current.setOpen(true))
 
     expect(result.current.isOpen).toBe(true)
@@ -79,7 +79,7 @@ describe('useCellEditorOpen', () => {
     // anchor, so a press on it is not the outside click that dismisses one. Verified on the desk —
     // pressing Set twice used to leave the panel open with focus stranded on the button.
     const { result, rerender } = renderHook(
-      ({ autoOpen, autoClose }) => useCellEditorOpen({ autoOpen, autoClose }),
+      ({ autoOpen, autoClose }) => useEditorOpen({ autoOpen, autoClose }),
       { initialProps: { autoOpen: false, autoClose: false } },
     )
     rerender({ autoOpen: true, autoClose: false })
@@ -97,7 +97,7 @@ describe('useCellEditorOpen', () => {
 
   it('ignores the signal on a cell that cannot be edited', () => {
     // Output scope, a focused template layer, an unreachable desk.
-    const { result } = renderHook(() => useCellEditorOpen({ autoOpen: true, disabled: true }))
+    const { result } = renderHook(() => useEditorOpen({ autoOpen: true, disabled: true }))
     expect(result.current.isOpen).toBe(false)
   })
 
@@ -105,7 +105,7 @@ describe('useCellEditorOpen', () => {
     // `disabled` is read at the instant the signal flips and never again. A scope switched to
     // Local minutes after a drag must not act on that drag.
     const { result, rerender } = renderHook(
-      ({ disabled }) => useCellEditorOpen({ autoOpen: true, disabled }),
+      ({ disabled }) => useEditorOpen({ autoOpen: true, disabled }),
       { initialProps: { disabled: true } },
     )
     rerender({ disabled: false })
@@ -118,7 +118,7 @@ describe('useCellEditorOpen', () => {
     // text typed for the previous value.
     const onOpen = vi.fn()
     const { result, rerender } = renderHook(
-      ({ autoOpen }) => useCellEditorOpen({ autoOpen, onOpen }),
+      ({ autoOpen }) => useEditorOpen({ autoOpen, onOpen }),
       { initialProps: { autoOpen: false } },
     )
     rerender({ autoOpen: true })
@@ -132,7 +132,7 @@ describe('useCellEditorOpen', () => {
 
   it('closes when the selection it was opened for goes away', () => {
     const { result, rerender } = renderHook(
-      ({ selectionEmpty }) => useCellEditorOpen({ selectionEmpty }),
+      ({ selectionEmpty }) => useEditorOpen({ selectionEmpty }),
       { initialProps: { selectionEmpty: false } },
     )
     act(() => result.current.setOpen(true))
@@ -148,7 +148,7 @@ describe('useCellEditorOpen', () => {
     // *state* would land in the effect right after the click that opened it, so the editor would
     // flicker rather than fail in a way anyone could report.
     const { result, rerender } = renderHook(
-      ({ selectionEmpty }) => useCellEditorOpen({ selectionEmpty }),
+      ({ selectionEmpty }) => useEditorOpen({ selectionEmpty }),
       { initialProps: { selectionEmpty: true } },
     )
     act(() => result.current.setOpen(true))
@@ -159,7 +159,7 @@ describe('useCellEditorOpen', () => {
   it('leaves an editor alone where there is no selection to speak of', () => {
     // `CueValueGrid` mounts these cells with no selection above them, so the prop is undefined —
     // which is not the same as "empty" and must never close anything.
-    const { result, rerender } = renderHook(() => useCellEditorOpen({}))
+    const { result, rerender } = renderHook(() => useEditorOpen({}))
     act(() => result.current.setOpen(true))
     rerender()
     expect(result.current.isOpen).toBe(true)
@@ -168,7 +168,7 @@ describe('useCellEditorOpen', () => {
   it('keeps `setOpen` stable across a changing `onOpen`', () => {
     // The cells pass a fresh inline arrow every render of their row, and a rig re-renders these
     // constantly; `setOpen` is a popover's `onOpenChange` and should not churn with it.
-    const { result, rerender } = renderHook(() => useCellEditorOpen({ onOpen: () => {} }))
+    const { result, rerender } = renderHook(() => useEditorOpen({ onOpen: () => {} }))
     const first = result.current.setOpen
     rerender()
     expect(result.current.setOpen).toBe(first)

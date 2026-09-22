@@ -6,6 +6,7 @@ import { useCellSelection, type CellSelection } from './useCellSelection'
 import { useCellEditorRequests } from './useCellEditorRequests'
 import { useLocalListSelection } from './useLocalListSelection'
 import { useSheetKeyboard, type SheetKeyRefusal } from './useSheetKeyboard'
+import { useLivePush } from '../editor/useLivePush'
 import {
   commitToSelectedCells,
   firstEditableCell,
@@ -16,8 +17,37 @@ import {
 import type { FanPlan } from './FanPopover'
 import type { SheetTableProps } from './SheetTable'
 
-/** How often a live editor's continuous commits reach the wire — ~30 Hz, trailing call. */
-const COMMIT_INTERVAL_MS = 33
+/**
+ * How often a live editor's continuous commits reach the wire — ~30 Hz, trailing call.
+ *
+ * The floor `useLivePush` is given (editor-kit plan D16): the busk tabs' hook and this sheet's
+ * throttle were two copies of one rule — a floor, a dedupe, a release that always lands — so the
+ * sheet takes the hook and hands it the number it always used, and its cadence does not move.
+ * Kept at 33 by argument rather than because 50 was tried; if a slider drag reads coarser, this is
+ * the one number to move.
+ */
+export const COMMIT_INTERVAL_MS = 33
+
+/** One cell's commit in flight — the row and column it names, and the value the editor gave. */
+interface PendingCommit<Row extends SheetRow, C extends string> {
+  row: Row
+  col: C
+  value: unknown
+}
+
+/**
+ * `useLivePush`'s equality, answered **never equal** on purpose: the sheet does not dedupe.
+ *
+ * The hook dedupes a gesture's own moves against the value it last sent, and its `reset()` is how
+ * a caller says a fresh gesture has begun. A sheet cannot say that: its value moves by routes the
+ * hook never sees — ⌫ clears through `column.clear`, Fan and Park write through the surface, a
+ * WebSocket frame or another tab moves the channel — so a value set, cleared and typed again would
+ * read as "the value last sent" and never reach the rig while the field showed it (editor-kit
+ * session 1 review, finding 2). The old throttle sent every commit; so does this one.
+ */
+function neverEqual(): boolean {
+  return false
+}
 
 export interface UseSheetOptions<Row extends SheetRow, C extends string> {
   rows: readonly Row[]
@@ -42,6 +72,11 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * keys (`CellSelectionActions`, `FanPopover`).
    */
   onRefused?: (refusal: SheetKeyRefusal) => boolean | void
+  /**
+   * What a row is called on this sheet — `cue`, `fixture`, `channel` — for the editors' label
+   * line (`SheetCellProps.batchLabel`). Defaults to `row`.
+   */
+  noun?: string
 }
 
 /**
@@ -62,6 +97,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
   copy,
   cellDisabled,
   onRefused,
+  noun = 'row',
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -161,45 +197,49 @@ export function useSheet<Row extends SheetRow, C extends string>({
     [cellSelection, columnByKey, commitToCells, rowSelection, selectedRows],
   )
   // Continuous drag commits are throttled to ~30 Hz with a trailing call — a level slider fans out
-  // to one frame per selected channel. A commit for a different cell flushes the pending one first.
-  const commitNowRef = useRef(commitNow)
-  commitNowRef.current = commitNow
-  const pendingRef = useRef<{ row: Row; col: C; value: unknown } | null>(null)
-  const timerRef = useRef<number | null>(null)
-  const flush = useCallback(function flush() {
-    const pending = pendingRef.current
-    pendingRef.current = null
-    if (pending) {
-      commitNowRef.current(pending.row, pending.col, pending.value)
-      timerRef.current = window.setTimeout(flush, COMMIT_INTERVAL_MS)
-    } else {
-      timerRef.current = null
-    }
-  }, [])
+  // to one frame per selected channel — through `useLivePush`, the busk tabs' discipline (D16):
+  // the first commit goes at once, a second inside the floor is held and sent when the floor
+  // lifts. The hook's dedupe is switched off (`neverEqual`, above). `send` reads `commitNow`
+  // through the hook's own ref, and `push` / `flush` are stable for the component's life, which is
+  // what keeps `onCellCommit`'s identity stable for `SheetRowView`'s memo — the hook's *object* is
+  // fresh per render, so it is the two functions that are depended on, never `live` itself.
+  //
+  // Two things the hook has no notion of are kept here. **A commit for a different cell lands the
+  // pending one first**, at once: two cells' values are two writes, and holding the first behind
+  // the second would drop it. And **an unmount lands whatever is pending**: the hook clears its
+  // timer on unmount and lets the deferred value go, which is right for a fader whose control has
+  // gone but not for a sheet whose last slider frame would otherwise never reach the rig. Both go
+  // through `flush`, which bypasses the floor.
+  //
+  // `lastPushedRef` holds the commit **still waiting** in the hook, and only that: `send` clears
+  // it the moment the hook sends it (the hook sends the very object `push` was given, so identity
+  // is the test). With the dedupe off, a flush of a commit the hook had already sent would send it
+  // twice — an address batch re-keyed on unmount, which is how this was found.
+  const lastPushedRef = useRef<PendingCommit<Row, C> | null>(null)
+  const { push: livePush, flush: liveFlush } = useLivePush<PendingCommit<Row, C>>(
+    (pending) => {
+      if (lastPushedRef.current === pending) lastPushedRef.current = null
+      commitNow(pending.row, pending.col, pending.value)
+    },
+    { floorMs: COMMIT_INTERVAL_MS, equals: neverEqual },
+  )
   useEffect(
     () => () => {
-      if (timerRef.current != null) window.clearTimeout(timerRef.current)
-      const pending = pendingRef.current
-      pendingRef.current = null
-      if (pending) commitNowRef.current(pending.row, pending.col, pending.value)
+      const last = lastPushedRef.current
+      lastPushedRef.current = null
+      if (last) liveFlush(last)
     },
-    [],
+    [liveFlush],
   )
   const handleCellCommit = useCallback(
     (row: Row, col: C, value: unknown) => {
-      const pending = pendingRef.current
-      if (pending && (pending.row.id !== row.id || pending.col !== col)) {
-        pendingRef.current = null
-        commitNowRef.current(pending.row, pending.col, pending.value)
-      }
-      if (timerRef.current == null) {
-        commitNowRef.current(row, col, value)
-        timerRef.current = window.setTimeout(flush, COMMIT_INTERVAL_MS)
-      } else {
-        pendingRef.current = { row, col, value }
-      }
+      const last = lastPushedRef.current
+      if (last && (last.row.id !== row.id || last.col !== col)) liveFlush(last)
+      const next: PendingCommit<Row, C> = { row, col, value }
+      lastPushedRef.current = next
+      livePush(next)
     },
-    [flush],
+    [liveFlush, livePush],
   )
 
   const batchRowsFor = useCallback(
@@ -279,6 +319,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     onCellCommit: handleCellCommit,
     batchCountFor,
     batchRowsFor,
+    batchNoun: noun,
     cellDisabled,
     cellSelection: tableCellSelection,
     onRowMarquee: setRows,

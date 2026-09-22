@@ -39,7 +39,7 @@ import {
   useBuskSheet,
   useBuskWindowDecided,
 } from '@/lib/buskWindow'
-import { useCellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { useEditorForm } from '@/components/editor/EditorSurface'
 import { Button } from '@/components/ui/button'
 import { PanelBottomOpen } from 'lucide-react'
 import { toast } from 'sonner'
@@ -107,7 +107,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  *
  * **There is no narrow-width target sheet any more** (D15): below `md` the band is one row with
  * a row chip, and Rig focus is the whole rig stacked. Below `md` the side sheet is a bottom sheet
- * or a right-hand overlay through `useCellEditorForm`, opened from the page strip's button onto
+ * or a right-hand overlay through `useEditorForm`, opened from the page strip's button onto
  * Colour, since that sheet carries no Speed tab (D7) — Colour, Spread and Show.
  *
  * **Three boards, and short beats narrow** (`Phones.dc.html`, `Tablets.dc.html`). `md` says
@@ -157,7 +157,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const [searchParams, setSearchParams] = useSearchParams()
   const focus = useBuskFocus()
   const sheet = useBuskSheet()
-  const sheetForm = useCellEditorForm()
+  const sheetForm = useEditorForm()
 
   const {
     selectedTargets,

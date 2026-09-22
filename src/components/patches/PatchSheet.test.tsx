@@ -49,7 +49,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 import { PatchSheet, patchRowId, type PatchSheetRow } from './PatchSheet'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 function patch(id: number, name: string, startChannel: number, channelCount = 6, universe = 1): FixturePatch {
   return {
@@ -128,7 +128,7 @@ beforeEach(() => {
       unobserve() {}
     },
   )
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 afterEach(() => {
   cleanup()

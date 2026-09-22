@@ -4,10 +4,9 @@ import { GitCommitHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
-import { CellEditorSurface } from './cells/CellEditorSurface'
-import { useCellEditorKeyboard } from './cells/useCellEditorKeyboard'
-import { ValueFieldRow } from './cells/ValueFieldRow'
+import { EditorSurface } from '../editor/EditorSurface'
+import { useEditorKeyboard } from '../editor/useEditorKeyboard'
+import { ValueFieldRow } from '../editor/ValueFieldRow'
 import { fanAddresses, fanColours, fanDurations, fanValues, type FanColour } from './fanMath'
 import { WORD_CLASS } from './toolbarFolds'
 
@@ -109,7 +108,7 @@ interface FanPopoverProps {
  * surfaces share the trigger, the surface, the chooser and the keyboard rather than each drawing
  * a popover of its own.
  *
- * It opens in `CellEditorSurface` — a popover on a desk, a bottom sheet on an upright phone, a side
+ * It opens in `EditorSurface` — a popover on a desk, a bottom sheet on an upright phone, a side
  * sheet where the viewport is short — because it is a cell editor in every way that matters: a
  * value panel over a selection, whose commit lands on every selected cell. The one difference is
  * that it writes on Apply rather than as it is edited, which is why Enter here *applies* (see the
@@ -214,7 +213,7 @@ export function FanPopover({
   /**
    * The fan's ends are typed as well as dragged, and the keyboard behaves as it does in a cell
    * editor: comma steps From → To, Enter applies. Shared with the cell editors
-   * (`useCellEditorKeyboard`) rather than restated, because this is the same kind of panel — a set
+   * (`useEditorKeyboard`) rather than restated, because this is the same kind of panel — a set
    * of values with a field each — and two spellings of one gesture is what the typed-value popover
    * was.
    *
@@ -227,7 +226,7 @@ export function FanPopover({
    * that decides what From means. The colour fan has no text field, so the hook finds nothing to
    * focus and leaves the pickers alone.
    */
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     autoFocus: fannable.length === 1,
     onDone: () => {
       if (!canApply) return
@@ -236,14 +235,8 @@ export function FanPopover({
     },
   })
 
-  // A fan's ends are plain numbers held here until Apply, but the retype trap is the same one
-  // every live field has — `Number('')` is 0, so an emptied box would silently move the end to
-  // black before the first digit of its replacement arrived.
-  const fromDraft = useNumberFieldDraft(String(fromValue), (n) => setFromValue(clampByte(n)))
-  const toDraft = useNumberFieldDraft(String(toValue), (n) => setToValue(clampByte(n)))
-
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setIsOpen}
       title="Fan"
@@ -397,8 +390,10 @@ export function FanPopover({
           </div>
         ) : (
           <div className="w-72 max-w-full space-y-3">
-            <ValueFieldRow label="From" min={0} max={255} value={fromValue} draft={fromDraft} onSlide={setFromValue} />
-            <ValueFieldRow label="To" min={0} max={255} value={toValue} draft={toDraft} onSlide={setToValue} />
+            {/* A fan's ends are plain numbers held here until Apply; the field owns the retype trap
+                (`EditorField`) and the clamp is this panel's, a byte being a byte. */}
+            <ValueFieldRow label="From" min={0} max={255} value={fromValue} onChange={(n) => setFromValue(clampByte(n))} />
+            <ValueFieldRow label="To" min={0} max={255} value={toValue} onChange={(n) => setToValue(clampByte(n))} />
           </div>
         )}
 
@@ -415,7 +410,7 @@ export function FanPopover({
           </Button>
         </div>
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 }
 

@@ -69,8 +69,8 @@ vi.mock('./NewTemplateFromSelectionSheet', () => ({
 
 /** The form the cell editor would choose. Swapped per test — the picker asks, it does not decide. */
 const form = vi.hoisted(() => ({ current: 'popover' as 'popover' | 'bottom-sheet' | 'side-sheet' }))
-vi.mock('@/components/sheet/cells/CellEditorSurface', () => ({
-  useCellEditorForm: () => form.current,
+vi.mock('@/components/editor/EditorSurface', () => ({
+  useEditorForm: () => form.current,
 }))
 
 const { TemplatePicker } = await import('./TemplatePicker')

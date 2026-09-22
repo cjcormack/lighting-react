@@ -8,7 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { useCellEditorForm, type CellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { useEditorForm, type EditorForm } from '@/components/editor/EditorSurface'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
 import {
   SIDE_PANEL_BODY_CLASS,
@@ -71,7 +71,7 @@ import type { BuskingTarget } from './buskingTypes'
  * **Off the desk board the rail is not drawn** — below `md`, as it never was, and on the short
  * board (`BuskingView`'s `board`), where a docked 288px rail would leave the page a bank four pads
  * wide: the sheet is `SideSheetOverlay`, a bottom sheet on an upright phone and a right-hand
- * overlay where the viewport is short, through `useCellEditorForm`'s three forms — the fold
+ * overlay where the viewport is short, through `useEditorForm`'s three forms — the fold
  * decides the form, the window decides the tab — and it carries **Colour · Spread · Show and still
  * no Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the
  * Show tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. It
@@ -118,11 +118,11 @@ export function tabWordClass(open: boolean): string {
  * Which tabs a sheet offers in a given form: the landed ones, docked; the landed ones **minus
  * Speed** in every overlay form below `md`, where the Show tab's strip carries the tempo chip that
  * reaches every master (D6, D7). `'popover'` is an overlay form too, not a second name for docked:
- * `useCellEditorForm` answers it for any viewport 640px and wider that is not short, which includes
+ * `useEditorForm` answers it for any viewport 640px and wider that is not short, which includes
  * the 640–767px band where the rail is still not drawn — and an overlay with a Speed tab and no
  * rail behind it would open onto nothing.
  */
-export function sideSheetTabs(form: 'docked' | CellEditorForm): readonly TabSpec[] {
+export function sideSheetTabs(form: 'docked' | EditorForm): readonly TabSpec[] {
   const live = SIDE_SHEET_TABS.filter((tab) => LIVE_SHEET_TABS.includes(tab.id))
   return form === 'docked' ? live : live.filter((tab) => tab.id !== 'speed')
 }
@@ -341,7 +341,7 @@ function DockedSideSheet({
  * layout, since that form exists for a viewport with no height.
  */
 export function SideSheetOverlay({ projectId, selectedTargets, families, show }: SideSheetProps) {
-  const form = useCellEditorForm()
+  const form = useEditorForm()
   const sheet = useBuskSheet()
   const { seed, onSpread, onSeedConsumed } = useSpreadSeed()
   const tabs = sideSheetTabs(form)

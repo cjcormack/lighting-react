@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react'
-import { useCellEditorForm } from './CellEditorSurface'
+import { useEditorForm } from './EditorSurface'
 
 /**
  * The text fields inside a cell editor, in DOM order.
@@ -48,7 +48,7 @@ const FIELD_SELECTOR =
  * do not reintroduce the split this hook exists to remove: on any one surface, every way of
  * opening an editor behaves the same.
  */
-export function useCellEditorKeyboard({
+export function useEditorKeyboard({
   autoFocus = true,
   onDone,
 }: {
@@ -69,7 +69,7 @@ export function useCellEditorKeyboard({
   contentRef: React.RefObject<HTMLDivElement | null>
   /** Put on the same element. */
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void
-  /** Hand to `CellEditorSurface` (or to the popover the editor draws itself in). */
+  /** Hand to `EditorSurface` (or to the popover the editor draws itself in). */
   onOpenAutoFocus: (event: Event) => void
 } {
   const contentRef = useRef<HTMLDivElement>(null)
@@ -81,9 +81,9 @@ export function useCellEditorKeyboard({
 
   // A sheet is a finger's surface; see the docblock. Read here rather than by each caller so the
   // four cell editors cannot answer it differently, and it is the same shared media store
-  // `CellEditorSurface` reads — a subscription per query, not per cell.
-  // Called unconditionally: `autoFocus && useCellEditorForm()` would short-circuit the hook away.
-  const form = useCellEditorForm()
+  // `EditorSurface` reads — a subscription per query, not per cell.
+  // Called unconditionally: `autoFocus && useEditorForm()` would short-circuit the hook away.
+  const form = useEditorForm()
   const focusable = autoFocus && form === 'popover'
   const focusableRef = useRef(focusable)
   focusableRef.current = focusable

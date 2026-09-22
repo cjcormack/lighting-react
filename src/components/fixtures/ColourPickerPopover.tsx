@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { CellEditorSurface } from '@/components/sheet/cells/CellEditorSurface'
-import { useCellEditorKeyboard } from '@/components/sheet/cells/useCellEditorKeyboard'
+import { EditorSurface } from '@/components/editor/EditorSurface'
+import { useEditorKeyboard } from '@/components/editor/useEditorKeyboard'
 import { ColourPickerBody } from './ColourPickerBody'
 
 interface ColourPickerPopoverProps {
@@ -48,7 +48,7 @@ interface ColourPickerPopoverProps {
   channelFields?: boolean
   /**
    * Open in the shared cell-editor surface, which folds to a bottom sheet at phone widths
-   * (`CellEditorSurface`) — instead of always being a floating popover.
+   * (`EditorSurface`) — instead of always being a floating popover.
    *
    * **Opt-in, and off by default**, on the same reasoning as [channelFields] and for the same two
    * other callers. The fold exists because a grid cell's popover has nowhere good to sit on a
@@ -69,7 +69,7 @@ interface ColourPickerPopoverProps {
    * scroll, it clips. The picker is the part that gives height up most cheaply, because the typed
    * R/G/B boxes beside it say the same thing exactly.
    *
-   * Set by `ColourCell` from `useCellEditorCramped()`, which is a height question rather than a
+   * Set by `ColourCell` from `useEditorCramped()`, which is a height question rather than a
    * form one — see that hook.
    */
   compact?: boolean
@@ -78,7 +78,7 @@ interface ColourPickerPopoverProps {
    * first keystroke. Null or absent for a click or a released marquee, which carry no character.
    *
    * It says nothing about *focus* — R is focused however the editor was opened; see
-   * `useCellEditorKeyboard`. `ColourCell`'s alone, like [channelFields].
+   * `useEditorKeyboard`. `ColourCell`'s alone, like [channelFields].
    */
   keyboardOpen?: string | null
   /**
@@ -86,7 +86,7 @@ interface ColourPickerPopoverProps {
    * the two visualizers', where a click on the swatch is the only way in. See `CellClickBehaviour`.
    */
   triggerOpens?: boolean
-  /** `ColourCell`'s. See `CellEditorSurface`'s own `anchorRef`. */
+  /** `ColourCell`'s. See `EditorSurface`'s own `anchorRef`. */
   editorAnchorRef?: React.RefObject<HTMLElement | null>
   /** The trigger element (swatch) */
   children: React.ReactNode
@@ -135,7 +135,7 @@ export function ColourPickerPopover({
   // editor focuses R. Shared with the four cell editors, which is the point: this popover *is* the
   // colour cell's editor. The two property visualizers pass no `keyboardOpen`, so nothing here
   // takes focus for them; their popovers hold no text field to type Enter or a comma into either.
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     // The two property visualizers draw no text fields here (see [channelFields]), so there is
     // nothing for focus to land on and taking it would only move it off the swatch they opened.
     autoFocus: channelFields,
@@ -170,7 +170,7 @@ export function ColourPickerPopover({
 
   if (sheetWhenNarrow) {
     return (
-      <CellEditorSurface
+      <EditorSurface
         open={controlledOpen}
         onOpenChange={setIsOpen}
         title={title}
@@ -183,7 +183,7 @@ export function ColourPickerPopover({
         wide
       >
         {body}
-      </CellEditorSurface>
+      </EditorSurface>
     )
   }
 

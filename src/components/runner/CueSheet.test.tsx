@@ -30,7 +30,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 import { CueSheet } from './CueSheet'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 const cue = (id: number, over: Partial<CueStackCueEntry> = {}): CueStackCueEntry => ({
   id,
@@ -118,7 +118,7 @@ beforeEach(() => {
       unobserve() {}
     },
   )
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 afterEach(() => {
   cleanup()

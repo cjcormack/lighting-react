@@ -982,7 +982,7 @@ those buttons was silent on the fold, whose `aria-label` wins the name, and *bec
 strip below 400px of sheet, where a non-open tab's word is `display: none`; the pill on the band
 (§The rig) is the louder half of the same answer.
 Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upright phone, a
-right-hand sheet where the viewport is short, through `useCellEditorForm`'s forms — opened from
+right-hand sheet where the viewport is short, through `useEditorForm`'s forms — opened from
 the page strip's *Sheet* button onto Colour, carrying **Colour · Spread · Show** and **still no
 Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the Show
 tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. The
@@ -1109,7 +1109,7 @@ the desk's mask gates presses, not value writes, so the sheet does not refuse un
 marquee — the rig band's family pill, one row up, is where the mask is read (the tab's own header
 said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A *Recent* chip is a press and goes
 through `useTemplatePress` under the mask like any other. The writes go through
-`hooks/useLivePush.ts`, the tempo fader's discipline lifted out of `BuskSpeedRail` and made generic
+`components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of `BuskSpeedRail` and made generic
 over the value: dedupe on an equality, a 50 ms floor, a deferred value sent when the floor lifts,
 the release bypassing both. The editor itself is `components/fixtures/ColourPickerBody.tsx` — the
 picker, the typed R/G/B, the emitter rows and the six-channel buffer, extracted from
@@ -1555,7 +1555,7 @@ grown for `requiredEmitters`) is the same bug caught one layer later, at one of 
 reaches.
 
 **Escape is the last rung, and the question is asked in the capture phase.** `HandChip` drops only
-when nothing else claims the key: a cell editor open anywhere (`cellEditorIsOpen()`), any
+when nothing else claims the key: a cell editor open anywhere (`editorIsOpen()`), any
 `[role="dialog"]` or Radix popper on the page, or an event already `defaultPrevented`. That is
 §"The cell editor's three forms"' snapshot rule — *is an editor open*, not *where was the key
 pressed*, which `isEditableTarget` and `closest('[role="dialog"]')` answer and answer wrongly the
@@ -1921,7 +1921,7 @@ under the operator's hand on the second press.
 **`All · n` opens `TemplatePicker`** — the offerable library as a searchable pad grid, sections
 Recent · All A–Z · Per fixture · Effects, built from the busk pad's own face (`padFace.ts`'s
 `PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and `templateLayerPresence` against the desk's
-resolved applied state). Three things about it: it takes **`useCellEditorForm`'s three forms** and
+resolved applied state). Three things about it: it takes **`useEditorForm`'s three forms** and
 neither of its own media queries, so the picker and a cell editor never disagree about which shape a
 screen gets; **a press does not close it**, because auditioning three colours in a row is the normal
 case; and its popover width is a **media** query rather than a container one — `PopoverContent` is
@@ -1997,7 +1997,8 @@ survey and the rules). The surfaces differ in their columns and their verbs, nev
 `useCellSelection`, `cellEntry` (the generic half — `orderedSelectedCells`, the two DOM guards,
 and the *shapes* `CellKeyboardPermission` / `CellActionCopy`; the programmer's own answers
 `cellKeyboardPermission` / `cellActionCopy` stay in `fixtures-list/cellEntry.ts`),
-`cells/CellEditorSurface` and its two hooks, `ValueFieldRow`, `UnsetCellMark`, the three fold
+the cell editor's surface and its two hooks, `ValueFieldRow` and `UnsetCellMark` (all four moved on
+again since, to `components/editor/` — §The editor kit), the three fold
 constants (`toolbarFolds.ts`, re-exported by `SelectionToolbar`), `CellSelectionActions`,
 `FanPopover` + `fanMath`, `selectionBand`, `useEscapeEditorSnapshot`. Three were extractions rather
 than moves: `useCellMarquee` (a local of `FixturesTable`, now generic over rows with a
@@ -2021,7 +2022,7 @@ requests, the throttled commit, the batch count — and `SheetTable` the anatomy
 header, 36px rows (44 on the DMX sheet), a sticky first column with the 3px selection edge, the
 same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
 `data-grid-name-header`, `data-row-id`, `data-cell`). Four kit cells go through
-`CellEditorSurface`, so they get the three forms and the double click for free: `TextCell`
+`EditorSurface`, so they get the three forms and the double click for free: `TextCell`
 (commit on ⏎, Escape reverts), `LevelCell` (the DMX value, live like `SliderCell`), `OptionCell`
 (`SettingCell`'s type-ahead over plain options) and `AddressCell`.
 
@@ -2073,8 +2074,9 @@ Three surface rules, each pinned by its test:
   the only writer is how one walks onto a key the other is mid-way through vacating. **`key` is also outside `METADATA_ONLY_PUT_KEYS`**, so each of those PUTs
   rebuilds the fixture registry and broadcasts — the same cost the address batch has always had, and
   the same answer: a bulk route is lighting7 work and Chris's call.
-  **A batch landing is drawn one head to a line** (`cells/LandingLines.tsx`), shared by the address
-  editor and the Key column, rather than joined with `·` into a paragraph read at the worst moment.
+  **A batch landing is drawn one head to a line** — `EditorReadout`'s `lines` arm, which was
+  `cells/LandingLines.tsx` until the editor kit — shared by the address editor and the Key column,
+  rather than joined with `·` into a paragraph read at the worst moment.
 - **DMX sheet** (`DmxSheet.test.tsx`): `/projects/:id/channels/:universe/table`, sticky key
   `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
@@ -2208,10 +2210,93 @@ route again**, `/projects/:id/patches`, with the chips as a 40px chrome row of 2
 B: it left Project Settings because a tab body under a settings heading was the one list that could
 not have the header row and the gutter. `/settings/patches` redirects there, `?action=new` intact.
 
+### The editor kit
+
+**Every value editor is built from the same five pieces, exported once from `components/editor/`**
+(editor-kit plan D8, D9; the design record is `lighting7/docs/plans/editor-kit-design/`, whose
+`Editors.dc.html` draws the anatomy and each editor on it). They were the busk sheet's anatomy —
+9px uppercase labels, 28px fields with the unit inside, a read-out line, a static footer with the
+save first — and the programmer's four cell editors and the kit's four each answered the count
+line, the label style, the field height and the unit their own way. What lives there now, and what
+each was:
+
+- **`EditorSurface`** — `CellEditorSurface` moved (§The cell editor's three forms): the three
+  forms, the double click, `wide`, the anchor. Its hooks are `useEditorForm`, `useEditorCramped`
+  and `editorIsOpen`; the `data-cell-editor-surface` attribute and the two media constants kept
+  their spellings, which `shortViewport.test.ts` pins. `useEditorKeyboard`, `useEditorOpen`,
+  `ValueFieldRow` and `UnsetCellMark` moved beside it, and `HandChip` and `useEscapeEditorSnapshot`
+  follow the `editorIsOpen` rename.
+- **`EditorLabel`** — the busk view's `BuskLabel`, moved and renamed; the busk view imports it
+  back. The label over every control.
+- **`EditorField`** — one 28px number field with the unit as a trailing muted glyph and
+  `useNumberFieldDraft` inside. It replaced `ValueFieldRow`'s bare `Input`, the busk Spread tab's
+  private `NumberField` and the colour editor's `ChannelNumberInput` — which survives as a thin
+  wrapper over it, because its two callers sit in `ColourPickerBody`, session 2's file. **The
+  caller still clamps**: the field parses, and a channel byte is 0–255 where a slider cell's bounds
+  come from its resolution and a percent is 0–100. The native spinner is hidden so the unit glyph
+  has the right edge; the arrows still step the value.
+- **`EditorReadout`** — the 10px muted line under a panel's controls, saying what the desk holds
+  and what was skipped, with a `lines` arm that was `LandingLines` (the address editor's and the
+  Key column's one-head-to-a-line landing; `LandingLines.tsx` is deleted).
+- **`EditorFooter`** — save slot · note · spacer · verbs, the shape the busk Colour and Spread tabs'
+  footers have. Drawn only where a panel writes on **Apply** — `TextCell` and `AddressCell` — never
+  by an editor that writes as it goes. The two busk tabs keep their own full-bleed footers; sessions
+  2 and 3 own rewiring them.
+- **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
+  commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
+  throttle were two copies of one rule — a floor, a dedupe, a release that always lands. Two things
+  the hook has no notion of are kept in `useSheet`: a commit for a *different* cell lands the
+  pending one first, and an unmount lands whatever is pending. **The sheet switches the hook's
+  dedupe off** (`neverEqual`): the hook dedupes a gesture's moves against what it last sent and
+  relies on `reset()` for a fresh gesture, and a sheet's value moves by routes the hook never sees
+  — ⌫ through `column.clear`, Fan, Park, the wire — so a value set, cleared and retyped would
+  never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
+  literal 33, the trailing call, and that a repeat is sent.
+
+**The label line replaced the count line** (D8). No editor body says *Applying to N targets* any
+more — `ColourCell`'s trigger `title` still does, until session 2 rebuilds that editor.
+The popover form draws `EditorLabelLine` first — *4 heads · Local* on the left (the batch and the
+scope, or the focused Look's name in layer scope, which no editor said before; *4 cues* / *8
+channels* / *4 fixtures* on the kit sheets, from `SheetCellProps.batchLabel` and the sheet's `noun`)
+and the column on the right — and **only the popover**: both sheet forms keep their title row, which
+already names the column, and the band above the grid already says the count. The programmer's
+cells take a **`CellBatch`** (`rowModel.ts`) in place of the old `batchCount` — the count, the
+**skipped** heads (targets that resolve nothing for the column, which a geometric marquee sweeps up
+along with the rest) and the resolutions — from `FixturesListContainer`'s `batchFor`, **one per marquee column**
+(`marqueeBatches`): a commit from a cell in column X lands on column X's targets alone, so what the
+editor says about the batch must be that column's, not the marquee's total — summed, the Dimmer
+editor said "1 head has no dimmer · skipped" for a par the *Gobo* column skipped. `scopeLabel` rides
+beside it from the scope and the Look store's `lookName`. The container's own 33 ms position merge
+goes through `mergePositionCommits`, which keeps `panDeg` / `tiltDeg` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
+silently drop it. `ColourCell` is session 2's and still takes `batchCount`.
+
+**The unit is the cell's** (D13). The programmer's dimmer cell reads *80%*, so `SliderCell`'s field
+is a percent — `toPct` / `fromPct`, 0 ↔ 0, 50 ↔ 128, 100 ↔ 255, pinned as literals in
+`SliderCell.test.tsx` — and the byte is the read-out (*204 of 255 · 0–255 on every head*, or *on the
+first head · ranges differ*). The slider stays in bytes. The DMX sheet reads *204*, so `LevelCell`
+keeps bytes; the percent is its read-out. Strobe, zoom, focus and iris are slider cells and take the
+percent for the same reason — a template of them is a percent already.
+
+**Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
+draws a 120px XY pad beside Pan · Tilt — a drag writes both axes in one commit — and where **every**
+head in the batch carries `degMin` / `degMax` on both its pan and tilt sliders (the movers, 10 of
+the 28 models; a real `position` descriptor carries none), the fields and sliders are in travel
+degrees and the commit carries **`panDeg` / `tiltDeg`** rather than bytes. `clampCommitToResolution`
+resolves a degree to **each head's own byte** — 270° is 128 on a 540° mover and 109 on a 630° one —
+through `lib/axisDegrees.ts`, which is `dmxToDegrees` (moved out of `stageCoords.ts`, re-exported
+there) beside its inverse; a head whose axis carries no annotation is left alone on that axis. A
+batch mixing annotated and silent heads keeps bytes for all of them rather than two units in one
+editor; the cell keeps its byte read-out either way. The field's range is the lead head's.
+
+**Widths by content** (D17): `w-72` for level, position, text and address (the busk endpoint editors'
+two fields plus a gutter, up from `w-64`) and `w-64` for the setting and option lists — measured in
+the app on 2026-09-22 as 288 and 256 (`getBoundingClientRect` on the open popover, with the field
+at 28 and the pad at 120), which is what each component's docblock records.
+
 ### The cell editor's three forms
 
 **A cell editor is a popover on a desk, a bottom sheet on an upright phone, and a right-hand sheet
-where the viewport is short.** `components/sheet/cells/CellEditorSurface.tsx` is the one
+where the viewport is short.** `components/editor/EditorSurface.tsx` is the one
 place that decides, and every cell goes through it — the programmer's four (`SliderCell`,
 `ColourCell` via `ColourPickerPopover`, `PositionCell`, `SettingCell`) and the kit's four
 (§Sheet kit). There were **five**: the marquee's own typed
@@ -2228,7 +2313,7 @@ Three rules, each of which was learned rather than designed:
   other site of that number.
 - **Width is the content's to ask for, and so is the compact layout.** `wide` on the surface is the
   colour editor's alone — 35rem against 22rem for the other three, which looked absurd in that much
-  room. `useCellEditorCramped()` is a *separate* `max-height: 750px` question, because all three
+  room. `useEditorCramped()` is a *separate* `max-height: 750px` question, because all three
   forms can be short of height: below it the colour editor draws a two-column layout with its
   emitter rows beside the picker. 750 and not 500 because **a popover must fit beside its cell, and
   a cell can be any row**, so the room it really gets is about half the viewport — below ~725 there
@@ -2259,10 +2344,10 @@ its own cells, the one thing a rectangle cannot say. The editor is opened by the
 the single click and the keys all say *what* to edit and one gesture says *edit it*.
 
 **The double click is that second gesture made with the pointer alone**, and it is the surface's
-rather than the four cells': `CellEditorSurface` decides it once, above the form branch, so all
+rather than the four cells': `EditorSurface` decides it once, above the form branch, so all
 three forms and all four value kinds answer it identically — the reason `CellClickBehaviour` is one
 type rather than four copies of two props. It opens through the same `onOpenChange` every other
-opener uses, so it lands in `useCellEditorOpen`'s click path: beside the cell (Set's toolbar anchor
+opener uses, so it lands in `useEditorOpen`'s click path: beside the cell (Set's toolbar anchor
 is Set's alone), with no typed seed, and with whatever a click's open resets reset. It is wired
 **only where a single click selects** — in `CueValueGrid` a single click already opens, and two of
 them would toggle the editor shut and back open. And it needs no
@@ -2283,7 +2368,7 @@ that has already shut and simply opens it again — verified in the browser on t
 commit before it, where a single click on an open cell behaves identically. But that dismissal is
 the *environment's* and not a rule this code states, and a test never reaches it: `fireEvent`
 dispatches exactly the one event it names, so no `pointerdown` is seen, the listener never runs, and
-the second open goes straight through. Both tests in `CellEditorSurface.test.tsx` fail if the guard
+the second open goes straight through. Both tests in `EditorSurface.test.tsx` fail if the guard
 is dropped. **The difference is not Radix rescuing the browser case** — `PopoverContent` suppresses
 an outside press only where it lands on a real `PopoverTrigger`, and this grid renders none in
 either environment.
@@ -2299,7 +2384,7 @@ popover would never be positioned and no cell would be marked open.
 Three consequences worth knowing before touching any of it:
 
 - **The trigger is a `PopoverAnchor`, not a `PopoverTrigger`** (`triggerOpens` on
-  `CellEditorSurface`, set from `CellClickBehaviour`, which is one type rather than four copies of
+  `EditorSurface`, set from `CellClickBehaviour`, which is one type rather than four copies of
   two props precisely so the four cells cannot answer this differently). Radix then has nothing to
   toggle and the button's own `onClick` is free to be the selection. `data-state` is restored by
   hand on the anchor: it is the only thing that says *which cell* the open editor belongs to, and
@@ -2330,7 +2415,7 @@ Three consequences worth knowing before touching any of it:
   straight down it would re-render every visible row at pointer rate.
 - **Escape is a rung longer than it looks.** An open editor takes it first and the selection
   survives; a second Escape, with nothing open, clears as it always did. The question is *is an
-  editor open* (`cellEditorIsOpen()`, a DOM read of the surface's own attribute) and not *where was
+  editor open* (`editorIsOpen()`, a DOM read of the surface's own attribute) and not *where was
   the key pressed*, which is what `isEditableTarget` and `closest('[role=dialog]')` answer — a
   different question, and one that answers wrongly the moment focus is not inside the panel.
   **The answer is snapshotted in the window's capture phase**, because Radix listens on the
@@ -2347,14 +2432,14 @@ Three consequences worth knowing before touching any of it:
   — a cell editor in every way but this one — does not read as one.
 
 **The editor opens where the gesture was made.** Set is pressed at the toolbar, so its editor opens
-at the Set button (`anchorRef` on `CellEditorSurface`, `editorAnchorRef` threaded container → table
+at the Set button (`anchorRef` on `EditorSurface`, `editorAnchorRef` threaded container → table
 → row → cell); **Enter and a typed character are made at the selection, with the operator's eye on
 the grid, so theirs opens beside the cell** — the cells express that by withholding the anchor
 (`atButton ? editorAnchorRef : undefined`) rather than by a second prop on the surface. Anchoring
 *everything* at the cell was the original defect: for a marquee near the bottom of a long list the
 panel landed nowhere near the hand that pressed Set. Three rules in it:
 
-- **The choice is latched at open**, in `useCellEditorOpen`, exactly as `keyboardSeed` is. The
+- **The choice is latched at open**, in `useEditorOpen`, exactly as `keyboardSeed` is. The
   request is a one-shot the table drops on the very next commit, so a per-render read would
   re-anchor the panel from the button to the cell a frame after opening — visibly jumping across
   the screen.
@@ -2365,8 +2450,8 @@ panel landed nowhere near the hand that pressed Set. Three rules in it:
   anchor from an effect, and effects run after the refs of the same commit.
 
 **An editor closes when the selection it was opened for goes away** (`selectionEmpty`, threaded to
-`useCellEditorOpen`). An editor is open *for* a selection, so a Deselect used to leave one on screen still
-writing — to something narrower than its own "Applying to N targets" line had just claimed. It is
+`useEditorOpen`). An editor is open *for* a selection, so a Deselect used to leave one on screen still
+writing — to something narrower than the batch its label line had just named. It is
 **edge-triggered**, on the false→true crossing and not on the state, or a grid with no selection at
 all could never open one: the close would land in the effect immediately after the click that
 opened it, and the editor would flicker rather than fail in a way anyone could report. `undefined`
@@ -2398,14 +2483,16 @@ it went instead:
 - **`pan,tilt` and `r,g,b`** survive as a **gesture** rather than a grammar: comma steps to the
   next field. That is what `PositionCell`'s new pair of boxes is for — it had none, only a drag —
   and what makes the colour editor's R → G → B → emitters a typed sequence.
-- **`50%`, `full` and `out` are gone, and nothing replaced them.** The level editor's box is
+- **`50%` came back in kind, `full` and `out` did not.** The programmer's level editor's box is
+  a **percent** since the editor kit (D13), so `50` typed there is what `50%` said; the DMX
+  sheet's stays a byte. `full` and `out` are still gone and nothing replaced them: the box is
   `type="number"`, so those characters cannot be typed into it at all. Said plainly because it is
   the one part of the deletion that was a real loss rather than a relocation: it was put to the
   desk as a question and answered *leave it as built*, on the same reasoning as hex. Getting them
-  back means a text grammar in the byte field, which costs that field its spinner and its
-  arrow-key increment — so ask before reaching for it.
+  back means a text grammar in the number field, which costs that field its arrow-key increment —
+  so ask before reaching for it.
 
-`components/sheet/cells/useCellEditorKeyboard.ts` is the one copy of the rule, shared by
+`components/editor/useEditorKeyboard.ts` is the one copy of the rule, shared by
 every cell — the programmer's four and the kit's — **and by `FanPopover`**, which is the same kind
 of panel and had the same gap. Two
 things in it are not arbitrary. The focus is taken in **`onOpenAutoFocus`**, not in an effect:
@@ -2432,7 +2519,7 @@ two columns. `singleColumnAnchor` and
 being the surface's own.
 
 **The one thing that does differ is the *form*, not the gesture.** Focus is taken in the popover
-and in neither sheet (`useCellEditorForm`), because both sheets are reached by a finger and there
+and in neither sheet (`useEditorForm`), because both sheets are reached by a finger and there
 the keyboard rises over the grid for nothing. That is a question about the surface, so on any one
 surface every way in still behaves identically. `FanPopover` opts out with `autoFocus: false` only
 when the marquee spans several fannable columns: then its first question is *which column*, and
@@ -2440,7 +2527,7 @@ jumping to the From box would skip the chooser that decides what From means. Wit
 selection has answered that, and From is focused like any editor's first field.
 
 **`keyboardSeed` carries the character and nothing else.** A string (`''` for a bare Enter, null
-for a click or a drag) threaded container → table → cell, latched by `useCellEditorOpen` into
+for a click or a drag) threaded container → table → cell, latched by `useEditorOpen` into
 `keyboardOpen` for as long as the editor is open, and read only to seed the first field.
 
 **A character typed at the grid opens the editor and lands in its first field**, committing as
@@ -2612,7 +2699,7 @@ rail is how local literals become something trackable afterwards. Set and Clear 
 at every width and only Fan folds on the phone arm, because on a phone Set is the only way into a
 selection's editor now that a drag opens nothing.
 
-**Fan reads the marquee, not the fixture selection**, and opens in `CellEditorSurface` like the four
+**Fan reads the marquee, not the fixture selection**, and opens in `EditorSurface` like the four
 cell editors. The column comes from the selection — `FanPopover` takes one `FanColumn` per selected
 column, targets in visible row order, from the same `columnTargets` expansion `commitToCells`,
 Backspace and the batch count use — and the chooser is drawn only when the selection spans more
@@ -3707,7 +3794,9 @@ path may quietly change where it lands.
   bank drop zones. It supersedes `busking-view-design/`, which drew the pools this page no longer
   has. Two conventions carried over and should hold for anything added here:
 
-  - **One label, `BuskLabel`** (9px bold uppercase, wide-tracked, muted, **no icon**), on every
+  - **One label, `EditorLabel`** (9px bold uppercase, wide-tracked, muted, **no icon**; it was
+    the busk view's `BuskLabel` until the editor kit took it as the label over every control,
+    `components/editor/EditorLabel.tsx`), on every
     region — band, palette, rail. Regions once drew a larger icon-bearing heading, which made three
     parts of one instrument read as three surfaces. It renders a `<div>` deliberately, so a test can
     reach a region's body by walking up from its label.
@@ -3737,7 +3826,8 @@ path may quietly change where it lands.
     ends. Don't "fix" it by widening it to the clock's range.
   - **It applies as it goes**, because that is what a fader is for: the tempo is judged by ear
     against a running show, and a control that only lands on release makes that guess-then-check.
-    `useLiveTempoPush` is the traffic half of the same decision, not a softening of it — writes are
+    `useLivePush` (`components/editor/useLivePush.ts`, the editor kit's) is the traffic half of the
+    same decision, not a softening of it — writes are
     deduplicated on the whole BPM and floored at `SLIDE_PUSH_MS` (50 ms), a deferred value is held
     and sent when the floor lifts rather than dropped, and the release bypasses both so the value
     let go on always lands. There is deliberately no optimistic pending value after the release,

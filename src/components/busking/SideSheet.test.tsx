@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { LIVE_SHEET_TABS, getBuskSheet, resetBuskWindowStores, setBuskSheet } from '@/lib/buskWindow'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 import { SIDE_PANEL_BODY_CLASS, SIDE_PANEL_STRIP_CLASS } from '@/components/sheet/sidePanel'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
 import type { BuskingTarget } from './buskingTypes'
@@ -110,7 +110,7 @@ afterEach(() => {
   cleanup()
   window.sessionStorage.clear()
   resetBuskWindowStores()
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
   vi.unstubAllGlobals()
 })
 

@@ -4,7 +4,7 @@ import { GripVertical, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { registerDragOverlay } from "@/components/dnd/dragOverlayRegistry"
-import { BuskLabel } from "@/components/busking/BuskLabel"
+import { EditorLabel } from "@/components/editor/EditorLabel"
 import {
   ATTRIBUTE_FAMILIES,
   FAMILY_LABELS,
@@ -47,7 +47,7 @@ import type { CueTarget } from "@/api/cuesApi"
  * `useDndMonitor` and never nested, for the busk page's reason. Foreign drags are ignored by id on
  * both sides.
  *
- * **The list is sectioned by kind, and Desk leads.** One sticky `BuskLabel` per kind that has rows,
+ * **The list is sectioned by kind, and Desk leads.** One sticky `EditorLabel` per kind that has rows,
  * in the order of the kind row — `Desk · Groups · Fixtures · Looks · Cues` — so the whole library
  * reads as five short lists rather than one long one. Desk (Selection, Encoder bank, the busk
  * pages, the whole-rig row) moved to the front of both the sections and the segmented control
@@ -776,7 +776,7 @@ export function SurfaceLibrary({
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex shrink-0 flex-col gap-2 border-b px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <BuskLabel>Library</BuskLabel>
+          <EditorLabel>Library</EditorLabel>
           <span className="flex-1" />
           <span className="text-[11px] text-muted-foreground">row → a strip · chip → one control</span>
         </div>
@@ -832,9 +832,9 @@ export function SurfaceLibrary({
                 className="[&:not(:has([data-testid^=library-row]))]:hidden"
               >
                 {kind === "all" && (
-                  <BuskLabel className="sticky top-0 z-10 border-b bg-background px-2.5 pt-2 pb-1">
+                  <EditorLabel className="sticky top-0 z-10 border-b bg-background px-2.5 pt-2 pb-1">
                     {KIND_LABELS[sectionKind]}
-                  </BuskLabel>
+                  </EditorLabel>
                 )}
                 {children}
               </section>

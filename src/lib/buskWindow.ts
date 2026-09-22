@@ -171,7 +171,7 @@ interface MediaEntry {
 const mediaEntries = new Map<string, MediaEntry>()
 
 /**
- * One `MediaQueryList` per query, shared by every reader — `CellEditorSurface.tsx`'s shape, private
+ * One `MediaQueryList` per query, shared by every reader — `EditorSurface.tsx`'s shape, private
  * here for the same reason its copy is private there: a shared media store would invite a shared
  * threshold, and the thresholds are pinned by spelling per site instead.
  */

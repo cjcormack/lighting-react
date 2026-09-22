@@ -52,7 +52,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }))
 
 import { DmxSheet, DMX_ROW_HEIGHT, DMX_ROW_WIDTHS } from './DmxSheet'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 const MAPPINGS = {
   1: { fixtureKey: 'par-1', fixtureName: 'Front PAR 1', description: 'Dim' },
@@ -123,7 +123,7 @@ beforeEach(() => {
       unobserve() {}
     },
   )
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 afterEach(() => {
   cleanup()

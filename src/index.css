@@ -200,7 +200,7 @@
 }
 
 /* The compact picker: the colour cell editor on any viewport too short for its full layout,
-   whichever of the three forms it is wearing (`useCellEditorCramped`). Here rather
+   whichever of the three forms it is wearing (`useEditorCramped`). Here rather
    than as a Tailwind arbitrary variant because the rules above are `!important` and would win —
    and because a reader looking for the picker's size will look here. Height only: the width is
    what keeps the hue bar draggable.

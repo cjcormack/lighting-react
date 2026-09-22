@@ -12,6 +12,7 @@ import { useCellSelection, type CellSelection } from '../sheet/useCellSelection'
 import { useEscapeEditorSnapshot } from '../sheet/useEscapeEditorSnapshot'
 import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
+import { useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import {
   cellActionCopy,
@@ -42,6 +43,8 @@ import {
   groupRowId,
   memberRowId,
   parseSelectParam,
+  batchForTargets,
+  mergePositionCommits,
   planBatchWrites,
   resolveTargetCells,
   selectedRowTargets,
@@ -75,6 +78,7 @@ import type { ColumnKey } from './columns'
 import { useDeskSelectionBridge } from './useDeskSelectionBridge'
 import { useDeskFollow } from '@/lib/deskFollow'
 import type {
+  CellBatch,
   CellCommit,
   FixtureRow,
   GroupRow,
@@ -219,6 +223,9 @@ export interface FixturesListContainerProps {
    */
   compactControls?: boolean
 }
+
+/** A divider row's batch: nothing lands on it. */
+const EMPTY_BATCH: CellBatch = { count: 0, skipped: 0, resolutions: [] }
 
 /**
  * The spreadsheet view shared by Fixtures → List (flat, `grouped: false`),
@@ -395,6 +402,11 @@ export function FixturesListContainer({
 
   // Null outside the programmer, so the plain fixtures and groups lists are unaffected.
   const scope = useProgrammerScope()
+  // The editors' label line says where a value lands: *Local*, or the focused Look's name, which
+  // rides on the row store (it is the layer frame's `lookName`, so no second query). A null
+  // scope — the plain lists — writes to Local too: `useCellWriters` has no other live arm.
+  const lookStore = useLookRowStore()
+  const scopeLabel = scope?.kind === 'layer' ? (lookStore?.lookName ?? 'Layer') : 'Local'
   /**
    * The marquee's rows, read by the scope effect below without being one of its deps. A drag mints
    * a new rectangle many times a second and that must not re-run an effect keyed on the scope.
@@ -734,7 +746,7 @@ export function FixturesListContainer({
   // and in Output or on a focused template layer that something else is **read-only**.
   //
   // It used to be closed by accident. Under a marquee the row selection was empty, so the old
-  // `clearCells()` took `selectionEmpty` across its false→true edge and `useCellEditorOpen` shut
+  // `clearCells()` took `selectionEmpty` across its false→true edge and `useEditorOpen` shut
   // the panel. Converting to rows keeps that flag false, so the edge never comes — and an open
   // popover is not inert in a read-only scope: `disabled` reaches the cell's *trigger*, never the
   // fields inside an already-open panel, and `useCellWriters` has no Output or template arm, so a
@@ -745,7 +757,7 @@ export function FixturesListContainer({
   // panel is usually dismissed before the click that flips the scope is handled. But the provider
   // falls back to Output on a *broadcast* when another desk removes the focused layer
   // (`ProgrammerScopeProvider`), and there is no pointer event in that path at all. The precedent
-  // is `CellEditorSurface`'s double-click guard: an environment dismissal is not a rule this code
+  // is `EditorSurface`'s double-click guard: an environment dismissal is not a rule this code
   // states.
   //
   // Deliberately a **second** effect rather than folded into the one above, which must stay
@@ -852,11 +864,7 @@ export function FixturesListContainer({
         // a pending tilt tick (or vice versa) within the same window.
         const prev = pendingCommitRef.current
         if (prev && prev.commit.kind === 'position' && commit.kind === 'position') {
-          commit = {
-            kind: 'position',
-            pan: commit.pan ?? prev.commit.pan,
-            tilt: commit.tilt ?? prev.commit.tilt,
-          }
+          commit = mergePositionCommits(prev.commit, commit)
         }
         pendingCommitRef.current = { row, col, commit }
       }
@@ -868,36 +876,32 @@ export function FixturesListContainer({
   // re-probed on every render of the container.
   const rowFanColumns = useMemo(() => fanColumnsForTargets(selectedTargets), [selectedTargets])
 
-  // The marquee has to be counted, or the popover says "Applying to 1" while the commit writes
-  // six hundred. An upper bound: cross-column commits are shape-filtered at write time, so a
-  // colour edit over a Colour+Position marquee reaches fewer than this says. It's the same total
-  // for every selected cell (marquee count doesn't vary by row/col), so it's hoisted into one
-  // memo rather than recomputed per rendered cell — `batchCountFor` runs once per visible cell
-  // per render, and each recompute here was itself O(rows × columns).
-  const marqueeBatchCount = useMemo(
-    () =>
-      columnTargets.reduce(
-        (n, { col, targets }) =>
-          n + targets.reduce((m, t) => m + resolveTargetCells(t, col).length, 0),
-        0,
-      ),
+  // The marquee has to be counted, or the editor's label line says "1 head" while the commit
+  // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
+  // column X lands on column X's targets alone (`commitToCells` shape-filters the rest), so what an
+  // editor says about the batch — the count, the skipped heads, the ranges — must be that column's
+  // and not the marquee's total. Summing the columns said "1 head has no dimmer · skipped" in the
+  // Dimmer editor for a par the *Gobo* column skipped. Hoisted into one memo rather than recomputed
+  // per rendered cell — `batchFor` runs once per visible cell per render, and each recompute here
+  // is itself O(rows × columns).
+  const marqueeBatches = useMemo(
+    () => new Map(columnTargets.map(({ col, targets }) => [col, batchForTargets(targets, col)] as const)),
     [columnTargets],
   )
 
-  // Counts write RESOLUTIONS for the column, not rows — a collapsed 12-head
-  // bar's colour cell must warn "Applying to 12", matching what
-  // planBatchWrites will actually expand the commit into.
-  const batchCountFor = useCallback(
-    (row: Row, col: ColumnKey): number => {
-      if (row.kind === 'divider') return 0
-      if (cellSelection.isSelected(row.id, col)) {
-        return marqueeBatchCount
-      }
+  // Counts write RESOLUTIONS for the column, not rows — a collapsed 12-head bar's colour cell
+  // must say "12 heads", matching what planBatchWrites will actually expand the commit into; and
+  // carries the heads that resolve nothing, for the read-out's skip count (`CellBatch`).
+  const batchFor = useCallback(
+    (row: Row, col: ColumnKey): CellBatch => {
+      if (row.kind === 'divider') return EMPTY_BATCH
+      const marquee = cellSelection.isSelected(row.id, col) ? marqueeBatches.get(col) : undefined
+      if (marquee) return marquee
       const targets =
         selection.isSelected(row.id) ? selectedTargets : rowWriteTargets(row)
-      return targets.reduce((n, target) => n + resolveTargetCells(target, col).length, 0)
+      return batchForTargets(targets, col)
     },
-    [cellSelection, marqueeBatchCount, selection, selectedTargets],
+    [cellSelection, marqueeBatches, selection, selectedTargets],
   )
 
   // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
@@ -1318,7 +1322,8 @@ export function FixturesListContainer({
           onToggleExpand={handleToggleExpand}
           onBeginCellEdit={handleBeginCellEdit}
           onCellCommit={handleCellCommit}
-          batchCountFor={batchCountFor}
+          batchFor={batchFor}
+          scopeLabel={scopeLabel}
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}

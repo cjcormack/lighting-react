@@ -441,6 +441,7 @@ export function CueSheet({
     copy,
     cellDisabled,
     onRefused: refuseKey,
+    noun: 'cue',
   })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
 
@@ -614,6 +615,7 @@ export function CueSheet({
                   ) : (
                     <TextCell
                       {...firstColumnCellProps<string>({
+                        noun: 'cue',
                         value: row.cue.cueNumber ?? '',
                         label: 'Cue number',
                         onCommit: (next) => {

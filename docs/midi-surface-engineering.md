@@ -255,7 +255,7 @@ hue, so a hue binding reads exactly as it always did.
 
 ## The library's sections and family groups
 
-The list is one sticky `BuskLabel` per kind that has rows, in kind-row order — **Desk · Groups ·
+The list is one sticky `EditorLabel` per kind that has rows, in kind-row order — **Desk · Groups ·
 Fixtures · Looks · Cues**, Desk moved to the front of both because the Selection row is what a
 selection-driven desk reaches for first and it used to sit under every fixture. Under a kind filter
 the one section shows without its heading. Inside a row the chips are grouped by family with a

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEventHandler, type ReactNode, type Ref } from 'react'
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Slider } from '@/components/ui/slider'
-import { numericSeed } from '@/components/sheet/cells/useCellEditorKeyboard'
+import { numericSeed } from '@/components/editor/useEditorKeyboard'
 import { parseCssRgb } from '@/lib/colourMath'
 import { cn } from '@/lib/utils'
 import { ChannelNumberInput } from './ChannelNumberInput'
@@ -72,7 +72,7 @@ export interface ColourPickerBodyProps {
    * while showing passes `true`.
    */
   open: boolean
-  /** The host's keyboard wiring (`useCellEditorKeyboard`), when it has one. */
+  /** The host's keyboard wiring (`useEditorKeyboard`), when it has one. */
   contentRef?: Ref<HTMLDivElement>
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>
 }

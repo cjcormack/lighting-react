@@ -67,7 +67,7 @@ import {
   type RigTileAddress,
 } from '@/lib/buskRig'
 import { RIG_DROP_DEPTH, rigDragData, type RigDropData, type RigRowDragData } from './buskDnd'
-import { BuskLabel } from './BuskLabel'
+import { EditorLabel } from '../editor/EditorLabel'
 import { NameField } from './NameField'
 import { RigEditProvider, useRigEdit } from './RigEditProvider'
 import { PAGE_MIN_HEIGHT_PX, RIG_MIN_HEIGHT_PX, RigHandle, clampRigHeight, lineEdges } from './RigHandle'
@@ -604,7 +604,7 @@ function RigBandBody({
         // pill, the desk chip, the verbs menu (or edit mode's reset) and the host's controls;
         // `flex-wrap` as the last resort there, since the row chip and the summary are what give.
         <div data-rig-row="compact" className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
-          <BuskLabel>Rig</BuskLabel>
+          <EditorLabel>Rig</EditorLabel>
           {!everyRow && effective.rows.length > 1 && (
             <RowChip rows={effective.rows} index={compactIndex} onSelect={setCompactRow} />
           )}
@@ -640,7 +640,7 @@ function RigBandBody({
         // at exactly one place.
         <div data-rig-row="desk" className={cn('mb-2 flex min-h-7 items-center gap-x-2 gap-y-1', TWO_ROWS_CLASS)}>
           <div data-rig-row-verbs className={cn('flex shrink-0 items-center gap-2', FIRST_ROW_CLASS)}>
-            <BuskLabel className={RIG_LABEL_CLASS}>Rig</BuskLabel>
+            <EditorLabel className={RIG_LABEL_CLASS}>Rig</EditorLabel>
             {!editing && (
               <>
                 <CellsMenu onSubselect={onSubselect} />

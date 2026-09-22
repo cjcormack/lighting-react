@@ -7,7 +7,7 @@ import programmerPageSrc from './routes/ProgrammerPage.tsx?raw'
 import layoutSrc from './Layout.tsx?raw'
 import programmerGridSrc from './components/programmer/ProgrammerGrid.tsx?raw'
 import selectionBarSrc from './components/sheet/SelectionBar.tsx?raw'
-import cellEditorSurfaceSrc from './components/sheet/cells/CellEditorSurface.tsx?raw'
+import cellEditorSurfaceSrc from './components/editor/EditorSurface.tsx?raw'
 import buskWindowSrc from './lib/buskWindow.ts?raw'
 import buskingViewSrc from './components/busking/BuskingView.tsx?raw'
 
@@ -64,7 +64,7 @@ describe('the short-viewport fold', () => {
     // than throwing, so a typo here is a fold that silently never happens. Three sites hand it a
     // string: `ProgrammerBody`, which moves rows A and B; `SelectionBar` (the sheet kit's since the
     // desk-findings' group B), which decides whether row C is permanently in the flow
-    // (`selectionBandState`); and `CellEditorSurface`, which swaps a cell editor's bottom sheet
+    // (`selectionBandState`); and `EditorSurface`, which swaps a cell editor's bottom sheet
     // for a right-hand one, because a short viewport has no vertical room to give a bottom sheet.
     // The test above already holds `ProgrammerGrid`'s class-name arms to one *number*; this holds
     // the three strings to one *spelling*, which the number check cannot see.
@@ -81,7 +81,7 @@ describe('the short-viewport fold', () => {
   })
 
   it('spells the cramped fold the same way at both sites that ask it', () => {
-    // 750 is the colour editor's compact fold (`CellEditorSurface`), and the busk view's
+    // 750 is the colour editor's compact fold (`EditorSurface`), and the busk view's
     // two-rows-not-three default (`buskWindow`). Neither file can sit in `SITES` — each carries a
     // second `max-height` — so the two copies are held to one spelling here instead.
     for (const src of [cellEditorSurfaceSrc, buskWindowSrc]) {

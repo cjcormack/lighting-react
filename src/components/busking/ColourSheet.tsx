@@ -9,8 +9,8 @@ import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
 import { useTemplatePress } from '@/components/programmer/useTemplatePress'
-import { useCellEditorCramped } from '@/components/sheet/cells/CellEditorSurface'
-import { useLivePush } from '@/hooks/useLivePush'
+import { useEditorCramped } from '@/components/editor/EditorSurface'
+import { useLivePush } from '@/components/editor/useLivePush'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { effectiveRig } from '@/lib/buskRig'
@@ -32,7 +32,7 @@ import { usePatchListQuery } from '@/store/patches'
 import { useTemplateListQuery } from '@/store/templates'
 import type { Fixture, ColourPropertyDescriptor } from '@/store/fixtures'
 import { templateSwatch } from './padFace'
-import { BuskLabel } from './BuskLabel'
+import { EditorLabel } from '../editor/EditorLabel'
 import { lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskingTypes'
 
 /**
@@ -280,7 +280,7 @@ const sameChannels = (a: ColourChannels, b: ColourChannels) =>
   a.r === b.r && a.g === b.g && a.b === b.b && a.w === b.w && a.a === b.a && a.uv === b.uv
 
 export function ColourSheet({ projectId, selectedTargets, families, onSpread, compact }: ColourSheetProps) {
-  const cramped = useCellEditorCramped()
+  const cramped = useEditorCramped()
   const isCompact = compact ?? cramped
   const selected = useMemo(() => [...selectedTargets.values()], [selectedTargets])
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
@@ -495,7 +495,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
         </div>
 
         <div className="border-t px-3 pt-2 pb-2">
-          <BuskLabel>Recent from templates</BuskLabel>
+          <EditorLabel>Recent from templates</EditorLabel>
           {recent.length === 0 ? (
             <p className="mt-1 text-[10px] text-muted-foreground">Colour templates you press show up here</p>
           ) : (

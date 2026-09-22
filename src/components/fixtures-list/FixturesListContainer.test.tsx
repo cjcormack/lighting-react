@@ -313,7 +313,7 @@ describe('FixturesListContainer across a programmer scope switch', () => {
  *
  * This used to be closed by accident. Under a marquee the row selection is empty, so the old
  * `clearCells()` took `selectionEmpty` (`selection.count === 0 && cellCount === 0`) across its
- * false→true edge and `useCellEditorOpen` shut the panel. Converting the marquee to rows keeps
+ * false→true edge and `useEditorOpen` shut the panel. Converting the marquee to rows keeps
  * that flag false, so the edge never comes — and an open panel is *not* inert in a read-only
  * scope: `disabled` reaches the cell's trigger, never the fields inside an open popover, and
  * `useCellWriters` has no Output or template arm, so a commit falls through to a live write into

@@ -39,13 +39,13 @@ import type { CellSelection } from '../sheet/useCellSelection'
 
 /** This grid's cell, over its closed column vocabulary. */
 type FixtureCellRef = CellRef<ColumnKey>
-import type { CellClickBehaviour } from '../sheet/cells/CellEditorSurface'
+import type { CellClickBehaviour } from '../editor/EditorSurface'
 import { SliderCell } from './cells/SliderCell'
 import { ColourCell } from './cells/ColourCell'
 import { PositionCell } from './cells/PositionCell'
 import { SettingCell } from './cells/SettingCell'
 import type { ColumnKey } from './columns'
-import type { CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
+import type { CellBatch, CellCommit, FixtureRow, GroupRow, InfoRow, Row, RowId } from './rowModel'
 import type { RowCell } from './useRowValues'
 import type { CellOwnership } from './useRowOwnership'
 
@@ -68,10 +68,18 @@ export interface FixturesTableProps {
    */
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
-  /** How many write targets a commit from this row's cell in this column
-   *  would reach (multi-head fixtures expand per element) — for the editor
-   *  popover's "Applying to N" header. */
-  batchCountFor: (row: Row, col: ColumnKey) => number
+  /**
+   * What a commit from this row's cell in this column lands on (multi-head fixtures expand per
+   * element) — the count, the skipped heads and their resolutions — for the editor's label line
+   * and read-out. See `CellBatch`.
+   */
+  batchFor: (row: Row, col: ColumnKey) => CellBatch
+  /**
+   * Where an edit lands, for the editors' label line: *Local*, or the focused Look's name in layer
+   * scope. The container reads the scope and the Look store once and hands the word down, so no
+   * row subscribes to either for it.
+   */
+  scopeLabel: string
   /** Open the detail sheet for a row (group → group sheet, fixture/element →
    *  fixture sheet). */
   onShowInfo: (row: InfoRow) => void
@@ -86,7 +94,7 @@ export interface FixturesTableProps {
   showOwnership?: boolean
   /**
    * Neither a row nor a cell is selected any more. Any open cell editor closes on the crossing
-   * into this — see `useCellEditorOpen`, which owns the rule and the reason.
+   * into this — see `useEditorOpen`, which owns the rule and the reason.
    *
    * Passed as a plain boolean rather than as a one-shot the way `autoOpenCell` is: it changes only
    * on the 0 ↔ non-0 boundary, so the rows' memo holds through every ordinary selection change,
@@ -138,7 +146,7 @@ export interface FixturesTableProps {
    * Only meaningful with [cellSelection], which is what makes a click select rather than open:
    * every editor on that grid is then opened by Set (or by its key), and anchoring at the cell
    * put the panel wherever in the grid the first selected cell happened to be. See `anchorRef` on
-   * `CellEditorSurface` for the fallback when the button is not mounted.
+   * `EditorSurface` for the fallback when the button is not mounted.
    */
   editorAnchorRef?: React.RefObject<HTMLElement | null>
   /**
@@ -177,7 +185,8 @@ export function FixturesTable({
   onToggleExpand,
   onBeginCellEdit,
   onCellCommit,
-  batchCountFor,
+  batchFor,
+  scopeLabel,
   onShowInfo,
   scrollToRowId,
   onScrolledToRow,
@@ -435,7 +444,8 @@ export function FixturesTable({
                     onToggleExpand={onToggleExpand}
                     onBeginCellEdit={onBeginCellEdit}
                     onCellCommit={onCellCommit}
-                    batchCountFor={batchCountFor}
+                    batchFor={batchFor}
+                    scopeLabel={scopeLabel}
                     onShowInfo={onShowInfo}
                     showOwnership={showOwnership}
                     cellSelection={cellSelection}
@@ -527,7 +537,13 @@ interface RowViewProps {
   onToggleExpand: (row: GroupRow | FixtureRow) => void
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
-  batchCountFor: (row: Row, col: ColumnKey) => number
+  batchFor: (row: Row, col: ColumnKey) => CellBatch
+  /**
+   * Where an edit lands, for the editors' label line: *Local*, or the focused Look's name in layer
+   * scope. Read once by the table — the scope and the Look store — and passed down rather than read
+   * per row, like `deskConnected`.
+   */
+  scopeLabel: string
   onShowInfo: (row: InfoRow) => void
   showOwnership: boolean
   /** Required, like the table's own — `RowView` has one caller and it always passes it. */
@@ -559,7 +575,7 @@ interface RowViewProps {
    * time — and null on every other row, so the memo holds for the rest of the grid.
    */
   autoCloseCol: ColumnKey | null
-  /** Nothing is selected — any open cell editor in this row must go. See `useCellEditorOpen`. */
+  /** Nothing is selected — any open cell editor in this row must go. See `useEditorOpen`. */
   selectionEmpty?: boolean
   /** Where a requested editor opens. See `FixturesTableProps`. */
   editorAnchorRef?: React.RefObject<HTMLElement | null>
@@ -609,7 +625,8 @@ const RowView = React.memo(function RowView({
   onToggleExpand,
   onBeginCellEdit,
   onCellCommit,
-  batchCountFor,
+  batchFor,
+  scopeLabel,
   onShowInfo,
   showOwnership,
   cellSelection,
@@ -955,7 +972,8 @@ const RowView = React.memo(function RowView({
               // Not `state == null`: a divider or a scope with no opinion is not the same as a
               // scope that has one and says "nothing here".
               placeholder={state !== undefined && state.value === undefined}
-              batchCount={batchCountFor(row, col)}
+              batch={batchFor(row, col)}
+              scopeLabel={scopeLabel}
               // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
               // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
               // otherwise walk straight past the guard and open an editor whose commit is dropped.
@@ -1044,7 +1062,8 @@ function PropertyCell({
   label,
   value,
   placeholder,
-  batchCount,
+  batch,
+  scopeLabel,
   disabled,
   autoOpen,
   autoClose,
@@ -1061,7 +1080,7 @@ function PropertyCell({
    * The column's display name. Only the *sheet* form of a cell editor shows it — a popover has no
    * header — but it is threaded from here rather than derived in the cells, because a cell is
    * given a `CellResolution` and not a `ColumnKey`, and one `slider` cell is a dimmer where the
-   * next is an iris. See `CellEditorSurface`.
+   * next is an iris. See `EditorSurface`.
    */
   label: string
   /**
@@ -1071,7 +1090,10 @@ function PropertyCell({
    */
   value: NonNullable<ReturnType<typeof useRowValues>[ColumnKey]>
   placeholder?: boolean
-  batchCount: number
+  /** What a commit lands on — see `CellBatch`. */
+  batch: CellBatch
+  /** *Local*, or the focused Look's name — see `FixturesTableProps`. */
+  scopeLabel: string
   /** The desk is unreachable, so an edit here would go nowhere. */
   disabled: boolean
   /**
@@ -1080,7 +1102,7 @@ function PropertyCell({
    *
    * Threaded to all four rather than solved once above them because the popover is each editor's
    * own — and because `CueValueGrid` mounts these same four components with no table over them.
-   * The rule itself is shared, in `useCellEditorOpen`. A [disabled] cell ignores it, so Output
+   * The rule itself is shared, in `useEditorOpen`. A [disabled] cell ignores it, so Output
    * scope, a focused template layer and an unreachable desk stay read-only through this door as
    * much as through the pointer.
    *
@@ -1094,12 +1116,12 @@ function PropertyCell({
   /**
    * That open came from the bar's **Set**, so the editor is anchored at that button. Enter and a
    * typed character leave it false: those are made at the selection, so the panel opens beside the
-   * cell. See `useCellEditorOpen`.
+   * cell. See `useEditorOpen`.
    */
   anchorAtButton: boolean
   /**
    * That open came from a character typed at the grid, which the editor seeds its first field
-   * with — see `useCellEditorKeyboard`. `''` for a bare Enter or Set; null for a click.
+   * with — see `useEditorKeyboard`. `''` for a bare Enter or Set; null for a click.
    */
   keyboardSeed: string | null
   /** Nothing is selected, so an open editor here has lost what it was editing for. */
@@ -1114,7 +1136,8 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           label={label}
-          batchCount={batchCount}
+          batch={batch}
+          scopeLabel={scopeLabel}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
@@ -1134,7 +1157,7 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           label={label}
-          batchCount={batchCount}
+          batchCount={batch.count}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
@@ -1154,7 +1177,8 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           label={label}
-          batchCount={batchCount}
+          batch={batch}
+          scopeLabel={scopeLabel}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
@@ -1174,7 +1198,8 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           label={label}
-          batchCount={batchCount}
+          batch={batch}
+          scopeLabel={scopeLabel}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}

@@ -6,7 +6,7 @@ import spreadSheetSrc from './SpreadSheet.tsx?raw'
 import type { BuskingTarget } from './buskingTypes'
 import type { Fixture } from '@/store/fixtures'
 import type { SpreadRequest, SpreadResponse } from '@/store/programmerOps'
-import { resetCellEditorSurfaceMedia } from '@/components/sheet/cells/CellEditorSurface'
+import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 /**
  * The Spread tab (busk-further plan D9, D10): the request per family — a `TemplateIntent` per
@@ -132,7 +132,7 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 
 describe('the request', () => {

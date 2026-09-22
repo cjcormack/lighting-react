@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CELL_EDITOR_SHEET_QUERY,
-  CellEditorSurface,
-  cellEditorIsOpen,
-  resetCellEditorSurfaceMedia,
-} from './CellEditorSurface'
-import { openCellEditorTarget } from '../cellEntry'
-import { useCellEditorOpen } from './useCellEditorOpen'
+  EditorSurface,
+  editorIsOpen,
+  resetEditorSurfaceMedia,
+} from './EditorSurface'
+import { openCellEditorTarget } from '../sheet/cellEntry'
+import { useEditorOpen } from './useEditorOpen'
 
 /**
  * Which of the three shapes a cell editor takes, and the listeners behind the decision.
@@ -48,7 +48,7 @@ function stubMatchMedia({ narrow, short }: { narrow: boolean; short: boolean }):
 
 function Surface({ title = 'Dimmer' }: { title?: string }) {
   return (
-    <CellEditorSurface
+    <EditorSurface
       open
       onOpenChange={() => {}}
       title={title}
@@ -56,7 +56,7 @@ function Surface({ title = 'Dimmer' }: { title?: string }) {
       trigger={<button type="button">cell</button>}
     >
       <p>editor body</p>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 }
 
@@ -66,12 +66,12 @@ function form(): string | null {
 }
 
 beforeEach(() => {
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  resetCellEditorSurfaceMedia()
+  resetEditorSurfaceMedia()
 })
 
 /**
@@ -81,13 +81,13 @@ afterEach(() => {
  */
 function SelectOnlySurface({ withAnchor = true }: { withAnchor?: boolean }) {
   // **The real hook, not a `useState` standing in for it.** Whether the panel is anchored at the
-  // Set button is `useCellEditorOpen`'s latched `atButton`, and the cells forward the ref only
+  // Set button is `useEditorOpen`'s latched `atButton`, and the cells forward the ref only
   // while it holds — so a harness that kept its own boolean would put every test on the
   // Set-anchored branch, including the ones about gestures that never take it, and would go on
   // passing if the latch itself regressed. `autoOpen` is the one-shot the table raises for Set.
   const [setPressed, setSetPressed] = useState(false)
   const anchorRef = useRef<HTMLButtonElement | null>(null)
-  const { isOpen, setOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, atButton } = useEditorOpen({
     autoOpen: setPressed,
     anchorAtButton: true,
   })
@@ -96,7 +96,7 @@ function SelectOnlySurface({ withAnchor = true }: { withAnchor?: boolean }) {
       <button type="button" ref={anchorRef} onClick={() => setSetPressed(true)}>
         Set
       </button>
-      <CellEditorSurface
+      <EditorSurface
         open={isOpen}
         onOpenChange={setOpen}
         title="Dimmer"
@@ -111,7 +111,7 @@ function SelectOnlySurface({ withAnchor = true }: { withAnchor?: boolean }) {
         }
       >
         <p>editor body</p>
-      </CellEditorSurface>
+      </EditorSurface>
     </>
   )
 }
@@ -122,7 +122,7 @@ const selected = vi.fn()
 function ClickOpensSurface() {
   const [open, setOpen] = useState(false)
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={open}
       onOpenChange={setOpen}
       title="Dimmer"
@@ -130,11 +130,11 @@ function ClickOpensSurface() {
       trigger={<button type="button">cell</button>}
     >
       <p>editor body</p>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 }
 
-describe('CellEditorSurface', () => {
+describe('EditorSurface', () => {
   it('floats a popover at desk sizes', () => {
     stubMatchMedia({ narrow: false, short: false })
     render(<Surface />)
@@ -202,7 +202,7 @@ describe('CellEditorSurface', () => {
   })
 })
 
-describe('CellEditorSurface click behaviour', () => {
+describe('EditorSurface click behaviour', () => {
   beforeEach(() => {
     selected.mockClear()
     stubMatchMedia({ narrow: false, short: false })
@@ -250,7 +250,7 @@ describe('CellEditorSurface click behaviour', () => {
     function Harness() {
       const [open, setOpen] = useState(false)
       return (
-        <CellEditorSurface
+        <EditorSurface
           open={open}
           onOpenChange={(next) => {
             opens.push(next)
@@ -262,7 +262,7 @@ describe('CellEditorSurface click behaviour', () => {
           trigger={<button type="button">cell</button>}
         >
           <p>editor body</p>
-        </CellEditorSurface>
+        </EditorSurface>
       )
     }
     render(<Harness />)
@@ -353,7 +353,7 @@ describe('CellEditorSurface click behaviour', () => {
   })
 })
 
-describe('cellEditorIsOpen', () => {
+describe('editorIsOpen', () => {
   // The grid's window-level Escape asks this instead of asking where the key was pressed, because
   // Radix closes an open editor from a document listener wherever focus is — so the two questions
   // disagree exactly when focus has been left somewhere unexpected, which is what pressing Set
@@ -361,16 +361,16 @@ describe('cellEditorIsOpen', () => {
   // cell.
   it('is false with nothing open and true while an editor is on screen', () => {
     stubMatchMedia({ narrow: false, short: false })
-    expect(cellEditorIsOpen()).toBe(false)
+    expect(editorIsOpen()).toBe(false)
 
     const { unmount } = render(<SelectOnlySurface />)
-    expect(cellEditorIsOpen()).toBe(false)
+    expect(editorIsOpen()).toBe(false)
 
     fireEvent.click(screen.getByText('Set'))
-    expect(cellEditorIsOpen()).toBe(true)
+    expect(editorIsOpen()).toBe(true)
 
     unmount()
-    expect(cellEditorIsOpen()).toBe(false)
+    expect(editorIsOpen()).toBe(false)
   })
 
   it('sees a sheet as readily as a popover — Escape must behave in all three forms', () => {
@@ -378,7 +378,7 @@ describe('cellEditorIsOpen', () => {
     render(<SelectOnlySurface />)
     fireEvent.click(screen.getByText('Set'))
     expect(form()).toBe('bottom-sheet')
-    expect(cellEditorIsOpen()).toBe(true)
+    expect(editorIsOpen()).toBe(true)
   })
 })
 
@@ -388,7 +388,7 @@ describe('cellEditorIsOpen', () => {
  * portalled to the screen edge (either sheet). The selection bar's Set reads it to decide which
  * editor to shut, so it has to be there in **all three** forms, not just the popover.
  */
-describe('CellEditorSurface trigger state', () => {
+describe('EditorSurface trigger state', () => {
   function cellGrid(children: React.ReactNode) {
     return (
       <div data-row-id="fixture:a">
@@ -404,7 +404,7 @@ describe('CellEditorSurface trigger state', () => {
         <button type="button" ref={anchorRef}>
           Set
         </button>
-        <CellEditorSurface
+        <EditorSurface
           open
           onOpenChange={() => {}}
           title="Dimmer"
@@ -414,7 +414,7 @@ describe('CellEditorSurface trigger state', () => {
           trigger={<button type="button">cell</button>}
         >
           <p>editor body</p>
-        </CellEditorSurface>
+        </EditorSurface>
       </>,
     )
   }
@@ -428,7 +428,7 @@ describe('CellEditorSurface trigger state', () => {
       { narrow: true, short: false },
       { narrow: false, short: true },
     ]) {
-      resetCellEditorSurfaceMedia()
+      resetEditorSurfaceMedia()
       stubMatchMedia(media)
       const { unmount } = render(<SurfaceInCell />)
       expect(openCellEditorTarget()).toEqual({ rowId: 'fixture:a', col: 'dimmer' })

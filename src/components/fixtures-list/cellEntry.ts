@@ -23,7 +23,7 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  * improved at a time.
  *
  * Now there is one. Enter opens the ordinary cell editor at the first selected cell, with its
- * first field focused (`useCellEditorKeyboard`), and a character typed at the grid arrives in that
+ * first field focused (`useEditorKeyboard`), and a character typed at the grid arrives in that
  * field as its first keystroke.
  *
  * **The grammar went with the field, and three of its words went for good.** A hex colour typed as

@@ -7,6 +7,7 @@ import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
 import { EMITTER_PROPERTIES } from '../../lib/templateIntent'
+import { degreesToDmx } from '../../lib/axisDegrees'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -201,8 +202,16 @@ export type CellCommit =
   | { kind: 'colour'; r: number; g: number; b: number; w?: number; a?: number; uv?: number }
   /** Position commits are per-axis: an omitted axis is left untouched, so a
    *  pan nudge on a batch selection doesn't overwrite every target's tilt
-   *  with one row's aggregate. */
-  | { kind: 'position'; pan?: number; tilt?: number }
+   *  with one row's aggregate.
+   *
+   *  An axis is said **either** as a byte (`pan`) **or** in travel degrees
+   *  (`panDeg`), never both. Degrees are the position editor's unit on a head
+   *  that annotates its range (editor-kit plan D14), and they are resolved to
+   *  each target's own byte in `clampCommitToResolution` — the one place with
+   *  the target descriptor in hand — because 270° is byte 128 on a 540° mover
+   *  and byte 109 on a 630° one. A target whose axis carries no annotation
+   *  cannot take a degree, and that axis is left untouched on it. */
+  | { kind: 'position'; pan?: number; tilt?: number; panDeg?: number; tiltDeg?: number }
   | { kind: 'setting'; level: number }
 
 /**
@@ -545,14 +554,80 @@ export function clampCommitToResolution(
     return { kind: 'slider', value: clamp(commit.value, min, max) }
   }
   if (commit.kind === 'position' && resolution.kind === 'position') {
+    // A degree resolves through the target's own annotation, and only there: the editor only
+    // sends degrees when every head in its batch annotates, so a null here is a head the editor
+    // never saw — and leaving the axis alone is safer than inventing a byte for it.
+    const panFromDeg =
+      commit.panDeg === undefined || resolution.panProperty == null
+        ? undefined
+        : (degreesToDmx(commit.panDeg, resolution.panProperty) ?? undefined)
+    const tiltFromDeg =
+      commit.tiltDeg === undefined || resolution.tiltProperty == null
+        ? undefined
+        : (degreesToDmx(commit.tiltDeg, resolution.tiltProperty) ?? undefined)
+    const pan = commit.pan ?? panFromDeg
+    const tilt = commit.tilt ?? tiltFromDeg
     return {
       kind: 'position',
-      pan: commit.pan === undefined ? undefined : clamp(commit.pan, resolution.panMin, resolution.panMax),
-      tilt:
-        commit.tilt === undefined ? undefined : clamp(commit.tilt, resolution.tiltMin, resolution.tiltMax),
+      pan: pan === undefined ? undefined : clamp(pan, resolution.panMin, resolution.panMax),
+      tilt: tilt === undefined ? undefined : clamp(tilt, resolution.tiltMin, resolution.tiltMax),
     }
   }
   return commit
+}
+
+/**
+ * What one cell editor's commit will land on — the marquee's heads for a cell inside it, the row's
+ * own targets otherwise — as the editor needs to read it (editor-kit plan D8, D13, D14).
+ *
+ * [count] is resolutions, not rows: a collapsed 12-head bar's colour cell lands on twelve, which is
+ * what `planBatchWrites` expands the commit into. [skipped] is the targets that resolve nothing for
+ * the column — a marquee is geometric and sweeps the par's empty Gobo cell along with the spot's —
+ * and is what the read-out says (*2 heads have no gobo · skipped*). [resolutions] is what the
+ * editor reads its ranges and annotations off: whether every head's dimmer is 0–255, whether every
+ * mover annotates its pan in degrees.
+ */
+export interface CellBatch {
+  count: number
+  skipped: number
+  resolutions: readonly NonNullable<CellResolution>[]
+}
+
+/** One column's [CellBatch] over its targets — the container keeps one per marquee column. */
+export function batchForTargets(targets: readonly WriteTarget[], col: ColumnKey): CellBatch {
+  const resolutions: NonNullable<CellResolution>[] = []
+  let skipped = 0
+  for (const target of targets) {
+    const cells = resolveTargetCells(target, col)
+    if (cells.length === 0) skipped += 1
+    for (const cell of cells) resolutions.push(cell.resolution)
+  }
+  return { count: resolutions.length, skipped, resolutions }
+}
+
+/**
+ * Two position commits inside one throttle window, as one: the later commit's axis wins where it
+ * says one, the earlier one's is kept where it does not — so a pan tick does not discard a pending
+ * tilt tick (or vice versa). **Per axis, one unit**: an axis said in degrees clears the byte the
+ * pending commit carried for it, and a byte clears the degree, because `clampCommitToResolution`
+ * reads the byte first and a stale byte beside a fresh degree would win. Before this existed the
+ * container's merge copied `pan` / `tilt` alone and the degree arm's third commit in a window
+ * became an empty write (editor-kit session 1 review, finding 1).
+ */
+export function mergePositionCommits(
+  prev: Extract<CellCommit, { kind: 'position' }>,
+  next: Extract<CellCommit, { kind: 'position' }>,
+): Extract<CellCommit, { kind: 'position' }> {
+  const out: Extract<CellCommit, { kind: 'position' }> = { kind: 'position' }
+  if (next.pan !== undefined) out.pan = next.pan
+  else if (next.panDeg !== undefined) out.panDeg = next.panDeg
+  else if (prev.pan !== undefined) out.pan = prev.pan
+  else if (prev.panDeg !== undefined) out.panDeg = prev.panDeg
+  if (next.tilt !== undefined) out.tilt = next.tilt
+  else if (next.tiltDeg !== undefined) out.tiltDeg = next.tiltDeg
+  else if (prev.tilt !== undefined) out.tilt = prev.tilt
+  else if (prev.tiltDeg !== undefined) out.tiltDeg = prev.tiltDeg
+  return out
 }
 
 export interface TargetResolution {

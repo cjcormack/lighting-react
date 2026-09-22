@@ -10,6 +10,7 @@ import {
   expandSelectionToTargets,
   fixtureSelectParam,
   groupSelectParam,
+  mergePositionCommits,
   parseSelectParam,
   planBatchWrites,
   targetFamilies,
@@ -461,6 +462,61 @@ describe('batch write planning', () => {
       kind: 'position',
       pan: 540,
       tilt: undefined,
+    })
+  })
+
+  it('resolves a degree commit to each head\'s own byte, and leaves a silent head\'s axis alone', () => {
+    // 270° is byte 128 on a 540° mover (127.5 rounded up) and byte 109 on a 630° one (109.3).
+    const mover540 = makeFixture('m540', [
+      sliderProp('pan', 'pan', chan(20), { axis: 'PAN', degMin: 0, degMax: 540 }),
+      sliderProp('tilt', 'tilt', chan(21), { axis: 'TILT', degMin: 0, degMax: 270 }),
+    ])
+    const mover630 = makeFixture('m630', [
+      sliderProp('pan', 'pan', chan(22), { axis: 'PAN', degMin: 0, degMax: 630 }),
+      sliderProp('tilt', 'tilt', chan(23), { axis: 'TILT', degMin: 0, degMax: 270 }),
+    ])
+    const silent = makeFixture('silent', [
+      sliderProp('pan', 'pan', chan(24), { axis: 'PAN' }),
+      sliderProp('tilt', 'tilt', chan(25), { axis: 'TILT' }),
+    ])
+    const planned = planBatchWrites([mover540, mover630, silent], 'position', { kind: 'position', panDeg: 270 })
+    expect(planned.map((p) => [p.target.key, p.commit])).toEqual([
+      ['m540', { kind: 'position', pan: 128, tilt: undefined }],
+      ['m630', { kind: 'position', pan: 109, tilt: undefined }],
+      ['silent', { kind: 'position', pan: undefined, tilt: undefined }],
+    ])
+    // A byte beside a degree wins: the byte is what the editor said, the degree is not sent then.
+    const both = planBatchWrites([mover540], 'position', { kind: 'position', pan: 10, panDeg: 270 })
+    expect(both[0].commit).toEqual({ kind: 'position', pan: 10, tilt: undefined })
+  })
+
+  it('merges two position commits in one window per axis, the later one winning and one unit per axis', () => {
+    // A pan degree tick then a tilt degree tick: both survive.
+    expect(mergePositionCommits({ kind: 'position', panDeg: 270 }, { kind: 'position', tiltDeg: 90 })).toEqual({
+      kind: 'position',
+      panDeg: 270,
+      tiltDeg: 90,
+    })
+    // The pad writes both; a later pan-only tick replaces pan and keeps the pending tilt.
+    expect(mergePositionCommits({ kind: 'position', panDeg: 100, tiltDeg: 50 }, { kind: 'position', panDeg: 120 })).toEqual({
+      kind: 'position',
+      panDeg: 120,
+      tiltDeg: 50,
+    })
+    // A byte after a degree on the same axis clears the degree, and vice versa.
+    expect(mergePositionCommits({ kind: 'position', panDeg: 270 }, { kind: 'position', pan: 10 })).toEqual({
+      kind: 'position',
+      pan: 10,
+    })
+    expect(mergePositionCommits({ kind: 'position', pan: 10 }, { kind: 'position', panDeg: 270 })).toEqual({
+      kind: 'position',
+      panDeg: 270,
+    })
+    // Bytes alone merge as they always did.
+    expect(mergePositionCommits({ kind: 'position', pan: 1 }, { kind: 'position', tilt: 2 })).toEqual({
+      kind: 'position',
+      pan: 1,
+      tilt: 2,
     })
   })
 })

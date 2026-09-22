@@ -2,10 +2,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { CellEditorSurface } from './CellEditorSurface'
-import { useCellEditorKeyboard } from './useCellEditorKeyboard'
-import { useCellEditorOpen } from './useCellEditorOpen'
-import { LandingLines } from './LandingLines'
+import { EditorSurface } from '../../editor/EditorSurface'
+import { EditorFooter } from '../../editor/EditorFooter'
+import { EditorLabel } from '../../editor/EditorLabel'
+import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { EditorReadout } from '../../editor/EditorReadout'
+import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 import type { SheetCellProps, SheetRow } from '../sheetModel'
 
 /** What a typed draft would do to the whole batch — [AddressCell]'s `AddressLanding` in text form. */
@@ -46,11 +49,15 @@ export interface TextCellProps extends SheetCellProps<string> {
  * drive a live channel the operator judges by eye, and a half-typed name is not a value anyone
  * wants written. The draft is seeded from the value on every open and from the character typed
  * at the grid when the keyboard opened it; Escape closes the surface and the draft dies with it.
+ *
+ * Because it writes on Apply, it is one of the two editors that draw an `EditorFooter`
+ * (editor-kit plan D8, D9); the landing lines are the read-out's multi-line arm. The popover is
+ * 288px (D17). `w-72`, measured in the app at 288px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
 export const TextCell = memo(function TextCell({
   value,
   label,
-  batchCount,
+  batchLabel,
   batchRows,
   disabled,
   autoOpen,
@@ -73,7 +80,7 @@ export const TextCell = memo(function TextCell({
   valueRef.current = value
   const reset = useCallback(() => setDraft(valueRef.current), [])
 
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
@@ -107,18 +114,18 @@ export const TextCell = memo(function TextCell({
     return true
   }, [error, onCommit, trimmed])
 
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     onDone: () => {
       if (commit()) setOpen(false)
     },
   })
 
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
       title={label}
-      contentClassName="w-64"
+      contentClassName="w-72"
       onOpenAutoFocus={onOpenAutoFocus}
       triggerOpens={false}
       anchorRef={atButton ? editorAnchorRef : undefined}
@@ -137,27 +144,26 @@ export const TextCell = memo(function TextCell({
         </button>
       }
     >
-      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
-        {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} rows</p>
-        )}
-        <Input
-          type="text"
-          aria-label={label}
-          placeholder={placeholder}
-          spellCheck={false}
-          autoComplete="off"
-          className={cn('h-8', mono && 'font-mono tabular-nums')}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        {landing && landing.lines.length > 0 && <LandingLines lines={landing.lines} error={error} />}
-        {error && (landing?.lines.length ?? 0) === 0 && (
-          <p className="text-xs text-destructive">{error}</p>
-        )}
-        <div className="flex justify-end">
+      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-2">
+        <EditorLabelLine subject={batchLabel} column={label} />
+        <div className="space-y-1">
+          <EditorLabel>{label}</EditorLabel>
+          <Input
+            type="text"
+            aria-label={label}
+            placeholder={placeholder}
+            spellCheck={false}
+            autoComplete="off"
+            className={cn('h-7 px-2 text-xs', mono && 'font-mono tabular-nums')}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <EditorReadout lines={landing?.lines} error={error} />
+        <EditorFooter>
           <Button
             size="sm"
+            className="h-7 text-xs"
             disabled={error != null}
             onClick={() => {
               if (commit()) setOpen(false)
@@ -165,8 +171,8 @@ export const TextCell = memo(function TextCell({
           >
             Apply
           </Button>
-        </div>
+        </EditorFooter>
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 })

@@ -5,7 +5,7 @@ import { BlindPill } from './BlindMarks'
 import { COMPACT_FOCUS_WORD_CLASS } from './RigBand'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
-import { BuskLabel } from './BuskLabel'
+import { EditorLabel } from '../editor/EditorLabel'
 import { summariseSelection, type BuskingTarget } from './buskingTypes'
 
 /**
@@ -63,7 +63,7 @@ export function RigStripContent({ selectedTargets, families, controls }: Omit<Ri
   return (
     <>
       {/* *Pads*, not *Rig*: in Pads this is the body's top row, as the desk board's pad row is. */}
-      <BuskLabel>Pads</BuskLabel>
+      <EditorLabel>Pads</EditorLabel>
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{summary}</span>
       {families != null && families.length > 0 && (
         <Badge

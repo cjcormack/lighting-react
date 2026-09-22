@@ -1,27 +1,37 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { memo, useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
-import { Input } from '@/components/ui/input'
-import { useNumberFieldDraft } from '@/hooks/useNumberFieldDraft'
 import type { CellResolution } from '../columns'
-import type { CellCommit } from '../rowModel'
+import type { CellBatch, CellCommit } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import { CellEditorSurface, type CellClickBehaviour } from '../../sheet/cells/CellEditorSurface'
-import { UNSET_CELL_TITLE, UnsetCellMark } from '../../sheet/cells/UnsetCellMark'
-import { numericSeed, useCellEditorKeyboard } from '../../sheet/cells/useCellEditorKeyboard'
-import { useCellEditorOpen } from '../../sheet/cells/useCellEditorOpen'
+import { EditorSurface, type CellClickBehaviour } from '../../editor/EditorSurface'
+import { EditorField } from '../../editor/EditorField'
+import { EditorLabel } from '../../editor/EditorLabel'
+import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { EditorReadout } from '../../editor/EditorReadout'
+import { headsLine, skippedLine } from '../../editor/editorCopy'
+import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
+import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
+import { useEditorOpen } from '../../editor/useEditorOpen'
 
 interface SliderCellOwnProps {
   value: Extract<CellValue, { kind: 'slider' }>
   resolutions: NonNullable<CellResolution>[]
   /**
-   * The column's name — "Dimmer", "Zoom" — which titles the editor where it is a bottom sheet.
-   * See `CellEditorSurface`. Defaulted rather than required because the value's `kind` cannot
-   * supply it (one `slider` cell is a dimmer and the next is an iris) and two callers mount these
-   * components read-only, where the editor never opens.
+   * The column's name — "Dimmer", "Zoom" — which titles the editor where it is a bottom sheet
+   * and names the column on the popover's label line. See `EditorSurface`. Defaulted rather than
+   * required because the value's `kind` cannot supply it (one `slider` cell is a dimmer and the
+   * next is an iris) and two callers mount these components read-only, where the editor never
+   * opens.
    */
   label?: string
-  /** How many fixtures a commit from this cell will write to. */
-  batchCount: number
+  /**
+   * What a commit from this cell lands on — the count for the label line, the skipped heads and
+   * the ranges for the read-out. See `CellBatch`. Absent where the cell is mounted read-only
+   * (`CueValueGrid`), and then this row alone.
+   */
+  batch?: CellBatch
+  /** *Local*, or the focused Look's name — the label line's scope. */
+  scopeLabel?: string
   /**
    * The current scope holds no value here: draw an em-dash instead of the fill bar, but keep
    * `value` as the editor's starting point so a busk begins where the rig is. See `UnsetCellMark`.
@@ -35,22 +45,22 @@ interface SliderCellOwnProps {
   disabled?: boolean
   /**
    * A released single-column marquee named this cell: open the editor without a click.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   autoOpen?: boolean
-  /** The container asked this editor to close — Set pressed again. See `useCellEditorOpen`. */
+  /** The container asked this editor to close — Set pressed again. See `useEditorOpen`. */
   autoClose?: boolean
-  /** That open came from the bar's Set, so the editor is anchored there. See `useCellEditorOpen`. */
+  /** That open came from the bar's Set, so the editor is anchored there. See `useEditorOpen`. */
   anchorAtButton?: boolean
   /**
    * The auto-open came from a character typed at the grid, which lands in the number field as its
    * first keystroke. Focus is not its business — the field is focused however the editor was
-   * opened. See `useCellEditorKeyboard`.
+   * opened. See `useEditorKeyboard`.
    */
   keyboardSeed?: string | null
   /**
    * Nothing is selected any more, so this editor's targets are gone with it — close.
-   * See `useCellEditorOpen`.
+   * See `useEditorOpen`.
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
@@ -59,20 +69,35 @@ interface SliderCellOwnProps {
 
 type SliderCellProps = SliderCellOwnProps & CellClickBehaviour
 
-function toPct(value: number): number {
+/** The cell's unit: a byte as the percent it reads on the grid. */
+export function toPct(value: number): number {
   return Math.round((value / 255) * 100)
+}
+
+/** The field's unit back to the rig's: a percent as a byte, before the resolution's clamp. */
+export function fromPct(pct: number): number {
+  return Math.round((pct / 100) * 255)
 }
 
 /**
  * Display: compact fill bar + percentage; a group with mixed values renders a
- * min–max range bar and "lo–hi%". Edit: a slider + numeric input in the shared cell-editor
+ * min–max range bar and "lo–hi%". Edit: a slider + a **percent** field in the shared editor
  * surface, committing continuously while dragging (the ChannelSlider convention).
+ *
+ * **The field is in the cell's unit** (editor-kit plan D13): the grid reads *80%*, so the box
+ * says 80 and the read-out says the byte — *204 of 255 · 0–255 on every head*. The DMX sheet's
+ * `LevelCell` reads bytes and keeps them; one field, the host names the unit. The slider stays in
+ * bytes, since that is the resolution the rig has and a drag wants every step of it.
+ *
+ * The popover is 288px (D17): `w-72`, measured in the app at 288px on 2026-09-22 (the popover's
+ * `getBoundingClientRect`).
  */
 export const SliderCell = memo(function SliderCell({
   value,
   resolutions,
   label = 'Value',
-  batchCount,
+  batch,
+  scopeLabel = 'Local',
   placeholder,
   disabled = false,
   autoOpen,
@@ -96,43 +121,43 @@ export const SliderCell = memo(function SliderCell({
     },
     [onCommit, range.min, range.max],
   )
-  // The field's own draft text — `useNumberFieldDraft` owns the "an emptied box must not commit"
-  // rule, shared with the colour editor's channel fields; the clamp above stays here, because
-  // this cell's bounds come from its resolution rather than being a flat byte.
-  const draft = useNumberFieldDraft(String(current), commit)
-  // The typed input is reset on every open, by a click or by a marquee alike — which is why it is
-  // `onOpen` on the hook rather than part of the `onOpenChange` handler below.
-  const { isOpen, setOpen, keyboardOpen, atButton } = useCellEditorOpen({
+  // The field parses; this cell clamps, because its bounds come from its resolution rather than
+  // being a flat byte — and it converts, because the field is a percent (D13).
+  const commitPct = useCallback((pct: number) => commit(fromPct(pct)), [commit])
+
+  // Controlled, because the container has to be able to open this from outside — Enter over a
+  // selection, or the bar's Set — which an uncontrolled Radix popover offers no door for. The
+  // field's draft lives inside the content and is dropped with it on close, so there is nothing
+  // for the open to reset.
+  const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
     anchorAtButton,
     keyboardSeed,
     disabled,
     selectionEmpty,
-    onOpen: draft.reset,
   })
-  const { contentRef, onKeyDown, onOpenAutoFocus } = useCellEditorKeyboard({
+  const { contentRef, onKeyDown, onOpenAutoFocus } = useEditorKeyboard({
     onDone: () => setOpen(false),
   })
-  // The character that opened this editor lands in the field as though it had been typed there —
-  // which means it commits, because every field here writes as it is typed. Through a ref so the
-  // effect depends on the open alone: `draft` is rebuilt on every render, and depending on it
-  // would re-seed the field on the operator's next keystroke.
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-  useEffect(() => {
-    const seed = numericSeed(keyboardOpen)
-    if (seed) draftRef.current.onChange(seed)
-  }, [keyboardOpen])
 
   const display = value.isUniform ? `${toPct(value.min)}%` : `${toPct(value.min)}–${toPct(value.max)}%`
 
+  // The read-out: the byte, and whether every head in the batch takes the same range of them.
+  const heads = batch ?? { count: 1, skipped: 0, resolutions }
+  const sliderHeads = heads.resolutions.filter((r) => r.kind === 'slider')
+  const sameRange = sliderHeads.every((r) => r.property.min === range.min && r.property.max === range.max)
+  const rangeLine =
+    `${current} of 255 · ${range.min}–${range.max}` +
+    (heads.count > 1 ? (sameRange ? ' on every head' : ' on the first head · ranges differ') : '')
+  const skipped = skippedLine(heads.skipped, label.toLowerCase())
+
   return (
-    <CellEditorSurface
+    <EditorSurface
       open={isOpen}
       onOpenChange={setOpen}
       title={label}
-      contentClassName="w-64"
+      contentClassName="w-72"
       onOpenAutoFocus={onOpenAutoFocus}
       triggerOpens={!clickSelects}
       // Only where the press was made — the bar's Set. Enter and a typed character are gestures
@@ -175,32 +200,38 @@ export const SliderCell = memo(function SliderCell({
       }
     >
       {/* The wrapper is the editor's keyboard: Enter closes, comma steps between fields, and a
-          keyboard-opened editor focuses the first of them. See `useCellEditorKeyboard`. */}
-      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-3">
-        {batchCount > 1 && (
-          <p className="text-xs text-muted-foreground">Applying to {batchCount} targets</p>
-        )}
-        <div className="flex items-center gap-3">
-          <Slider
-            min={range.min}
-            max={range.max}
-            step={1}
-            value={[current]}
-            onValueChange={([next]) => commit(next)}
-            className="flex-1"
-          />
-          <Input
-            type="number"
-            min={range.min}
-            max={range.max}
-            aria-label={label}
-            className="h-8 w-20 tabular-nums"
-            value={draft.value}
-            onChange={(e) => draft.onChange(e.target.value)}
-            onBlur={draft.onBlur}
-          />
+          keyboard-opened editor focuses the first of them. See `useEditorKeyboard`. */}
+      <div ref={contentRef} onKeyDown={onKeyDown} className="space-y-2">
+        <EditorLabelLine subject={headsLine(heads.count, scopeLabel)} column={label} />
+        <div className="space-y-1">
+          {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
+          <EditorLabel>{label}</EditorLabel>
+          <div className="flex items-center gap-2.5">
+            <Slider
+              min={range.min}
+              max={range.max}
+              step={1}
+              value={[current]}
+              onValueChange={([next]) => commit(next)}
+              className="flex-1"
+            />
+            <EditorField
+              label={label}
+              unit="%"
+              min={0}
+              max={100}
+              value={toPct(current)}
+              onCommit={commitPct}
+              seed={numericSeed(keyboardOpen)}
+              className="w-[72px] shrink-0"
+            />
+          </div>
         </div>
+        <EditorReadout>
+          <span>{rangeLine}</span>
+          {skipped && <span>{skipped}</span>}
+        </EditorReadout>
       </div>
-    </CellEditorSurface>
+    </EditorSurface>
   )
 })

@@ -15,7 +15,7 @@ import { useEscapeEditorSnapshot } from './useEscapeEditorSnapshot'
  * the answer is read, but that it is read *before anything else can act on the same key*.
  */
 
-/** Stands in for an open cell editor: the attribute `cellEditorIsOpen` looks for. */
+/** Stands in for an open cell editor: the attribute `editorIsOpen` looks for. */
 function mountEditor(): HTMLElement {
   const el = document.createElement('div')
   el.setAttribute('data-cell-editor-surface', 'popover')

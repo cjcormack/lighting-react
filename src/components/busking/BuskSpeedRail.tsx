@@ -6,9 +6,9 @@ import { BeatIndicator } from '@/components/BeatIndicator'
 import { ManageMastersLink } from '@/components/SpeedMasters'
 import { SpeedMasterDetailSheet } from '@/components/speedMasters/SpeedMasterDetailSheet'
 import { formatBpm, useBpmDraft } from '@/hooks/useBpmDraft'
-import { useLivePush } from '@/hooks/useLivePush'
+import { useLivePush } from '@/components/editor/useLivePush'
 import { useLongPress } from '@/hooks/useLongPress'
-import { BUSK_LABEL_CLASS } from './BuskLabel'
+import { EDITOR_LABEL_CLASS } from '../editor/EditorLabel'
 import {
   setSpeedMasterBpm,
   tapSpeedMaster,
@@ -334,7 +334,7 @@ function MasterCard({
         />
       )}
       <div className="relative flex flex-col gap-2 px-3 py-2.5">
-        <span className={cn('flex items-center gap-1.5', BUSK_LABEL_CLASS)}>
+        <span className={cn('flex items-center gap-1.5', EDITOR_LABEL_CLASS)}>
           <BeatIndicator master={master} className="size-1.5 shrink-0" />
           <span className="truncate">
             M{master.index}

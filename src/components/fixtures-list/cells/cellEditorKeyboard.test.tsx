@@ -106,7 +106,6 @@ describe('a keyboard-opened slider editor', () => {
         value={{ kind: 'slider', min: 128, max: 128, isUniform: true }}
         resolutions={[SLIDER_RESOLUTION]}
         label="Dimmer"
-        batchCount={1}
         autoOpen
         keyboardSeed="5"
         onCommit={onCommit}
@@ -116,9 +115,10 @@ describe('a keyboard-opened slider editor', () => {
     const field = await screen.findByRole('spinbutton', { name: 'Dimmer' })
     expect(field).toHaveFocus()
     // Seeded *and* committed: every field here writes as it is typed, so a character typed at the
-    // grid has to behave as though it had been typed in the box.
+    // grid has to behave as though it had been typed in the box. The box is a **percent** (editor-kit
+    // plan D13), so a typed 5 is byte 13 — round(5 / 100 × 255) — on the wire.
     expect(field).toHaveValue(5)
-    expect(onCommit).toHaveBeenCalledWith({ kind: 'slider', value: 5 })
+    expect(onCommit).toHaveBeenCalledWith({ kind: 'slider', value: 13 })
   })
 
   it('closes on Enter', async () => {
@@ -127,7 +127,6 @@ describe('a keyboard-opened slider editor', () => {
         value={{ kind: 'slider', min: 0, max: 0, isUniform: true }}
         resolutions={[SLIDER_RESOLUTION]}
         label="Dimmer"
-        batchCount={1}
         autoOpen
         keyboardSeed=""
         onCommit={() => {}}
@@ -150,7 +149,6 @@ describe('a keyboard-opened slider editor', () => {
         value={{ kind: 'slider', min: 0, max: 0, isUniform: true }}
         resolutions={[SLIDER_RESOLUTION]}
         label="Dimmer"
-        batchCount={1}
         autoOpen
         keyboardSeed={null}
         onCommit={onCommit}
@@ -163,7 +161,8 @@ describe('a keyboard-opened slider editor', () => {
     expect(onCommit).not.toHaveBeenCalled()
     expect(field).toHaveValue(0)
 
-    fireEvent.change(field, { target: { value: '128' } })
+    // A percent field: 50 lands as byte 128 — round(50 / 100 × 255).
+    fireEvent.change(field, { target: { value: '50' } })
     expect(onCommit).toHaveBeenCalledWith({ kind: 'slider', value: 128 })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(screen.queryByRole('spinbutton', { name: 'Dimmer' })).not.toBeInTheDocument()
@@ -176,7 +175,6 @@ describe('a keyboard-opened slider editor', () => {
         value={{ kind: 'slider', min: 0, max: 0, isUniform: true }}
         resolutions={[SLIDER_RESOLUTION]}
         label="Dimmer"
-        batchCount={1}
         onCommit={() => {}}
         onBeginEdit={() => {}}
       />,
@@ -201,7 +199,6 @@ describe('the position editor', () => {
         }}
         resolutions={[POSITION_RESOLUTION]}
         label="Position"
-        batchCount={1}
         autoOpen
         keyboardSeed="6"
         onCommit={onCommit}
@@ -234,7 +231,6 @@ describe('the wheel editor', () => {
         value={{ kind: 'setting', isUniform: true, level: 0, option: GOBOS[0] }}
         resolutions={[settingResolution(GOBOS)]}
         label="Gobo"
-        batchCount={1}
         autoOpen
         keyboardSeed="b"
         onCommit={onCommit}
@@ -258,7 +254,6 @@ describe('the wheel editor', () => {
         value={{ kind: 'setting', isUniform: true, level: 0, option: GOBOS[0] }}
         resolutions={[settingResolution(GOBOS)]}
         label="Gobo"
-        batchCount={1}
         autoOpen
         keyboardSeed=""
         onCommit={onCommit}
@@ -279,7 +274,6 @@ describe('the wheel editor', () => {
         value={{ kind: 'setting', isUniform: true, level: 0, option: GOBOS[0] }}
         resolutions={[settingResolution(GOBOS)]}
         label="Gobo"
-        batchCount={1}
         autoOpen
         keyboardSeed="z"
         onCommit={onCommit}
@@ -298,7 +292,6 @@ describe('the wheel editor', () => {
         value={{ kind: 'setting', isUniform: true, level: 0, option: GOBOS[0] }}
         resolutions={[settingResolution(GOBOS.slice(0, 2))]}
         label="Gobo"
-        batchCount={1}
         autoOpen
         keyboardSeed=""
         onCommit={() => {}}
@@ -323,9 +316,9 @@ describe('the colour editor', () => {
           b: 30,
           combinedCss: 'rgb(10, 20, 30)',
         }}
+        batchCount={1}
         resolutions={[COLOUR_RESOLUTION]}
         label="Colour"
-        batchCount={1}
         autoOpen
         keyboardSeed="7"
         onCommit={onCommit}

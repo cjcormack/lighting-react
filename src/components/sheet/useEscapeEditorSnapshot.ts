@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { cellEditorIsOpen } from './cells/CellEditorSurface'
+import { editorIsOpen } from '../editor/EditorSurface'
 
 /**
  * Was a cell editor open when Escape was pressed?
@@ -38,7 +38,7 @@ export function useEscapeEditorSnapshot(extra?: () => boolean): React.RefObject<
   useEffect(() => {
     const onCapture = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      ref.current = cellEditorIsOpen() || extraRef.current?.() === true
+      ref.current = editorIsOpen() || extraRef.current?.() === true
     }
     window.addEventListener('keydown', onCapture, true)
     return () => window.removeEventListener('keydown', onCapture, true)

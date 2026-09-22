@@ -58,7 +58,7 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
  * cover the very cell it is anchored to. The editor renders at a negative `top` and is clipped by
  * the window, silently. 750 is that figure with a little margin.
  *
- * A **height** rule and not a form rule, which is why it is not folded into `useCellEditorForm`:
+ * A **height** rule and not a form rule, which is why it is not folded into `useEditorForm`:
  * the bottom sheet on an upright phone has all the height in the world and should keep the full
  * layout, while a short desktop window has none and is still a popover.
  *
@@ -69,10 +69,10 @@ const SHORT_VIEWPORT = '(max-height: 500px)'
 const CRAMPED_VIEWPORT = '(max-height: 750px)'
 
 /** Which of the three shapes a cell editor is drawing itself as. */
-export type CellEditorForm = 'popover' | 'bottom-sheet' | 'side-sheet'
+export type EditorForm = 'popover' | 'bottom-sheet' | 'side-sheet'
 
 /**
- * Stamped on whichever of the three shapes is mounted, and the DOM contract [cellEditorIsOpen]
+ * Stamped on whichever of the three shapes is mounted, and the DOM contract [editorIsOpen]
  * reads. Spread rather than written out at the two sites, so the attribute and its reader cannot
  * drift apart.
  */
@@ -93,7 +93,7 @@ const SURFACE_ATTR = 'data-cell-editor-surface'
  * the asker is the container above the table; lifting a boolean through five layers to answer
  * "is anything open" would be a subscription per cell for one bit.
  */
-export function cellEditorIsOpen(): boolean {
+export function editorIsOpen(): boolean {
   return typeof document !== 'undefined' && document.querySelector(`[${SURFACE_ATTR}]`) != null
 }
 
@@ -134,7 +134,7 @@ interface MediaEntry {
   listeners: Set<() => void>
   subscribe: (onStoreChange: () => void) => () => void
   getSnapshot: () => boolean
-  /** Undone by [resetCellEditorSurfaceMedia]; absent where there is no `matchMedia` to listen to. */
+  /** Undone by [resetEditorSurfaceMedia]; absent where there is no `matchMedia` to listen to. */
   dispose?: () => void
 }
 
@@ -180,7 +180,7 @@ function mediaEntry(query: string): MediaEntry {
  * accumulated one live listener per reset, and the count a test made of them (the "one listener per
  * query" assertion) would have been measuring the wrong thing.
  */
-export function resetCellEditorSurfaceMedia(): void {
+export function resetEditorSurfaceMedia(): void {
   for (const entry of mediaEntries.values()) entry.dispose?.()
   mediaEntries.clear()
 }
@@ -198,7 +198,7 @@ function useSharedMedia(query: string): boolean {
  * Separate from the form on purpose — a popover, a bottom sheet and a side sheet can each be short
  * of height, and only the editor knows whether it is tall enough for the question to arise.
  */
-export function useCellEditorCramped(): boolean {
+export function useEditorCramped(): boolean {
   return useSharedMedia(CRAMPED_VIEWPORT)
 }
 
@@ -213,7 +213,7 @@ export function useCellEditorCramped(): boolean {
  * for its row height: both sheets are reached by a finger and the popover is not. A `sm:` variant
  * cannot say that — see the note there.
  */
-export function useCellEditorForm(): CellEditorForm {
+export function useEditorForm(): EditorForm {
   const narrow = useSharedMedia(CELL_EDITOR_SHEET_QUERY)
   const short = useSharedMedia(SHORT_VIEWPORT)
   if (short) return 'side-sheet'
@@ -259,7 +259,7 @@ function useKeyboardInset(open: boolean | undefined): number {
   return inset
 }
 
-interface CellEditorSurfaceProps {
+interface EditorSurfaceProps {
   /** Undefined leaves the popover to hold its own state — the two property visualizers do. */
   open?: boolean
   onOpenChange: (open: boolean) => void
@@ -283,7 +283,7 @@ interface CellEditorSurfaceProps {
    * Popover only: its **width**. A sheet sizes itself against the screen.
    *
    * Not its rhythm any more. Each editor wraps its own controls in the element that carries
-   * `useCellEditorKeyboard`'s ref and key handler, and the spacing rides on that — so one number
+   * `useEditorKeyboard`'s ref and key handler, and the spacing rides on that — so one number
    * applies in all three forms, rather than the popover's coming from here and both sheets'
    * from `SheetBody`'s own `space-y-4` between what used to be its direct children.
    */
@@ -291,7 +291,7 @@ interface CellEditorSurfaceProps {
   /** Popover only. */
   align?: 'start' | 'center' | 'end'
   /**
-   * Both primitives spell this the same way. Every cell editor passes `useCellEditorKeyboard`'s,
+   * Both primitives spell this the same way. Every cell editor passes `useEditorKeyboard`'s,
    * which is how the first text field takes focus on open — in that callback rather than in an
    * effect, because Radix's own auto-focus is a parent effect and would take it straight back.
    */
@@ -319,7 +319,7 @@ interface CellEditorSurfaceProps {
    *
    * The double click is the surface's rather than the four cells', for the reason [CellClickBehaviour]
    * itself exists: one rule, or a grid where the dimmer opens on two clicks and the colour does not.
-   * It opens through [onOpenChange] like any other opener, so it lands in `useCellEditorOpen`'s
+   * It opens through [onOpenChange] like any other opener, so it lands in `useEditorOpen`'s
    * click path — beside the cell, with no typed seed, and with whatever a click's open resets reset.
    * It is withheld while this editor is already open, which is not tidiness — see the guard at
    * `onTriggerDoubleClick` for what a second open does to a panel the operator is typing into.
@@ -372,7 +372,7 @@ interface CellEditorSurfaceProps {
  * them grows a rule the other has not got; the popover is its own branch so that a desk pays for
  * no viewport listener at all.
  */
-export function CellEditorSurface({
+export function EditorSurface({
   open,
   onOpenChange,
   title,
@@ -384,8 +384,8 @@ export function CellEditorSurface({
   triggerOpens = true,
   anchorRef,
   children,
-}: CellEditorSurfaceProps) {
-  const form = useCellEditorForm()
+}: EditorSurfaceProps) {
+  const form = useEditorForm()
 
   // One handler, written once and handed to whichever element is the trigger in each of the three
   // branches, so all three answer a double click identically. **Not a wrapper around the trigger**,
@@ -407,7 +407,7 @@ export function CellEditorSurface({
   // simply opens it again (checked in the browser, popover form, on this change and on the commit
   // before it). A test never gets that far: `fireEvent` dispatches exactly the one event it names,
   // so no `pointerdown` is ever seen, that listener does not run, and the second open goes straight
-  // through — which is what the two tests in `CellEditorSurface.test.tsx` catch, and both fail if
+  // through — which is what the two tests in `EditorSurface.test.tsx` catch, and both fail if
   // this guard is dropped. **Don't read that as Radix protecting the desk case**: `PopoverContent`
   // suppresses an outside press only where it lands on a real `PopoverTrigger`, and this grid
   // renders none in either environment. See [triggerOpens].
@@ -522,7 +522,7 @@ function SheetSurface({
   triggerOpens,
   children,
 }: Pick<
-  CellEditorSurfaceProps,
+  EditorSurfaceProps,
   | 'open'
   | 'onOpenChange'
   | 'title'
@@ -532,7 +532,7 @@ function SheetSurface({
   | 'triggerOpens'
   | 'children'
 > & {
-  form: Exclude<CellEditorForm, 'popover'>
+  form: Exclude<EditorForm, 'popover'>
   /**
    * The double click that opens this editor, already decided above — undefined where a single
    * click opens, and while this editor is open. Passed down rather than recomputed here so the

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { isEditableTarget } from '@/lib/domUtils'
-import { cellEditorIsOpen } from './cells/CellEditorSurface'
+import { editorIsOpen } from '../editor/EditorSurface'
 import { marqueeOwnsKeyTarget } from './cellEntry'
 import type { CellKeyboardPermission } from './cellEntry'
 import type { RowId } from './cellSelectionModel'
@@ -81,7 +81,7 @@ export function useSheetKeyboard<C extends string>({
         // An open editor takes Escape first, and keeps the selection: Radix will close it from its
         // own document listener, and the selection it was opened for survives. Asked here, in
         // capture, while the panel is still mounted.
-        if (cellEditorIsOpen()) return
+        if (editorIsOpen()) return
         onEscape()
         return
       }

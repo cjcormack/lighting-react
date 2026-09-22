@@ -49,7 +49,7 @@ import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { RailBodyFrame, RailHandleFrame, RailStripFrame, useRailArm } from './ProgrammerWorkspace'
 
-/** One label for every band of the rail: the busk view's `BuskLabel`, in a rail that has no icon room. */
+/** One label for every band of the rail: the editor kit's `EditorLabel` (`components/editor/`), in a rail that has no icon room — its own copy, tracked at 0.1em where the kit's is 0.08em. */
 const LABEL_CLASS =
   'inline-flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground'
 

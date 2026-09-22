@@ -99,7 +99,7 @@ export function useCellEditorRequests<C extends string>({
   const toggleCellEditor = useCallback(() => {
     if (closeCellEditor()) return
     // Set is pressed at the toolbar, so its editor opens there. Enter and a typed character are
-    // made at the selection and open beside the cell — see `anchorAtButton` in `useCellEditorOpen`.
+    // made at the selection and open beside the cell — see `anchorAtButton` in `useEditorOpen`.
     request('', true)
   }, [closeCellEditor, request])
 

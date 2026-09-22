@@ -548,6 +548,7 @@ export function PatchSheet({
     columns,
     permission: { entry: true, clear: true },
     copy,
+    noun: 'fixture',
   })
   const { selectedRows, cellCount, cellSelection } = sheet
   const selectedCount = selectedRows.length
@@ -682,6 +683,7 @@ export function PatchSheet({
               <span className="relative min-w-0 flex-1">
                 <TextCell
                   {...firstColumnCellProps<string>({
+                    noun: 'fixture',
                     value: row.patch.displayName,
                     label: 'Fixture name',
                     onCommit: (next) => {

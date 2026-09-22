@@ -11,7 +11,7 @@ import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { buskPaletteId, type PaletteRecord } from '@/lib/buskLayout'
 import { canHandLand } from '@/lib/handTargets'
 import type { BuskCue } from '@/api/buskApi'
-import { BuskLabel } from './BuskLabel'
+import { EditorLabel } from '../editor/EditorLabel'
 import {
   describeLookContents,
   describeTemplate,
@@ -327,7 +327,7 @@ function LibraryTab({
     <>
       <div className="flex shrink-0 flex-col gap-2 border-b px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <BuskLabel>Library</BuskLabel>
+          <EditorLabel>Library</EditorLabel>
           <span className="flex-1" />
           <span className="text-[11px] text-muted-foreground">drag onto a bank</span>
         </div>

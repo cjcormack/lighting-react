@@ -27,7 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * It also owns the closing rule that is nobody's click: **an editor belongs to a selection, so it
  * goes when the selection does** — see [selectionEmpty].
  */
-export function useCellEditorOpen({
+export function useEditorOpen({
   autoOpen,
   autoClose,
   keyboardSeed,
@@ -52,14 +52,14 @@ export function useCellEditorOpen({
    * for a bare Enter or the bar's Set). Null for a click, which carries none.
    *
    * Seeding only: which field has focus is not a function of how the editor was opened — see
-   * `useCellEditorKeyboard`. Latched into [keyboardOpen] at the moment the editor opens, because
+   * `useEditorKeyboard`. Latched into [keyboardOpen] at the moment the editor opens, because
    * the signal itself is a one-shot the table drops on the very next commit while the editor
    * stays open for as long as the operator is typing into it.
    */
   keyboardSeed?: string | null
   /**
    * This open came from the selection bar's **Set**, so the editor belongs at that button rather
-   * than at the cell — see `anchorRef` on `CellEditorSurface`.
+   * than at the cell — see `anchorRef` on `EditorSurface`.
    *
    * Read at the instant the signal flips and **latched** into [atButton] for as long as the editor
    * is open, exactly as [keyboardSeed] is: the request is a one-shot the table drops on the very

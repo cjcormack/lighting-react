@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { LookFamilyFilterBar, type LookFamilyFilter } from '@/components/ViewSwitcher'
-import { BuskLabel } from '@/components/busking/BuskLabel'
+import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EffectPadDetail } from '@/components/busking/EffectPadDetail'
 import {
   describeTemplate,
@@ -17,7 +17,7 @@ import {
   templateSwatch,
 } from '@/components/busking/padFace'
 import { templateLayerPresence } from '@/components/busking/lookPresence'
-import { useCellEditorForm } from '@/components/sheet/cells/CellEditorSurface'
+import { useEditorForm } from '@/components/editor/EditorSurface'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
@@ -55,7 +55,7 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  *    tracking mutation.
  *  - **Three forms, from the cell editor.** A popover under the `All` button on a desk or an iPad, a
  *    bottom sheet on an upright phone, a right-hand sheet where the viewport is short — the same
- *    two media queries `CellEditorSurface` makes, so the two panels never disagree about which
+ *    two media queries `EditorSurface` makes, so the two panels never disagree about which
  *    shape a screen gets.
  *
  * It takes the offerable list rather than filtering one, because the strip has already decided it
@@ -98,7 +98,7 @@ export function TemplatePicker({
    * The `All · n` button, which the popover form hangs under.
    *
    * A `virtualRef` anchor rather than a `PopoverTrigger`, because the button belongs to the row's
-   * layout and not to this component — the same arrangement `CellEditorSurface` makes for Set.
+   * layout and not to this component — the same arrangement `EditorSurface` makes for Set.
    */
   anchorRef: RefObject<HTMLElement | null>
   /** The marquee's cells; empty when rows are selected but no cells. Names the scope line. */
@@ -110,7 +110,7 @@ export function TemplatePicker({
   /** The templates that fit the selection, in the library's own name order. */
   offerable: readonly TemplateSummary[]
 }) {
-  const form = useCellEditorForm()
+  const form = useEditorForm()
   const [search, setSearch] = useState('')
   const [family, setFamily] = useState<LookFamilyFilter>('ALL')
   const [newOpen, setNewOpen] = useState(false)
@@ -276,10 +276,10 @@ export function TemplatePicker({
             section.templates.length === 0 ? null : (
               <section key={section.key}>
                 <div className="flex items-center gap-2 px-0.5 pt-2.5 pb-1.5">
-                  {/* `BuskLabel`, not a hand-rolled span: it is the desk's one section label, it is
+                  {/* `EditorLabel`, not a hand-rolled span: it is the desk's one section label, it is
                       already used outside the busk view (`SurfaceLibrary`), and the copy this
                       replaced had already drifted to `tracking-[0.1em]` against its `0.08em`. */}
-                  <BuskLabel className="whitespace-nowrap">{section.label}</BuskLabel>
+                  <EditorLabel className="whitespace-nowrap">{section.label}</EditorLabel>
                   <span className="text-[10px] text-muted-foreground">{section.caption}</span>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
@@ -342,7 +342,7 @@ export function TemplatePicker({
               if (anchorRef.current?.contains(event.target as Node)) event.preventDefault()
             }}
             // Radix's own auto-focus is a parent effect and would take the focus straight back off a
-            // field focused in an effect — the same reason `useCellEditorKeyboard` does this here.
+            // field focused in an effect — the same reason `useEditorKeyboard` does this here.
             onOpenAutoFocus={(event) => {
               event.preventDefault()
               searchRef.current?.focus()
@@ -365,7 +365,7 @@ export function TemplatePicker({
                   { width: 'min(22.5rem, 92vw)', maxWidth: 'none' }
             }
             // Both sheets are reached by a finger, and focusing the field there raises the
-            // on-screen keyboard over the grid for nothing — the same split `useCellEditorForm`
+            // on-screen keyboard over the grid for nothing — the same split `useEditorForm`
             // already makes for a cell editor.
             onOpenAutoFocus={(event) => event.preventDefault()}
           >

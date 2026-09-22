@@ -383,7 +383,7 @@ export function DmxSheet({
   )
   const permission = useMemo(() => ({ entry: connected, clear: connected }), [connected])
   const cellDisabled = useCallback(() => !connected, [connected])
-  const sheet = useSheet<DmxRow, DmxColumnKey>({ rows, columns, permission, copy, cellDisabled })
+  const sheet = useSheet<DmxRow, DmxColumnKey>({ rows, columns, permission, copy, cellDisabled, noun: 'channel' })
   const { cellCount } = sheet
 
   // **A row width change drops the cell selection, and drops it during the render that changes

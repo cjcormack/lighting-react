@@ -20,7 +20,7 @@ import { describeCellScope, type CellRef, type RowId } from './cellSelectionMode
 import { useCellMarquee } from './useCellMarquee'
 import type { CellSelection } from './useCellSelection'
 import type { CellOpenRequest } from './useCellEditorRequests'
-import type { SheetCellProps, SheetColumn, SheetRow } from './sheetModel'
+import { batchLabelOf, type SheetCellProps, type SheetColumn, type SheetRow } from './sheetModel'
 
 /** Every row of every sheet is 36px, the DMX sheet's 44 — see `rowHeight`. */
 export const SHEET_ROW_HEIGHT = 36
@@ -75,6 +75,11 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   batchCountFor: (row: Row, col: C) => number
   /** Those rows, in visible order — for an editor that previews its landing. */
   batchRowsFor: (row: Row, col: C) => readonly Row[]
+  /**
+   * What a row is called on this sheet — `cue`, `fixture`, `channel` — for the editors' label
+   * line (`SheetCellProps.batchLabel`). Defaults to `row`.
+   */
+  batchNoun?: string
   /** The surface has made this cell inert — a locked show, an offline desk. */
   cellDisabled?: (row: Row, col: C) => boolean
   /** Classes on the whole row — the cue sheet's live green and next blue. */
@@ -127,6 +132,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   onCellCommit,
   batchCountFor,
   batchRowsFor,
+  batchNoun = 'row',
   cellDisabled,
   rowClass,
   rowDrag,
@@ -317,6 +323,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   onBeginCellEdit={onBeginCellEdit}
                   onCellCommit={onCellCommit}
                   batchCountFor={batchCountFor}
+                  batchNoun={batchNoun}
                   batchRowsFor={batchRowsFor}
                   cellDisabled={cellDisabled}
                   cellSelection={cellSelection}
@@ -528,6 +535,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   onCellCommit: (row: Row, col: C, value: unknown) => void
   batchCountFor: (row: Row, col: C) => number
   batchRowsFor: (row: Row, col: C) => readonly Row[]
+  batchNoun: string
   cellDisabled?: (row: Row, col: C) => boolean
   cellSelection: CellSelection<C>
   autoOpenCol: C | null
@@ -552,6 +560,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   onCellCommit,
   batchCountFor,
   batchRowsFor,
+  batchNoun,
   cellDisabled,
   cellSelection,
   autoOpenCol,
@@ -641,10 +650,12 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         }
         const selectedCell = cellSelection.isSelected(row.id, column.key)
         const disabled = cellDisabled?.(row, column.key) ?? false
+        const batchCount = batchCountFor(row, column.key)
         const props: SheetCellProps<unknown> = {
           value,
           label: column.label,
-          batchCount: batchCountFor(row, column.key),
+          batchCount,
+          batchLabel: batchLabelOf(batchCount, batchNoun),
           batchRows: () => batchRowsFor(row, column.key),
           disabled,
           autoOpen: autoOpenCol === column.key,
