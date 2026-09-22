@@ -166,7 +166,6 @@ describe('the announce', () => {
     expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({
       focus: 'split',
-      rigRows: '2',
       sheet: 'none',
       pageFollows: 'true',
       immersive: 'off',

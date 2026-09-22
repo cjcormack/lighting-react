@@ -26,7 +26,8 @@ import { Status } from './statusApi'
  * could claim to be another window or another operator.
  *
  * **`viewOptions` is a free `string → string` map** (busk-further plan D13): the busk view's
- * `focus`, `rigRows`, `sheet` and page facts, and — under every live view — `immersive`
+ * `focus`, `sheet` and page facts (the split's height is this window's pixels and is not
+ * announced), and — under every live view — `immersive`
  * (busk-chrome plan D9, `lib/immersive.ts`), announced so a Screens sheet on another window can
  * draw them, and carried back verbatim on `windows.state`. The registry never learns a view's
  * vocabulary — `lib/windowViews.ts` describes it (`announcedViewOptions` says which keys go out

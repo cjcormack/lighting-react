@@ -6,7 +6,6 @@ import type { Fixture } from '@/store/fixtures'
 import fixture from './__fixtures__/rigOrder.fixture.json'
 import {
   applyDrop,
-  clampRigRows,
   effectiveRig,
   expandTile,
   nextRowName,
@@ -448,15 +447,6 @@ describe('a row’s layout — the bank’s two facts, on the row', () => {
     // accepting a rig nobody has re-laid-out, and its Json refuses a key it does not know.
     expect('flow' in request.rows[1]).toBe(false)
     expect('width' in request.rows[1]).toBe(false)
-  })
-})
-
-describe('clampRigRows', () => {
-  it('holds 1…N and answers 0 for no rows', () => {
-    expect(clampRigRows(3, 4)).toBe(3)
-    expect(clampRigRows(9, 4)).toBe(4)
-    expect(clampRigRows(0, 4)).toBe(1)
-    expect(clampRigRows(3, 0)).toBe(0)
   })
 })
 

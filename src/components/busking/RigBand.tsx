@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { ChevronDown, ChevronLeft, ChevronRight, Grid2x2, GripVertical, MoreHorizontal, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +40,7 @@ import { usePatchListQuery } from '@/store/patches'
 import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
-import { useBuskRigRows } from '@/lib/buskWindow'
+import { useBuskRigHeight, useDefaultBuskRigRows } from '@/lib/buskWindow'
 import { SUBSELECT_FILTER_MODES, SUBSELECT_MODE_LABELS, SUBSELECT_STEP_MODES } from '@/lib/cellsSubSelection'
 import {
   applyDrop,
@@ -70,7 +70,7 @@ import { RIG_DROP_DEPTH, rigDragData, type RigDropData, type RigRowDragData } fr
 import { BuskLabel } from './BuskLabel'
 import { NameField } from './NameField'
 import { RigEditProvider, useRigEdit } from './RigEditProvider'
-import { RigHandle } from './RigHandle'
+import { PAGE_MIN_HEIGHT_PX, RIG_MIN_HEIGHT_PX, RigHandle, clampRigHeight, lineEdges } from './RigHandle'
 import { RigDropSlot, RigTile, type TileLookup } from './RigTile'
 import { summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
 import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selectionVerbs'
@@ -88,7 +88,7 @@ import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selecti
  * a `flow` — the bank's two facts, plus `SCROLL`, the sideways-scrolling line every row was before
  * it had a flow and still the default. The rows fill a twelve-track grid in order (`rigLines`), so
  * two half-width rows sit side by side as two half-width columns do on a page, and the band's unit
- * is the **line**, not the row: the handle counts lines and `clampRigRows` clamps to them. Both
+ * is the **line**, not the row: the handle snaps to a line's edge and the default height counts lines. Both
  * facts are set from the row's `…` menu in *Edit layout*, as a bank's are from its own.
  *
  * **A press is a plain toggle**, as it was, and a **pip is a press of its own** (session 7): a
@@ -127,18 +127,26 @@ import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selecti
  * derived from the selection: the label is only the filter last pressed here, and it resets with
  * the band. A step is never remembered as the label — it is not a mode.
  *
- * **The handle is `RigHandle`, in both shapes** (busk-further plan D6, revised 2026-09-21): in
- * Split a grip under the rows, dragged to a height and **snapping to whole lines** — a half line of
- * tiles is useless — that reads and writes the window's `busk.rigRows` (`lib/buskWindow.ts`), and
- * **snaps past both ends**: dragged past the last line it lands on Rig focus, dragged above the
- * first on Pads, so the segmented control and this handle are one setting. While it is dragged every
- * line is drawn and the clip is the snap: cut at the pointer between the ends, to nothing in the
- * Pads region, lifted to every line in the Rig region — no count caption and no badge, the band
- * simply takes the shape the release will give it; the arrow keys step it one line at a time for
- * the keyboard. It is drawn for **one line too** (D6: 1…N — a one-row rig still needs its way into
- * Rig and Pads from the band). In **Rig** a chevron pill is drawn where the drag would be — under
- * the rows at the bottom — and a press on it is the way back to Split; in Pads the band is not
- * drawn and the pad row's Focus control is the way back (D17). In **Rig focus** the
+ * **The handle is `RigHandle`, in Split only** (busk-further plan D6, rebuilt 2026-09-22): a grip
+ * under the rows that sets **the rig region's height in px** — the window's `busk.rigHeight`
+ * (`lib/buskWindow.ts`), `null` until chosen and drawn then as the first `defaultBuskRigRows`
+ * whole lines, measured — and nothing else. In Split **every line is mounted and the grid is a
+ * scroller** at that height, so the bar can rest between two lines and the rows scroll under it
+ * (every fixture tile's appearance leaf is mounted with it — the whole rig's channel
+ * subscriptions rather than a few lines' worth, as Rig focus and edit mode already paid, and what
+ * makes the Colour tab's *Pick* answer for a head below the fold);
+ * dragged past the last line the region simply has room, which is how the page is made smaller.
+ * The snap is **live and magnetic**, to a line's bottom edge within `RIG_SNAP_PX` while the grip
+ * is held; the keys step between the same edges; a double press restores the default. It is
+ * clamped on read, never on write: the page keeps `PAGE_MIN_HEIGHT_PX` below the handle, so a
+ * stored height taller than a window that has since shrunk is drawn at the ceiling and comes back
+ * when the window does. **It never changes focus** — the count it replaced snapped past its ends
+ * into Rig and Pads, live at the ends and on release between them, and could shrink only the
+ * rig; Pads and Rig are the Focus control's, and in Rig the folded page strip's chevron is the way
+ * back (`BuskPageStrip`), as the rig strip's is off the desk board. The band writes the resolved
+ * height onto the grid from a **layout effect, never a `style` prop**, so the handle's per-move
+ * write is not undone by a re-render and a handle unmounted mid-drag leaves nothing stale
+ * (`RigHandle`'s docblock). In **Rig focus** the
  * band takes `focus="rig"`: every row, the band filling the body and its rows scrolling. **Below `md` Rig
  * focus stacks every row two tiles across, scrolling vertically** (`Phones.dc.html` note 6): it is
  * D15's replacement for the narrow-width target sheet, and a sideways scroll per row on a phone would
@@ -173,9 +181,9 @@ export interface RigBandProps {
    */
   stackRows?: boolean
   /**
-   * Split shows `busk.rigRows` lines under the handle; Rig fills the body with every row. There is
-   * no Pads arm on the desk board (D17): in Pads the host draws the pad row instead of this band,
-   * and off the desk board `RigStrip` is the fold.
+   * Split draws the rows as a scroller at `busk.rigHeight` under the handle; Rig fills the body
+   * with every row. There is no Pads arm on the desk board (D17): in Pads the host draws the pad
+   * row instead of this band, and off the desk board `RigStrip` is the fold.
    */
   focus: 'split' | 'rig'
   /**
@@ -252,7 +260,7 @@ export interface RigBandProps {
  * and the row's `scrollWidth` equalled its `clientWidth` at 738, 616, 540 and 496 with no mask.
  */
 
-export { snapRigRows } from './RigHandle'
+export { snapRigHeight, stepRigHeight } from './RigHandle'
 
 /**
  * The floor, as a number, so the tests can pin every class below against the one value. **Every
@@ -366,23 +374,97 @@ function RigBandBody({
   )
   const lines = useMemo(() => rigLines(effective.rows), [effective.rows])
 
-  // The handle: 1…N whole lines (D6), the window's fact clamped to the rig. Edit mode and Rig focus
-  // show every row — a hidden row cannot take a drop, and Rig focus *is* the whole rig — and so
-  // does a drag in progress, which clips the rows at the pointer instead (`RigRowsHandle`).
-  const shown = useBuskRigRows(lines.length)
+  // Every line is mounted in every shape but the compact boards' one-row Split (a hidden row
+  // cannot take a drop, Rig focus *is* the whole rig, and the desk board's Split is a scroller
+  // under the handle). The compact Split shows one row with the row chip.
   const everyRow = editing || focus === 'rig'
   const [compactRow, setCompactRow] = useState(0)
   const compactIndex = Math.min(compactRow, Math.max(0, effective.rows.length - 1))
-  // Held by the band because it decides what is drawn (every line while the handle is held); the
-  // clip at the pointer is the handle's own, written imperatively onto `rowsRef` per move so a
-  // pointer frame re-renders the overlay and not every tile on the band.
-  const [dragging, setDragging] = useState(false)
-  const visibleLines: number[][] = everyRow || dragging
-    ? lines
-    : compact
+  const visibleLines: number[][] =
+    compact && !everyRow
       ? effective.rows.length === 0 ? [] : [[compactIndex]]
-      : lines.slice(0, shown)
+      : lines
   const rowsRef = useRef<HTMLDivElement>(null)
+
+  // ── The split's height (D6, rebuilt 2026-09-22) ──
+  // The desk board's Split draws the rows as a scroller at the window's `busk.rigHeight`, or —
+  // while the window has not chosen — at the first `defaultBuskRigRows` whole lines, measured
+  // once they are on screen. Both are clamped to what the column can give: the page keeps
+  // `PAGE_MIN_HEIGHT_PX`. The measurement is a layout effect, so the unmeasured first frame (the
+  // grid at its natural height) is never painted, and it re-runs when the rows change or the
+  // column or the grid resizes — a narrower column reflows a `WRAP` row, a shorter one lowers the
+  // ceiling, and a grid that has just become a scroller can lose a scrollbar's width.
+  // The height goes onto the grid **imperatively, from a layout effect keyed on the value**, never
+  // as a `style` prop: the handle writes the same property per move, and a prop would undo that on
+  // any re-render mid-drag (`RigHandle`'s docblock).
+  const splitScroller = focus === 'split' && !editing && !compact && lines.length > 0
+  const wish = useBuskRigHeight()
+  const defaultRows = useDefaultBuskRigRows()
+  const [measured, setMeasured] = useState<{ defaultHeight: number; capacity: number } | null>(null)
+  // While the grip is held the handle owns the grid's height (`RigHandle`'s `onDragging`).
+  const [dragging, setDragging] = useState(false)
+  const measureSplit = useCallback(() => {
+    const rows = rowsRef.current
+    if (rows == null) return
+    const gridRect = rows.getBoundingClientRect()
+    // Content coordinates: the edges as drawn plus whatever the grid is scrolled by, so the
+    // default is the same lines however the operator has scrolled.
+    const edges = lineEdges(rows).map((edge) => edge + rows.scrollTop)
+    const defaultHeight = edges[Math.min(defaultRows, edges.length) - 1] ?? RIG_MIN_HEIGHT_PX
+    // The ceiling is the column's height less every fixed thing in it but the grid and the page —
+    // the band's chrome above the grid, the handle and the band's padding below it, the page strip
+    // — less the page's minimum. Measured from those boxes and **never inferred from the page
+    // body's remainder**: with the grid at its natural height on the first frame, a rig taller
+    // than the column has already collapsed the body to nothing, and "grid + body − minimum" then
+    // answered several times the real ceiling — a stored height past it was accepted, the region
+    // drawn taller than the column, and the page unreachable. The chrome boxes do not move when
+    // the band overflows; the column's own box is the viewport's, not its content's.
+    const column = rows.closest('[data-busk-column]')
+    const band = rows.closest('[data-rig-band]')
+    const strip = column?.querySelector('[data-busk-page-strip]')
+    const capacity =
+      column != null && band != null
+        ? (() => {
+            const columnRect = column.getBoundingClientRect()
+            const bandRect = band.getBoundingClientRect()
+            const above = gridRect.top - columnRect.top
+            const below = bandRect.bottom - gridRect.bottom + (strip?.getBoundingClientRect().height ?? 0)
+            return columnRect.height - above - below - PAGE_MIN_HEIGHT_PX
+          })()
+        : Infinity
+    setMeasured((prev) =>
+      prev != null && prev.defaultHeight === defaultHeight && prev.capacity === capacity ? prev : { defaultHeight, capacity },
+    )
+  }, [defaultRows])
+  useLayoutEffect(() => {
+    if (!splitScroller) return
+    measureSplit()
+    const rows = rowsRef.current
+    const column = rows?.closest('[data-busk-column]')
+    if (rows == null || column == null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measureSplit())
+    // The column for the ceiling and the width; the grid too, because becoming a scroller can
+    // narrow the rows by a scrollbar and reflow a `WRAP` row without the column moving at all.
+    observer.observe(column)
+    observer.observe(rows)
+    return () => observer.disconnect()
+    // `lines` re-measures when the rows change: a row added or re-laid-out moves every edge.
+  }, [splitScroller, measureSplit, lines])
+  const capacity = measured?.capacity ?? Infinity
+  const rigHeight =
+    measured == null ? null : clampRigHeight(wish ?? measured.defaultHeight, RIG_MIN_HEIGHT_PX, capacity)
+  useLayoutEffect(() => {
+    const rows = rowsRef.current
+    if (rows == null) return
+    // Held off only while a drag is live **in Split**: a shape change under a drag (another
+    // window's `focus: 'rig'`) must clear the height in this same commit, since the handle's
+    // teardown — the thing that ends `dragging` — is a passive cleanup and runs a paint later.
+    if (dragging && splitScroller) return
+    rows.style.height = splitScroller && rigHeight != null ? `${rigHeight}px` : ''
+    // `dragging` is a dep so the release re-syncs the grid to the resolved height — which is the
+    // one the drag committed, or the old wish re-clamped if the ceiling moved under a press that
+    // moved nothing.
+  }, [splitScroller, rigHeight, dragging])
 
   // Every cell the selection **covers**: the cells selected on their own, and every cell of a
   // selected whole fixture — the desk's `TargetCoverage` reads a cell as covered by its parent, so
@@ -622,6 +704,13 @@ function RigBandBody({
             'grid grid-cols-12 content-start gap-x-3 gap-y-1.5',
             editing && effective.fallback && 'opacity-60',
             focus === 'rig' && !editing && 'min-h-0 flex-1 overflow-y-auto',
+            // The desk board's Split: a scroller at the handle's height (the layout effect above).
+            // `scrollbar-gutter: stable` so the rows' width is the same whether or not a scrollbar
+            // is showing: otherwise a width-taking scrollbar (Windows, Linux) can reflow a `WRAP`
+            // row as the grid's height crosses its content's, and with no height chosen the
+            // default's measurement would chase that reflow — taller with the bar, shorter
+            // without — for as long as the two disagreed. Overlay scrollbars ignore it.
+            splitScroller && 'min-h-0 overflow-y-auto [scrollbar-gutter:stable]',
           )}
         >
           {editing && effective.fallback && effective.rows.length > 0 && (
@@ -667,18 +756,15 @@ function RigBandBody({
       )}
 
       {/* ── The handle ── */}
-      {/* One grip in two shapes, on the desk board: the drag in Split; the press back to Split
-          under the rows in Rig. Not in edit mode, which forces Split for its duration, and not on
-          the compact board, where the segmented control is the route. */}
-      {!editing && !compact && (focus === 'rig' || lines.length > 0) && (
-        <RigHandle
-          mode={focus}
-          shown={shown}
-          total={lines.length}
-          rowsRef={rowsRef}
-          dragging={dragging}
-          onDragging={setDragging}
-        />
+      {/* The grip under the rows, on the desk board's Split only: not in edit mode, which forces
+          Split for its duration and shows every row unclipped; not on the compact boards, where the
+          segmented control is the route; and not in Rig, where the folded page strip's chevron is
+          the way back. Mounted **before** the height is measured — its 16px box is part of what the
+          page body is measured against, and a ceiling measured without it was 16px too generous on
+          every first paint, leaving the page 104 at the bottom of a drag. The floor stands in for
+          the value on that one unpainted frame; the layout effect re-renders before paint. */}
+      {splitScroller && (
+        <RigHandle height={rigHeight ?? RIG_MIN_HEIGHT_PX} max={capacity} rowsRef={rowsRef} onDragging={setDragging} />
       )}
 
       {/* Confirmed, like the page delete: this takes a whole arrangement away and the rig write

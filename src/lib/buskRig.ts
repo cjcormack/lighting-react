@@ -195,7 +195,7 @@ export function rowWidth(row: BuskRigRow): number {
 /**
  * The rows cut into the **lines** the band draws them on — a twelve-track grid filled in order, a
  * row starting a new line when it does not fit beside the last (`rowWidth`). Each line is the row
- * indices on it. This is the unit the Split handle counts and `clampRigRows` clamps to: two
+ * indices on it. This is the unit the Split handle snaps to and the default height counts: two
  * half-width rows side by side are one line, and showing "one row" of them would show half a line.
  */
 export function rigLines(rows: readonly BuskRigRow[]): number[][] {
@@ -833,10 +833,3 @@ export function rigSteps(rows: readonly BuskRigRow[]): CueTarget[][] {
   return steps
 }
 
-// ─── The rows handle (in lines) ─────────────────────────────────────────
-
-/** How many **lines** the split shows (`rigLines`): 1…N, or 0 for a rig with no rows to show. */
-export function clampRigRows(wanted: number, total: number): number {
-  if (total <= 0) return 0
-  return Math.max(1, Math.min(Math.round(wanted), total))
-}

@@ -792,15 +792,17 @@ drawing crosses on whatever page the operator went to next.
 
 **Each window gives the busk view its own shape, and the shape is three per-tab facts**
 (busk-further plan D5–D7, `lib/buskWindow.ts`): `busk.focus` (`split` · `pads` · `rig`),
-`busk.rigRows` (how many rig lines the split shows — a line holds the rows that share it) and `busk.sheet` (`none` · `speed` · `colour` ·
+`busk.rigHeight` (how tall the split draws the rig region, in px — `null` until the window chooses,
+drawn then as the surface's default whole lines) and `busk.sheet` (`none` · `speed` · `colour` ·
 `spread`, where `none` is the fold). They sit on `buskPageFollow.ts`'s model and **beside** it —
 per-tab `sessionStorage` through `createSyncStore`, never `localStorage`, never the desk's — and
 nothing here reads the selection's follow flag or the page's. The reason is the reason focus
 exists: two screens at one desk showing two shapes of one view, pressed onto one selection.
 
-**Split** is the band showing `busk.rigRows` rows over the page with the handle between; **Pads**
+**Split** is the band drawing the rig as a scroller at `busk.rigHeight` over the page with the handle between; **Pads**
 folds the rig to `RigStrip` (the summary, the family pill, the desk chip while unlinked — what a
-press needs to be honest about — and a chevron that unfolds Split) **off the desk board**, and on it draws **no rig
+press needs to be honest about — labelled *Pads*, since in Pads it is the body's top row, and with
+no chevron: the Focus control beside it is the way back) **off the desk board**, and on it draws **no rig
 row at all** (busk-chrome plan D17, session A.5): the **pad row** is the body's top row and the page
 fills the rest; **Rig** fills the
 body with every row and folds the page to `BuskPageStrip`'s **40px folded arm** at the bottom —
@@ -846,26 +848,50 @@ The row was two — a label row over a controls row — from the morning of 2026
 and the merge cost 32px in every shape; before that the Focus control was on the page strip and
 moved with the fold, and then briefly on the band's one label row, which a desk width with the
 sidebar open filled to wrapping. **The handle is `RigHandle`,
-one grip in two shapes**: in Split a drag (a focusable `role="separator"`) that snaps to whole
-lines on release — every line is drawn while it is held and **the clip is the snap**: dragged into
-the Pads region the rows clip to nothing, into the Rig region the clip lifts and the rows stretch to
-take the page body's room, and between them the rows' bottom edge follows the pointer — cut at it
-above the tiles, extended to it below, so a drag past the last line visibly pushes the page down —
-so the band already has the shape the release will give it (a badge naming the shape was tried and read as a status box; there is none);
-`snapRigRows` is the pure rule and the arrow keys step it one line at a time — and in Rig
-a **chevron pill** drawn where the drag would be, a press on it returning to Split, pointing the way
-the page will come; it replaced the strip's *Unfold the rig* chevron on the desk board, and its Pads
-twin went with the Pads row (D17: the pad row's Focus control is the way back). There is **no count caption**: *1 of 2 rows*
-said nothing the rows did not and made the snap to Pads or Rig a caption change the eye missed. The
-handle and the segmented control are **one setting** (D6): past the last line **or within 40px of
-the column's bottom** (`data-busk-column`, read as the drag's floor) is Rig focus, above the first
-line's middle is Pads, so it is never stuck at either end. The floor rule exists because on a rig
-taller than the window the last line's bottom is below the viewport and Rig was unreachable by drag —
-reported from the desk as the snap working upward only — and the grip takes pointer capture so a
-drag that runs off the bottom of the window still delivers its release. It is drawn for a **one-line
-rig too** (D6 says 1…N; hiding it below two rows left the segmented control as the only route) and
-**hidden off the desk board** — below `md` and on the short board, where the band is one row with a
-row chip and the segmented control is the route. **Edit mode forces Split** for its duration, because a palette drag
+a grip under the rows in Split, and it sets one thing: how tall the rig region is** (D6, rebuilt
+2026-09-22). The region is a scroller with every line mounted, so the bar can rest between two
+lines and the rows scroll under it; past the last line the region simply has room, which is how the
+page is made smaller. The drag (a focusable `role="separator"`) is **live and magnetic**: within
+`RIG_SNAP_PX` (10) of a line's bottom edge the height jumps to it and elsewhere it follows the
+pointer, the last line's edge a snap point like any other; the arrow keys step between the same
+edges, a double press restores the default (read off the two presses, not `dblclick`, since the press cancels `pointerdown` and Safari is the desk browser), and the fact is written on release only if the drag
+moved. `snapRigHeight` / `stepRigHeight` are the pure rules, pinned by table in `RigBand.test.tsx`.
+It is clamped **on read, never on write**: the band measures a ceiling off the column
+(`data-busk-column`'s height less the fixed chrome in it — the band's row above the grid, the
+handle and padding below it, the page strip — less the page's `PAGE_MIN_HEIGHT_PX` of 120) and a
+floor of `RIG_MIN_HEIGHT_PX` (56), so a stored height taller than a window that has since shrunk
+is drawn at the ceiling and comes back when the window does. **Never infer that ceiling from the
+page body's remainder**: on the first frame the grid is at its natural height, so a rig taller than
+the column has already collapsed the body to nothing and "grid + body − minimum" answers several
+times the truth — a stored height past it was accepted and the page drawn off the bottom of the
+screen. The chrome boxes do not move when the band overflows, and the column's box is the
+viewport's. The handle is **mounted before the measurement** for the same reason: its 16px box is
+part of that chrome, and a ceiling measured without it left the page 104 at the bottom of a drag. **The handle never changes focus.** The one it replaced counted whole lines
+(`busk.rigRows`) and snapped past its ends into Rig and Pads, and the desk's report was four
+inconsistencies from one design: the ends snapped as the pointer crossed them while the lines
+snapped on release, the count could shrink only the rig and never the page, the bar could not rest
+between lines, and only Rig had a way back drawn under the rows. Focus is the segmented control's
+alone now. **The rig strip is the band's compact row without the rows under it** (`RigStrip`): the
+same `pt-2.5 pb-2` box and `min-h-7` row, so the row and the Focus control at its end sit where the
+band's do whichever is drawn — it was a 36px chrome row of its own, 4px off the band's row centre,
+carrying a chevron before the Focus control that pushed the control along on that strip only. The
+chevron is gone (the Focus control is the one way between the shapes on every board, D17's desk-board
+rule made general) and the label reads **Pads**, since in Pads that row is the body's top row as the
+desk board's pad row is. Only Rig's folded page strip keeps a chevron back to Split (`BuskPageStrip`,
+40px at the bottom of the body, nothing beside it to line up against); the chevron pill under the
+rows went with the ends. The band writes the resolved height
+onto the grid from a **layout effect keyed on the value, never a `style` prop**: the handle writes
+the same property per move, a prop would undo that on any re-render mid-drag, and a handle unmounted
+mid-drag (a `focus: 'rig'` from another window) must leave no fixed height on a grid that has to
+flex — its teardown touches the DOM not at all, because a passive cleanup runs after the commit
+that cleared it. The grip takes pointer capture so a drag that runs off the bottom of the window
+still delivers its release, `pointercancel` ends it as a release does, and the ceiling is read
+through a ref so a resize mid-drag does not cancel the drag. The default is **measured, not
+stored**: with the fact `null` the band measures the first `defaultBuskRigRows` lines' edges in a
+layout effect (so the unmeasured first frame never paints) and again when the rows change or the
+column resizes; every other reader of that default is gone. It is drawn for a **one-line rig too**
+and **hidden off the desk board** — below `md` and on the short board, where the band is one row
+with a row chip and the segmented control is the route. **Edit mode forces Split** for its duration, because a palette drag
 needs both regions, and restores the window's focus on Done by never having written it; the
 control is disabled while editing rather than hidden, still lighting the stored focus, which is
 what Done returns to. A project with **no pages** forces Split too: its first-open screen lives in
@@ -876,7 +902,7 @@ the reader resolves it against the surface through the module's own copies of th
 cramped (750) height queries (`shortViewport.test.ts` pins both spellings) plus Tailwind's `lg`
 for width: focus defaults to `pads` on a short viewport; the sheet to `speed` where docking the
 288px rail leaves the page its 600px (`lg` and up), `none` where it would stack the page (iPad
-portrait) or the viewport is short; the rows to three on a desk screen and two where cramped or
+portrait) or the viewport is short; the rig's default lines to three on a desk screen and two where cramped or
 below `lg` — so a 1024×768 iPad in landscape gets two, and an **820-tall** one (1180×820) gets
 **three**, since 820 clears the 750 fold; the `Tablets` board's "2 rows" never anticipated the
 taller iPad, and `buskWindow.test.ts` pins both cases. `lg` rather than a measured body because the default has to be answerable off the busk
@@ -1349,12 +1375,13 @@ bank's two facts, plus `SCROLL`, the sideways-scrolling line every row was and s
 (`rowFlow` / `rowWidth` read an absent field as the default, for a desk that predates the two
 columns) — set from the row's `…` menu in edit mode (`setRowLayout`). The rows fill a twelve-track
 grid in order (`rigLines`), so two half-width rows share a line, and the band's unit is the **line**:
-the handle counts lines and `clampRigRows` clamps to them. `toRigRequest` sends the two only where
+the handle snaps to a line's edge and the default height counts lines. `toRigRequest` sends the two only where
 they differ from the defaults, since the desk's Json refuses a key it does not know and a desk
 mid-upgrade must keep accepting a rig nobody has re-laid-out. The drag handle (D6, §Focus and the
-side sheet) reads and writes the window's `busk.rigRows`, snaps past both ends, is drawn for a
+side sheet) reads and writes the window's `busk.rigHeight`, never the focus, is drawn for a
 one-line rig and hidden off the desk board (below `md` and on the short board alike, `!compact`);
-edit mode shows every row, since a hidden one cannot take a drop. **The one row folds in a fixed
+every line is mounted in Split and in edit mode alike — the one scrolls, the other cannot hide a
+row that has to take a drop. **The one row folds in a fixed
 order, and its floor is two rows by design** (busk-chrome plan D15, `Band.dc.html`; the thresholds
 are re-measured in the app and are `RigBand.tsx`'s to move): the band is its own `@container` and
 carries `data-focus`, and the row gives up its words in this order — the **verbs' words first**
@@ -1408,8 +1435,8 @@ Highlight capture and one locate fold and the two rows cannot answer a press two
 them. **A held Highlight releases when those buttons unmount**: `useHighlight` releases on its own
 host's unmount, and its host is the view now, which outlives a focus change — so a MIDI
 `buskFocusSet` mid-hold would otherwise take the band and the held button away with the dimmers
-pinned at full. `RigStrip` and the short board's merged row are unchanged, and `RigHandle` has no
-Pads arm. **The pad row's `@container` is a wrapper and the row is its child**, as the band's is:
+pinned at full. `RigStrip` and the short board's merged row carry the same pieces without a chevron
+since 2026-09-22, and `RigHandle` has one arm, Split's. **The pad row's `@container` is a wrapper and the row is its child**, as the band's is:
 a query container is the nearest *ancestor* and never the element itself, so a floor class on the
 container element has nothing to match — the first cut did that, and below 680 the first group
 took `w-full` in a row that never wrapped and pushed the Focus control under the docked sheet.
@@ -2913,8 +2940,10 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
   arrives empty behind the boot overlay and fills itself when the show is ready. There is no retry
   timer; do not add one.
 - **`viewOptions` is a free `string → string` map, and the registry never learns its vocabulary**
-  (busk-further plan D13; lighting7 `6e2cc72`). On the busk view it carries `focus`, `rigRows`,
-  `sheet`, `pageFollows` and — only while the page is unlinked — `page`; a following window
+  (busk-further plan D13; lighting7 `6e2cc72`). On the busk view it carries `focus`,
+  `sheet`, `pageFollows` and — only while the page is unlinked — `page` (the split's height is
+  pixels on this window's screen and is not announced; the `rigRows` count it replaced was, and
+  nothing ever read it); a following window
   announces no page, because the desk's showing page is the desk's to say and the Screens sheet
   reads it for every following row alike. It rides back on `windows.state`, which is what the
   Screens sheet draws a row's Focus · Sheet · Page controls from — generically, off the `options`

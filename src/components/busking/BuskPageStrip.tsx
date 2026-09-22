@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useDndMonitor, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { useSelector } from 'react-redux'
-import { MoreHorizontal, Pencil } from 'lucide-react'
+import { ChevronUp, MoreHorizontal, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -202,8 +202,10 @@ export interface BuskPageStripProps {
    * board's merged row the Focus control — which otherwise lives on the rig's top row, not here.
    */
   controls?: ReactNode
-  /** Rig focus: the 40px folded page at the bottom of the body — name, bank count, the controls. */
+  /** Rig focus: the 40px folded page at the bottom of the body — name, bank count, the chevron back to Split, the controls. */
   folded?: boolean
+  /** Folded only: the chevron's press, the way back to Split. */
+  onUnfold?: () => void
   /**
    * The short board's merged row (`Phones.dc.html`, landscape): a 32px row with the rig strip's
    * pieces in [leading], the page tabs and the controls after them — one row where the desk board
@@ -280,6 +282,7 @@ export function BuskPageStrip({
   onReorder,
   controls,
   folded = false,
+  onUnfold,
   dense = false,
   leading,
   pads,
@@ -348,6 +351,21 @@ export function BuskPageStrip({
           {active == null ? '' : bankCount === 0 ? 'No banks' : `${bankCount} ${bankCount === 1 ? 'bank' : 'banks'}`}
         </span>
         <div className="flex-1" />
+        {/* The way back to Split, pointing the way the page will come. The rig strip carries no
+            twin: there the Focus control beside the summary is the way, and a chevron pushed it
+            along on that strip only (`RigStrip`). This strip sits at the bottom with nothing to
+            line up against, and a press here is a finger's reach from the pads it brings back. */}
+        {onUnfold != null && (
+          <button
+            type="button"
+            onClick={onUnfold}
+            aria-label="Show the page again: Split"
+            title="Show the page again: Split"
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <ChevronUp className="size-4" />
+          </button>
+        )}
         {controls}
       </div>
     )

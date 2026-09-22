@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils'
 
 /**
  * The **Focus** segmented control — Split · Pads · Rig (busk-further plan D5–D6, `Focus.dc.html`).
- * It reads and writes the window's `busk.focus` and nothing else, so it and the rig band's rows
- * handle are one setting: the handle dragged past the last row lands on *Rig* here, and to none on
- * *Pads*.
+ * It reads and writes the window's `busk.focus` and nothing else — and since 2026-09-22 it is
+ * **the** control that does: the rig band's handle sets the split's height and never the focus
+ * (it used to snap past its ends into Rig and Pads), the rig strip carries no chevron beside it,
+ * and only Rig's folded page strip keeps a chevron back to Split (`BuskPageStrip`).
  *
  * **It sits at the end of the rig band's one row in every shape** (2026-09-21) — Split, Rig
  * and, on the desk board, Pads, where the band is drawn folded to that row; off the desk board

@@ -29,7 +29,7 @@ describe('the announce', () => {
   })
 
   it('carries viewOptions as a seventh key only when the view contributes any, copied', () => {
-    const options = { focus: 'pads', sheet: 'none', rigRows: '2', pageFollows: 'true' }
+    const options = { focus: 'pads', sheet: 'none', pageFollows: 'true' }
     const frame = announceFrame({ ...ME, view: '/projects/1/busk', viewOptions: options })
     expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
     expect(frame.viewOptions).toEqual(options)
@@ -40,7 +40,7 @@ describe('the announce', () => {
   })
 
   it('carries viewOptions.immersive under every live view and no viewOptions on a library — the key set otherwise unchanged (busk-chrome D9)', () => {
-    const busk = { focus: 'pads', sheet: 'none', rigRows: '2', pageFollows: 'true' }
+    const busk = { focus: 'pads', sheet: 'none', pageFollows: 'true' }
     for (const view of WINDOW_VIEWS) {
       const path = `/projects/1${view.segment}`
       const frame = announceFrame({ ...ME, view: path, viewOptions: announcedViewOptions(windowViewOf(path), busk, 'on') })

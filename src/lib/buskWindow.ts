@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
-import { clampRigRows } from './buskRig'
 import { unlinkBuskPage, useBuskPageFollow, useLocalBuskPage } from './buskPageFollow'
 
 /**
  * **The busk view's per-window facts** — the shape one window gives the view (busk-further plan
- * §3.4, D5–D7): which of the three shapes it is in (`busk.focus`), how many rig rows the split
- * shows (`busk.rigRows`), and which side-sheet tab is open (`busk.sheet`, where `none` is the fold).
+ * §3.4, D5–D7): which of the three shapes it is in (`busk.focus`), how tall the split draws the rig
+ * region (`busk.rigHeight`, px), and which side-sheet tab is open (`busk.sheet`, where `none` is
+ * the fold).
  *
  * All three sit on `lib/buskPageFollow.ts`'s model and **beside** it, never inside it: per-tab
  * `sessionStorage` through `createSyncStore` — `localStorage` is one value per origin per profile
@@ -18,9 +18,21 @@ import { unlinkBuskPage, useBuskPageFollow, useLocalBuskPage } from './buskPageF
  * chosen*, and the reader resolves it against the surface: `focus` defaults to `pads` on a short
  * viewport and `split` otherwise; `sheet` defaults to `speed` where docking the 288px rail leaves
  * the page body its 600px, and to `none` where it would stack the page (iPad portrait) or the
- * viewport is short; `rigRows` defaults to three rows on a desk screen and two where the viewport
- * is cramped or narrower than `lg`. Once the window has chosen, the tab fact wins whatever the
- * surface says, and it survives a reload of that tab.
+ * viewport is short; `rigHeight` rests at `null`, which the band draws as the first
+ * [defaultBuskRigRows] whole lines — three on a desk screen and two where the viewport is cramped
+ * or narrower than `lg` — measured once the lines are on screen. Once the window has chosen, the
+ * tab fact wins whatever the surface says, and it survives a reload of that tab.
+ *
+ * **The rig height is pixels, not a line count** (2026-09-22; it was `busk.rigRows`, 1…N whole
+ * lines). A count could only ever shrink the *rig*: the page took whatever the lines left, so the
+ * one way to give the page less room was a whole extra line, and the bar could not rest between
+ * two lines. A height can: the rig region is a scroller under a bar the operator puts anywhere,
+ * snapping to a line's bottom while it is dragged and resting between lines otherwise, and past
+ * the last line the region simply has room — which is how the page gets smaller. It is **this
+ * window's** fact and means nothing on another screen, so unlike the count it is not announced
+ * (`useBuskViewOptions`); the Screens sheet never drew a row control for either. The band clamps
+ * it on read — a stored height taller than the body leaves the page its minimum — without
+ * rewriting the wish, so a window that shrinks and grows back shows what it asked for.
  *
  * **The short and cramped queries are copies**, by the convention `shortViewport.test.ts`
  * enforces: every site that folds at 500px of height says so with a media query of its own, and
@@ -63,14 +75,14 @@ export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'speed', 'colour', 'sp
 export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['speed', 'colour', 'spread', 'show']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
-export const BUSK_RIG_ROWS_KEY = 'busk.rigRows'
+export const BUSK_RIG_HEIGHT_KEY = 'busk.rigHeight'
 export const BUSK_SHEET_KEY = 'busk.sheet'
 export const BUSK_LAST_SHEET_KEY = 'busk.lastSheet'
 export const BUSK_WINDOW_DECIDED_KEY = 'busk.windowDecided'
 
-/** The three rows a desk screen shows in Split before the operator moves the handle. */
+/** The three lines a desk screen shows in Split before the operator moves the handle. */
 export const DESK_RIG_ROWS = 3
-/** Two rows where the viewport is cramped or narrower than `lg` — the tablet boards. */
+/** Two lines where the viewport is cramped or narrower than `lg` — the tablet boards. */
 export const TABLET_RIG_ROWS = 2
 
 // The two height folds, duplicated per site by convention (see the module comment); the width
@@ -105,10 +117,10 @@ const focusStore = createSyncStore<BuskFocus | null>({
   storage: sessionStorageArea,
 })
 
-const rigRowsStore = createSyncStore<number | null>({
-  key: BUSK_RIG_ROWS_KEY,
+const rigHeightStore = createSyncStore<number | null>({
+  key: BUSK_RIG_HEIGHT_KEY,
   fallback: null,
-  parse: (parsed) => (typeof parsed === 'number' && Number.isInteger(parsed) && parsed > 0 ? parsed : null),
+  parse: (parsed) => (typeof parsed === 'number' && Number.isFinite(parsed) && parsed > 0 ? parsed : null),
   storage: sessionStorageArea,
 })
 
@@ -235,6 +247,7 @@ export function defaultBuskSheet(surface: Pick<BuskSurface, 'short' | 'docks'>):
   return 'speed'
 }
 
+/** How many whole lines the split draws while the window has not chosen a height ([useBuskRigHeight]). */
 export function defaultBuskRigRows(surface: Pick<BuskSurface, 'cramped' | 'docks'>): number {
   return surface.cramped || !surface.docks ? TABLET_RIG_ROWS : DESK_RIG_ROWS
 }
@@ -261,18 +274,33 @@ export function setBuskFocus(focus: BuskFocus): void {
 }
 
 /**
- * How many rig rows the split shows, **clamped to the rig** — 1…[total], or 0 for a rig with no
- * rows. The stored fact is the operator's wish and is not rewritten by the clamp: a rig that
- * loses a row and gets it back shows the same count it did.
+ * The rig region's height in Split, in px — **the wish, unclamped**, or `null` while this window
+ * has not chosen one. The band resolves `null` to the first [useDefaultBuskRigRows] lines by
+ * measuring them, and clamps either against the body on read (the page keeps its minimum) without
+ * writing the clamp back: the stored fact is what the operator asked for, and a window that shrinks
+ * and grows back shows it again.
  */
-export function useBuskRigRows(total: number): number {
-  const wanted = useStored(rigRowsStore)
-  const surface = useBuskSurface()
-  return clampRigRows(wanted ?? defaultBuskRigRows(surface), total)
+export function useBuskRigHeight(): number | null {
+  return useStored(rigHeightStore)
 }
 
-export function setBuskRigRows(rows: number): void {
-  rigRowsStore.set(Math.max(1, Math.round(rows)))
+/** The lines the split draws while [useBuskRigHeight] answers `null`: the surface's default. */
+export function useDefaultBuskRigRows(): number {
+  return defaultBuskRigRows(useBuskSurface())
+}
+
+export function getBuskRigHeight(): number | null {
+  return rigHeightStore.getSnapshot()
+}
+
+/** Choose a height. Rounded to whole px, and never zero — the band's floor is the least it draws. */
+export function setBuskRigHeight(px: number): void {
+  rigHeightStore.set(Math.max(1, Math.round(px)))
+}
+
+/** Back to the surface's default — two still presses on the grip. */
+export function resetBuskRigHeight(): void {
+  rigHeightStore.set(null)
 }
 
 /** Which side-sheet tab is open, `none` for the fold: the window's choice, else the default. */
@@ -342,7 +370,6 @@ export function applyBuskArrival(params: { focus: string | null; sheet: string |
 /** The keys the busk view announces, and the two the Screens sheet and MIDI can set. */
 export const VIEW_OPTION_FOCUS = 'focus'
 export const VIEW_OPTION_SHEET = 'sheet'
-export const VIEW_OPTION_RIG_ROWS = 'rigRows'
 export const VIEW_OPTION_PAGE = 'page'
 export const VIEW_OPTION_PAGE_FOLLOWS = 'pageFollows'
 /** `{sheet: 'toggle'}` — the MIDI `BuskSheetToggle`'s spelling, folded here into [toggleBuskSheet]. */
@@ -350,35 +377,32 @@ export const VIEW_OPTION_TOGGLE = 'toggle'
 
 /**
  * The busk facts as the announce carries them (`windows.announce {viewOptions}`), so a Screens sheet
- * on another window can draw this one's row: focus, the split's rows (the wish, unclamped — no
- * row control reads it), the sheet, whether the page follows the desk and — only while it does
- * not — which page this window holds. A following window announces no `page`: the desk's showing
- * page is the desk's to say, and the sheet reads it from `busk.pageState` for every following
- * row alike.
+ * on another window can draw this one's row: focus, the sheet, whether the page follows the desk
+ * and — only while it does not — which page this window holds. A following window announces no
+ * `page`: the desk's showing page is the desk's to say, and the sheet reads it from
+ * `busk.pageState` for every following row alike. **The rig height is not announced**: it is
+ * pixels on this window's screen, which says nothing about another's, and no row control ever read
+ * the line count it replaced (the `rigRows` key went with the count, 2026-09-22).
  *
  * Values, not choices: a window that has not chosen announces the surface's default, because that
  * *is* what it is showing. A subscription, for the announce effect in `useWindowsBridge`.
  */
 export function useBuskViewOptions(): Record<string, string> {
   const focus = useBuskFocus()
-  const rows = useStored(rigRowsStore)
-  const surface = useBuskSurface()
   const sheet = useBuskSheet()
   const follows = useBuskPageFollow()
   const local = useLocalBuskPage()
-  return buskViewOptions(focus, rows ?? defaultBuskRigRows(surface), sheet, follows, local)
+  return buskViewOptions(focus, sheet, follows, local)
 }
 
 function buskViewOptions(
   focus: BuskFocus,
-  rigRows: number,
   sheet: BuskSheet,
   pageFollows: boolean,
   localPage: number | null,
 ): Record<string, string> {
   const options: Record<string, string> = {
     [VIEW_OPTION_FOCUS]: focus,
-    [VIEW_OPTION_RIG_ROWS]: String(rigRows),
     [VIEW_OPTION_SHEET]: sheet,
     [VIEW_OPTION_PAGE_FOLLOWS]: pageFollows ? 'true' : 'false',
   }
@@ -436,7 +460,7 @@ export function applyBuskViewOptions(
 /** Test seam: every store back to its fallback, and the cached media answers dropped. */
 export function resetBuskWindowStores(): void {
   focusStore.reset()
-  rigRowsStore.reset()
+  rigHeightStore.reset()
   sheetStore.reset()
   lastSheetStore.reset()
   decidedStore.reset()

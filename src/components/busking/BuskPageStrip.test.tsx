@@ -328,4 +328,17 @@ describe('the pad row', () => {
     expect(folded).toHaveTextContent('Ballads')
     expect(within(folded).queryByRole('button', { name: 'Ballads' })).toBeNull()
   })
+
+  it('folded, carries the chevron back to Split before the controls, and only when given a press', () => {
+    const onUnfold = vi.fn()
+    draw({ folded: true, controls: <span>ctl</span>, onUnfold })
+    const folded = document.querySelector('[data-busk-page-strip="folded"]') as HTMLElement
+    const chevron = within(folded).getByRole('button', { name: 'Show the page again: Split' })
+    expect(chevron.compareDocumentPosition(screen.getByText('ctl')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(chevron)
+    expect(onUnfold).toHaveBeenCalledTimes(1)
+    cleanup()
+    draw({ folded: true })
+    expect(screen.queryByRole('button', { name: 'Show the page again: Split' })).toBeNull()
+  })
 })

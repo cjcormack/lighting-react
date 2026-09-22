@@ -7,7 +7,7 @@ import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
-import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskRigRows } from '@/lib/buskWindow'
+import { getBuskFocus, getBuskRigHeight, getBuskSheet, resetBuskWindowStores, setBuskRigHeight } from '@/lib/buskWindow'
 import {
   CHIP_SUBJECT_CLASS,
   EDIT_WORD_CLASS,
@@ -18,8 +18,8 @@ import {
   SECOND_ROW_CLASS,
   TWO_ROWS_CLASS,
   VERB_WORD_CLASS,
-  snapRigRows, COMPACT_FOCUS_WORD_CLASS, BLIND_WORD_CLASS } from './RigBand'
-import { useSelectionVerbs, type SelectionVerbs } from './selectionVerbs'
+  snapRigHeight, stepRigHeight, COMPACT_FOCUS_WORD_CLASS, BLIND_WORD_CLASS } from './RigBand'
+import { useSelectionVerbs } from './selectionVerbs'
 import type { Fixture } from '@/store/fixtures'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
@@ -133,11 +133,38 @@ function Band(props: Omit<Parameters<typeof RigBand>[0], 'verbs'>) {
   return <RigBand {...props} verbs={verbs} />
 }
 
-/** A verbs object a test can hand in by hand, where the hook is not wanted. */
-const inertVerbs: SelectionVerbs = {
-  spread: () => {},
-  locate: { press: () => {}, active: false, enabled: false, title: 'Locate', label: 'Locate' },
-  highlight: { press: () => {}, release: () => {}, active: false, enabled: false },
+function bandFor(
+  selected: BuskingTarget[],
+  handlers: Partial<Omit<Parameters<typeof RigBand>[0], 'verbs'>>,
+  families: AttributeFamily[] | null,
+) {
+  const map = new Map(selected.map((t) => [buskingTargetKey(t), t]))
+  const band = (
+    <Band
+      projectId={1}
+      selectedTargets={map}
+      families={families}
+      onToggle={handlers.onToggle ?? (() => {})}
+      onClear={handlers.onClear ?? (() => {})}
+      onSubselect={handlers.onSubselect ?? (() => {})}
+      editing={handlers.editing ?? false}
+      compact={handlers.compact ?? false}
+      stackRows={handlers.stackRows ?? false}
+      focus={handlers.focus ?? 'split'}
+      controls={handlers.controls}
+    />
+  )
+  // The view's column: the band, the page strip and the page body, the boxes the band measures
+  // the split's ceiling off.
+  return (
+    <DndContext>
+      <div data-busk-column>
+        {band}
+        <div data-busk-page-strip="open" />
+        <div data-busk-page-body />
+      </div>
+    </DndContext>
+  )
 }
 
 function draw(
@@ -145,25 +172,33 @@ function draw(
   handlers: Partial<Omit<Parameters<typeof RigBand>[0], 'verbs'>> = {},
   families: AttributeFamily[] | null = null,
 ) {
-  const map = new Map(selected.map((t) => [buskingTargetKey(t), t]))
-  return render(
-    <DndContext>
-      <Band
-        projectId={1}
-        selectedTargets={map}
-        families={families}
-        onToggle={handlers.onToggle ?? (() => {})}
-        onClear={handlers.onClear ?? (() => {})}
-        onSubselect={handlers.onSubselect ?? (() => {})}
-        editing={handlers.editing ?? false}
-        compact={handlers.compact ?? false}
-        stackRows={handlers.stackRows ?? false}
-        focus={handlers.focus ?? 'split'}
-        controls={handlers.controls}
-      />
-    </DndContext>,
-  )
+  return render(bandFor(selected, handlers, families))
 }
+
+/**
+ * jsdom lays nothing out, so the split's measurements are stubbed by attribute — installed before
+ * a draw, since the band measures in a layout effect at mount: the column from y=0 `columnHeight`
+ * tall, the band from y=0 to 16px under the grid (the handle's box), the rows grid `gridHeight`
+ * tall from y=100 (100 of band chrome above it), each line `lineHeight` tall in turn, the page
+ * strip 40. The ceiling is then `columnHeight − 100 − 16 − 40 − 120`: 440 by default.
+ */
+function stubLayout({ gridHeight = 160, lineHeight = 40, columnHeight = 716 } = {}) {
+  const originalRect = Element.prototype.getBoundingClientRect
+  const rect = (top: number, height: number) =>
+    ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.hasAttribute('data-busk-column')) return rect(0, columnHeight)
+    if (this.hasAttribute('data-rig-band')) return rect(0, 100 + gridHeight + 16)
+    if (this.hasAttribute('data-rig-rows')) return rect(100, gridHeight)
+    if (this.hasAttribute('data-busk-page-strip')) return rect(100 + gridHeight + 16, 40)
+    const line = (this as HTMLElement).dataset?.rigLine
+    if (line != null) return rect(100 + Number(line) * lineHeight, lineHeight)
+    return originalRect.call(this)
+  })
+}
+
+const rowsGrid = () => document.querySelector('[data-rig-rows]') as HTMLElement
+const handle = () => screen.getByRole('separator', { name: 'Rig height' })
 
 const tileButtons = () =>
   screen.getAllByRole('button', { pressed: false }).concat(screen.queryAllByRole('button', { pressed: true }))
@@ -194,6 +229,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   window.sessionStorage.clear()
   resetDeskFollowStores()
@@ -271,7 +307,8 @@ describe('the rig band', () => {
     draw([{ type: 'fixture', key: 'bar-1', fixture: barFixture }])
     expect(screen.getByRole('button', { name: 'Bar L 1–2' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByRole('button', { name: 'Bar L · Cell 3' })[0]).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'PAR 1' })).toHaveAttribute('aria-pressed', 'false')
+    // Every line is mounted in Split, so both PAR 1 tiles (rows Three and Four) are on screen.
+    for (const par of screen.getAllByRole('button', { name: 'PAR 1' })) expect(par).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('reads a fixture tile `some` with a count when one of its cells is selected elsewhere', () => {
@@ -529,12 +566,12 @@ describe('the rig band', () => {
     }
     expect(positions.rig).toEqual(positions.split)
 
-    // Rig focus: the grip under the rows is the way back; there is no Pads chevron any more, since
-    // in Pads the band is not drawn and the pad row's Focus control is the way back.
-    expect(screen.queryByRole('separator', { name: 'Rig rows' })).toBeNull()
+    // Rig focus: no handle and no pill under the rows — the way back is the folded page strip's
+    // chevron (`BuskPageStrip`), which the host draws, and the Focus control; there is no Pads
+    // chevron either, since in Pads the band is not drawn and the pad row's Focus control is the way back.
+    expect(screen.queryByRole('separator', { name: 'Rig height' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Show the rig rows again: Split' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Show the page again: Split' }))
-    expect(getBuskFocus()).toBe('split')
+    expect(screen.queryByRole('button', { name: 'Show the page again: Split' })).toBeNull()
   })
 
   it('folds the verbs to their icons first, the Cells prefix and Focus words after, and the label last before the floor (D15, D20)', () => {
@@ -722,150 +759,189 @@ describe('the rig band', () => {
     expect(onSubselect).toHaveBeenCalledWith('INVERT')
   })
 
-  it('clamps the rows handle to 1…N lines, and the keys step it — writing the window’s fact', () => {
+  it('draws the desk board’s Split as a scroller at the window’s height, every line mounted, the handle reporting it', () => {
     rigData = builtRig()
-    setBuskRigRows(3)
+    stubLayout()
+    setBuskRigHeight(100)
     draw()
-    const handle = screen.getByRole('separator', { name: 'Rig rows' })
-    expect(handle).toHaveAttribute('aria-valuenow', '3')
-    expect(handle).toHaveAttribute('aria-valuemax', '5')
-    expect(screen.queryByText('Four')).not.toBeInTheDocument()
-    // The old ± buttons and the "3 of 4 rows" caption are gone: the count is the handle's own value.
+    // Every line is in the DOM — the rows scroll under the bar — and the grid is the scroller.
+    expect(screen.getByText('Four')).toBeInTheDocument()
+    expect(rowsGrid().className).toContain('overflow-y-auto')
+    expect(rowsGrid().style.height).toBe('100px')
+    // The old ± buttons and the "3 of 4 rows" caption are gone: the height is the handle's own value.
+    expect(handle()).toHaveAttribute('aria-valuenow', '100')
+    expect(handle()).toHaveAttribute('aria-valuemin', '56')
+    // The ceiling: the column less its fixed chrome, less the page's 120 — never the page body's
+    // remainder, which a rig taller than the column has already collapsed.
+    expect(handle()).toHaveAttribute('aria-valuemax', '440')
     expect(screen.queryByRole('button', { name: 'Show one row more' })).not.toBeInTheDocument()
     expect(screen.queryByText(/of 4 rows/)).not.toBeInTheDocument()
-    fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '4')
-    expect(screen.getByText('Four')).toBeInTheDocument()
-    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
-    fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '1')
-    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('1')
-    expect(screen.queryByText('Cells')).not.toBeInTheDocument()
   })
 
-  it('snaps past the ends of the handle into Rig and Pads focus (D6)', () => {
+  it('draws the surface’s default whole lines while the window has not chosen — three on a desk screen — measured, not stored', () => {
     rigData = builtRig()
-    setBuskRigRows(4)
+    stubLayout()
     draw()
-    const handle = screen.getByRole('separator', { name: 'Rig rows' })
-    expect(handle).toHaveAttribute('aria-valuenow', '4')
-    fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(getBuskFocus()).toBe('rig')
-    // The wish is untouched: back in Split the band shows the same four rows.
-    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('4')
-
-    setBuskFocus('split')
-    setBuskRigRows(1)
-    cleanup()
-    draw()
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '1')
-    fireEvent.keyDown(screen.getByRole('separator', { name: 'Rig rows' }), { key: 'ArrowUp' })
-    expect(getBuskFocus()).toBe('pads')
+    // Three lines of 40 from the grid's top: the region's bottom sits on the third line's.
+    expect(rowsGrid().style.height).toBe('120px')
+    expect(handle()).toHaveAttribute('aria-valuenow', '120')
+    expect(getBuskRigHeight()).toBeNull()
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBeNull()
   })
 
-  it('drags to a height and snaps to whole lines on release — every line drawn while held, the rows clipped at the pointer, Pads and Rig named over them', () => {
+  it('steps the keys between line edges, to the ceiling past the last and the floor above the first — never changing focus', () => {
     rigData = builtRig()
-    setBuskRigRows(2)
+    stubLayout()
+    setBuskRigHeight(100)
     draw()
-    const handle = screen.getByRole('separator', { name: 'Rig rows' })
-    expect(screen.queryByText('Four')).not.toBeInTheDocument()
-    // jsdom lays nothing out, so the lines' boxes are stubbed at 40px each from y=100.
-    let boxes = 0
-    const rows = document.querySelector('[data-rig-rows]')!
-    const originalRect = Element.prototype.getBoundingClientRect
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      if (this === rows) return { top: 100, bottom: 260, left: 0, right: 0, width: 0, height: 160, x: 0, y: 100, toJSON: () => ({}) } as DOMRect
-      const line = (this as HTMLElement).dataset?.rigLine
-      if (line != null) {
-        boxes += 1
-        const top = 100 + Number(line) * 40
-        return { top, bottom: top + 40, left: 0, right: 0, width: 0, height: 40, x: 0, y: top, toJSON: () => ({}) } as DOMRect
-      }
-      return originalRect.call(this)
-    })
-    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 180 })
-    // Held: every line is in the DOM (so it can be measured), and the handle says so.
-    expect(screen.getByText('Four')).toBeInTheDocument()
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('data-rig-rows-dragging', 'true')
-    // The clip is the snap: above the first line's middle the rows clip to nothing (the shape Pads
-    // gives the band), past the last line the clip lifts and every line shows (Rig's), and between
-    // them the rows are cut at the pointer.
-    fireEvent.pointerMove(window, { pointerId: 1, clientY: 105 })
-    expect((rows as HTMLElement).style.maxHeight).toBe('0px')
-    fireEvent.pointerMove(window, { pointerId: 1, clientY: 300 })
-    expect((rows as HTMLElement).style.maxHeight).toBe('')
-    fireEvent.pointerMove(window, { pointerId: 1, clientY: 225 })
-    expect((rows as HTMLElement).style.maxHeight).toBe('125px')
-    // Released at 225: three lines' bottoms (140, 180, 220) are within reach; the fourth (260) is not.
-    fireEvent.pointerUp(window, { pointerId: 1, clientY: 225 })
-    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('3')
-    expect(boxes).toBeGreaterThan(0)
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).not.toHaveAttribute('data-rig-rows-dragging')
-    expect((rows as HTMLElement).style.maxHeight).toBe('')
-    vi.restoreAllMocks()
-  })
-
-  it('cancels a drag when the shape changes under it — another window’s focus write mid-drag — clearing the clip and re-arming nothing', () => {
-    rigData = builtRig()
-    setBuskRigRows(2)
-    const { rerender } = draw()
-    const handle = screen.getByRole('separator', { name: 'Rig rows' })
-    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientY: 180 })
-    const rows = document.querySelector('[data-rig-rows]') as HTMLElement
-    expect(rows.style.overflow).toBe('hidden')
-    // Another window sends `focus: 'rig'`: the band re-renders in Rig, the handle becomes the way
-    // back, and the drag in flight is cancelled — no stale clip, no phantom drag armed.
-    const map = new Map<string, BuskingTarget>()
-    rerender(
-      <DndContext>
-        <RigBand projectId={1} selectedTargets={map} families={null} onToggle={() => {}} onClear={() => {}} verbs={inertVerbs} onSubselect={() => {}} editing={false} compact={false} stackRows={false} focus="rig" />
-      </DndContext>,
-    )
-    expect((document.querySelector('[data-rig-rows]') as HTMLElement).style.overflow).toBe('')
-    expect(screen.getByRole('button', { name: 'Show the page again: Split' })).toBeInTheDocument()
-    // Back in Split with the pointer released elsewhere: nothing writes the row count.
-    rerender(
-      <DndContext>
-        <RigBand projectId={1} selectedTargets={map} families={null} onToggle={() => {}} onClear={() => {}} verbs={inertVerbs} onSubselect={() => {}} editing={false} compact={false} stackRows={false} focus="split" />
-      </DndContext>,
-    )
-    fireEvent.pointerUp(window, { pointerId: 1, clientY: 105 })
-    expect(window.sessionStorage.getItem('busk.rigRows')).toBe('2')
+    fireEvent.keyDown(handle(), { key: 'ArrowDown' })
+    expect(handle()).toHaveAttribute('aria-valuenow', '120')
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBe('120')
+    fireEvent.keyDown(handle(), { key: 'ArrowDown' })
+    expect(handle()).toHaveAttribute('aria-valuenow', '160')
+    // Past the last line: the ceiling, which is how the page is made smaller. Not Rig focus.
+    fireEvent.keyDown(handle(), { key: 'ArrowDown' })
+    expect(handle()).toHaveAttribute('aria-valuenow', '440')
+    expect(getBuskFocus()).toBe('split')
+    fireEvent.keyDown(handle(), { key: 'ArrowUp' })
+    expect(handle()).toHaveAttribute('aria-valuenow', '160')
+    fireEvent.keyDown(handle(), { key: 'ArrowUp' })
+    fireEvent.keyDown(handle(), { key: 'ArrowUp' })
+    fireEvent.keyDown(handle(), { key: 'ArrowUp' })
+    // The first line's edge (40) is under the floor, so the floor it is — and not Pads focus.
+    expect(handle()).toHaveAttribute('aria-valuenow', '56')
+    fireEvent.keyDown(handle(), { key: 'ArrowUp' })
+    expect(handle()).toHaveAttribute('aria-valuenow', '56')
     expect(getBuskFocus()).toBe('split')
   })
 
-  it('snaps a drag position to Pads above the first line, Rig well past the last, and whole lines between', () => {
-    const lines = [0, 1, 2, 3].map((i) => ({ top: 100 + i * 40, bottom: 140 + i * 40 }))
-    expect(snapRigRows(105, lines, 4)).toBe(0)
-    expect(snapRigRows(125, lines, 4)).toBe(1)
-    expect(snapRigRows(150, lines, 4)).toBe(1)
-    expect(snapRigRows(172, lines, 4)).toBe(2)
-    expect(snapRigRows(260, lines, 4)).toBe(4)
-    expect(snapRigRows(270, lines, 4)).toBe(4)
-    expect(snapRigRows(300, lines, 4)).toBe(5)
-    expect(snapRigRows(300, [], 4)).toBe(0)
-    // The floor rule: a rig taller than the column puts its last line's bottom out of reach, so
-    // within 40px of the column's bottom is Rig whatever the lines say — and above that the lines
-    // still decide.
-    expect(snapRigRows(172, lines, 4, 200)).toBe(5)
-    expect(snapRigRows(150, lines, 4, 200)).toBe(1)
-    expect(snapRigRows(105, lines, 4, 130)).toBe(0)
+  it('drags live — snapping to a line’s edge within 10px as it passes one, following the pointer otherwise — and writes the fact on release', () => {
+    rigData = builtRig()
+    stubLayout()
+    draw()
+    // The stub reports the grid 160 tall, so that is where the drag starts from.
+    fireEvent.pointerDown(handle(), { button: 0, pointerId: 1, clientY: 300 })
+    expect(handle()).toHaveAttribute('data-rig-rows-dragging', 'true')
+    // 45 up is 115: within 10 of the third line's edge at 120, so it snaps there — while held.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 255 })
+    expect(rowsGrid().style.height).toBe('120px')
+    // 60 up is 100: no edge within reach, so the bar rests between two lines.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 240 })
+    expect(rowsGrid().style.height).toBe('100px')
+    // Far above the first line is the floor, far below the last is the ceiling — and neither is a
+    // change of focus.
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 0 })
+    expect(rowsGrid().style.height).toBe('56px')
+    expect(getBuskFocus()).toBe('split')
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 900 })
+    expect(rowsGrid().style.height).toBe('440px')
+    expect(getBuskFocus()).toBe('split')
+    // Nothing is written until the release, which writes what the drag left.
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBeNull()
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 240 })
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 240 })
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBe('100')
+    expect(handle()).toHaveAttribute('aria-valuenow', '100')
+    expect(handle()).not.toHaveAttribute('data-rig-rows-dragging')
+    expect(getBuskFocus()).toBe('split')
   })
 
-  it('draws the handle for a one-row rig too — 1…N, so a one-row rig still reaches Rig and Pads from the band (D6)', () => {
-    rigData = { rows: [{ id: 1, uuid: 'r1', name: 'Wash', tiles: [tile({ kind: 'FIXTURE', patch: parPatch })] }] }
-    setBuskRigRows(1)
+  it('writes nothing for a press that moved nothing, and two still presses on the grip restore the default', () => {
+    rigData = builtRig()
+    stubLayout()
+    setBuskRigHeight(100)
     draw()
-    const handle = screen.getByRole('separator', { name: 'Rig rows' })
-    expect(handle).toHaveAttribute('aria-valuenow', '1')
-    expect(handle).toHaveAttribute('aria-valuemax', '2')
-    fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(getBuskFocus()).toBe('rig')
-    setBuskFocus('split')
-    fireEvent.keyDown(screen.getByRole('separator', { name: 'Rig rows' }), { key: 'ArrowUp' })
-    expect(getBuskFocus()).toBe('pads')
+    // The clock the double press is read against — an event's `timeStamp` cannot be set from a test.
+    const clock = vi.spyOn(Date, 'now')
+    const press = (at: number, moveTo?: number) => {
+      fireEvent.pointerDown(handle(), { button: 0, pointerId: 1, clientY: 300 })
+      if (moveTo != null) fireEvent.pointerMove(window, { pointerId: 1, clientY: moveTo })
+      clock.mockReturnValue(at)
+      fireEvent.pointerUp(window, { pointerId: 1, clientY: moveTo ?? 300 })
+    }
+    // One still press: the wish stands, and nothing is written for it — not even a `pointermove`
+    // at the press's own point, which would otherwise snap the grip onto an edge within reach.
+    press(1000, 300)
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBe('100')
+    expect(getBuskRigHeight()).toBe(100)
+    expect(rowsGrid().style.height).toBe('100px')
+    // A press that moved is not half of a double press: the next still press starts the count.
+    press(1100, 240)
+    expect(getBuskRigHeight()).toBe(100)
+    press(1200)
+    expect(getBuskRigHeight()).toBe(100)
+    // Two still presses within 400ms — read off the presses, not off `dblclick`, since the press
+    // cancels `pointerdown` and whether a browser still synthesises the click pair is its call.
+    press(1500)
+    expect(getBuskRigHeight()).toBeNull()
+    expect(handle()).toHaveAttribute('aria-valuenow', '120')
+    expect(rowsGrid().style.height).toBe('120px')
+    // Consumed: the next still press is a first again, and one 800ms after it is too.
+    setBuskRigHeight(100)
+    press(1700)
+    expect(getBuskRigHeight()).toBe(100)
+    press(2500)
+    expect(getBuskRigHeight()).toBe(100)
+  })
+
+  it('clamps a stored height taller than the body to the ceiling on read, keeping the wish', () => {
+    rigData = builtRig()
+    stubLayout({ columnHeight: 516 })
+    setBuskRigHeight(1000)
+    draw()
+    // 516 − 100 − 16 − 40 − 120: the page keeps its minimum, and the window shows its wish again when it grows.
+    expect(handle()).toHaveAttribute('aria-valuenow', '240')
+    expect(rowsGrid().style.height).toBe('240px')
+    expect(getBuskRigHeight()).toBe(1000)
+  })
+
+  it('cancels a drag when the shape changes under it — another window’s focus write mid-drag — clearing the height and re-arming nothing', () => {
+    rigData = builtRig()
+    stubLayout()
+    setBuskRigHeight(100)
+    const { rerender } = draw()
+    fireEvent.pointerDown(handle(), { button: 0, pointerId: 1, clientY: 300 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientY: 240 })
+    expect(rowsGrid().style.height).toBe('100px')
+    // Another window sends `focus: 'rig'`: the band re-renders in Rig with the grid free to flex
+    // — no fixed height left on it — and there is no handle, so the drag in flight is cancelled.
+    rerender(bandFor([], { focus: 'rig' }, null))
+    expect(rowsGrid().style.height).toBe('')
+    expect(screen.queryByRole('separator', { name: 'Rig height' })).toBeNull()
+    // Back in Split with the pointer released elsewhere: nothing writes the height.
+    rerender(bandFor([], { focus: 'split' }, null))
+    fireEvent.pointerUp(window, { pointerId: 1, clientY: 105 })
+    expect(window.sessionStorage.getItem('busk.rigHeight')).toBe('100')
+    expect(getBuskFocus()).toBe('split')
+  })
+
+  it('snaps a height to the nearest line edge within reach and clamps it, and steps between edges — the pure rules', () => {
+    const edges = [40, 80, 120, 160]
+    expect(snapRigHeight(115, edges, 56, 440)).toBe(120)
+    expect(snapRigHeight(100, edges, 56, 440)).toBe(100)
+    expect(snapRigHeight(70, edges, 56, 440)).toBe(80)
+    expect(snapRigHeight(45, edges, 56, 440)).toBe(56)
+    expect(snapRigHeight(900, edges, 56, 440)).toBe(440)
+    // A ceiling under the floor is the floor: a window too short for both keeps the rig readable.
+    expect(snapRigHeight(100, edges, 56, 20)).toBe(56)
+    expect(snapRigHeight(100, [], 56, 440)).toBe(100)
+    expect(stepRigHeight(100, edges, 1, 56, 440)).toBe(120)
+    expect(stepRigHeight(120, edges, 1, 56, 440)).toBe(160)
+    expect(stepRigHeight(160, edges, 1, 56, 440)).toBe(440)
+    expect(stepRigHeight(100, edges, -1, 56, 440)).toBe(80)
+    expect(stepRigHeight(80, edges, -1, 56, 440)).toBe(56)
+    expect(stepRigHeight(56, edges, -1, 56, 440)).toBe(56)
+  })
+
+  it('draws the handle for a one-line rig too, and no handle in edit mode', () => {
+    rigData = { rows: [{ id: 1, uuid: 'r1', name: 'Wash', tiles: [tile({ kind: 'FIXTURE', patch: parPatch })] }] }
+    stubLayout()
+    draw()
+    expect(handle()).toBeInTheDocument()
+    cleanup()
+    draw([], { editing: true })
+    expect(screen.queryByRole('separator', { name: 'Rig height' })).toBeNull()
+    expect(rowsGrid().style.height).toBe('')
   })
 
   it('lays rows out on a twelve-track grid by their width, two half-width rows sharing a line, and flows a row’s tiles by its flow', () => {
@@ -875,25 +951,25 @@ describe('the rig band', () => {
     rig.rows![1].flow = 'WRAP'
     rig.rows![2].flow = 'COLUMN'
     rigData = rig
-    setBuskRigRows(2)
+    stubLayout()
     draw()
-    // Two lines shown: Wash and Cells share the first, Three is the second; Four is on the third.
+    // Wash and Cells share the first line, Three is the second, Four the third — every line mounted.
     expect(screen.getByText('Wash')).toBeInTheDocument()
     expect(screen.getByText('Cells')).toBeInTheDocument()
     expect(screen.getByText('Three')).toBeInTheDocument()
-    expect(screen.queryByText('Four')).not.toBeInTheDocument()
+    expect(screen.getByText('Four')).toBeInTheDocument()
     const lines = [...document.querySelectorAll('[data-rig-line]')]
-    expect(lines.map((el) => el.getAttribute('data-rig-line'))).toEqual(['0', '0', '1'])
-    expect(lines.map((el) => (el as HTMLElement).style.gridColumn)).toEqual(['span 6 / span 6', 'span 6 / span 6', 'span 12 / span 12'])
+    expect(lines.map((el) => el.getAttribute('data-rig-line'))).toEqual(['0', '0', '1', '2'])
+    expect(lines.map((el) => (el as HTMLElement).style.gridColumn)).toEqual(['span 6 / span 6', 'span 6 / span 6', 'span 12 / span 12', 'span 12 / span 12'])
     expect(document.querySelector('[data-rig-rows]')!.className).toContain('grid-cols-12')
     const bodies = [...document.querySelectorAll('[data-rig-row-body]')].map((b) => b.getAttribute('data-rig-row-body'))
-    expect(bodies).toEqual(['scroll', 'wrap', 'column'])
+    expect(bodies).toEqual(['scroll', 'wrap', 'column', 'scroll'])
     expect(document.querySelector('[data-rig-row-body="wrap"]')!.className).toContain('flex-wrap')
     expect(document.querySelector('[data-rig-row-body="column"]')!.className).toContain('flex-col')
     expect(document.querySelector('[data-rig-row-body="scroll"]')!.className).toContain('overflow-x-auto')
-    // Two rows share a line, so the unit the handle counts is the line: three lines for four rows.
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuenow', '2')
-    expect(screen.getByRole('separator', { name: 'Rig rows' })).toHaveAttribute('aria-valuemax', '4')
+    // Two rows share a line, so the unit the handle snaps to is the line: the default three lines
+    // of the stub's 40 put the region's bottom on the third line's edge.
+    expect(handle()).toHaveAttribute('aria-valuenow', '120')
   })
 
   it('stacks every row two tiles across, scrolling with the band, in Rig focus below md — never a sideways row', () => {
@@ -923,8 +999,9 @@ describe('the rig band', () => {
 
   it('shows every row with no handle in Rig focus, filling the body — below md too', () => {
     rigData = builtRig()
-    setBuskRigRows(1)
     draw([], { focus: 'rig' })
+    expect(screen.queryByRole('separator', { name: 'Rig height' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show the page again: Split' })).toBeNull()
     expect(screen.getByText('Four')).toBeInTheDocument()
     expect(screen.queryByText(/of 4 rows/)).not.toBeInTheDocument()
     expect(document.querySelector('[data-rig-band="rig"]')!.className).toContain('flex-1')
@@ -1110,27 +1187,35 @@ describe('the rig band', () => {
 })
 
 describe('the folded rig strip', () => {
-  it('keeps the summary, the pill and the desk chip — the chip only while unlinked — and unfolds on its chevron', () => {
-    const onUnfold = vi.fn()
+  it('keeps the summary, the pill and the desk chip — the chip only while unlinked — labelled Pads, with no chevron, on the band’s own row', () => {
     const map = new Map<string, BuskingTarget>([
       ['group:Front wash', { type: 'group', name: 'Front wash', group: group('Front wash', 6) }],
     ])
-    render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} controls={<span>Focus here</span>} />)
+    render(<RigStrip selectedTargets={map} families={['COLOUR']} controls={<span>Focus here</span>} />)
     expect(screen.getByText('Front wash · 6 heads')).toBeInTheDocument()
-    // The host's controls — the Focus control — sit at the strip's end, as on the band's one row.
+    // In Pads this is the body's top row, as the desk board's pad row is: it says so.
+    expect(screen.getByText('Pads')).toBeInTheDocument()
+    expect(screen.queryByText('Rig')).toBeNull()
+    // The host's controls — the Focus control — sit at the strip's end, as on the band's one row,
+    // with no chevron before them: the Focus control is the one way between the shapes, and a
+    // chevron here pushed it along on this strip only.
     expect(screen.getByText('Focus here')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unfold the rig' })).toBeNull()
+    // The band's own box and row, so the row sits where the band's does.
+    const strip = document.querySelector('[data-rig-strip]') as HTMLElement
+    expect(strip.className).toContain('pt-2.5')
+    expect(strip.className).toContain('pb-2')
+    expect(strip.firstElementChild!.className).toContain('min-h-7')
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Targets:/ })).toBeNull()
     // No blind pill while the programmer is not blind…
     expect(document.querySelector('[data-busk-blind]')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Unfold the rig' }))
-    expect(onUnfold).toHaveBeenCalledTimes(1)
     cleanup()
     // …and one after the family pill while it is: off the desk board this strip (and the short
     // board's merged row, which mounts the same pieces) is the only rig chrome in Pads.
     programmer.blind = true
     try {
-      render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} />)
+      render(<RigStrip selectedTargets={map} families={['COLOUR']} />)
       const pill = document.querySelector('[data-busk-blind]') as HTMLElement
       expect(pill).toHaveTextContent('Blind')
       expect(pill.previousElementSibling).toHaveTextContent('Colour')
@@ -1140,7 +1225,7 @@ describe('the folded rig strip', () => {
     }
     cleanup()
     unlinkFromDesk({ targets: [], families: null })
-    render(<RigStrip selectedTargets={map} families={['COLOUR']} onUnfold={onUnfold} />)
+    render(<RigStrip selectedTargets={map} families={['COLOUR']} />)
     expect(screen.getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
   })
 })

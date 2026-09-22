@@ -116,7 +116,7 @@ beforeEach(() => {
     row('s-2', 'w-2', 'Screen 2', {
       view: '/projects/1/busk',
       fullscreen: true,
-      viewOptions: { focus: 'pads', rigRows: '2', sheet: 'none', pageFollows: 'false', page: '3' },
+      viewOptions: { focus: 'pads', sheet: 'none', pageFollows: 'false', page: '3' },
     }),
     row('s-3', 'w-3', 'Chris’s iPad', { follows: false, user: 'Chris' }),
   ]

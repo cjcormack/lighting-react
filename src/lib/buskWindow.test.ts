@@ -15,13 +15,16 @@ import {
   isBuskWindowDecided,
   resetBuskWindowStores,
   setBuskFocus,
-  setBuskRigRows,
+  setBuskRigHeight,
+  resetBuskRigHeight,
+  getBuskRigHeight,
   setBuskSheet,
   toggleBuskSheet,
   isLiveSheetTab,
   LIVE_SHEET_TABS,
   useBuskFocus,
-  useBuskRigRows,
+  useBuskRigHeight,
+  useBuskViewOptions,
   useBuskSheet,
   useBuskWindowDecided,
 } from './buskWindow'
@@ -29,7 +32,7 @@ import { getLocalBuskPage, isFollowingBuskPage, resetBuskPageFollowStores } from
 
 /**
  * The busk view's per-window facts (busk-further plan §3.4, D5–D7): defaults from the surface until
- * the window chooses; `?focus=` / `?sheet=` latched once per tab; `rigRows` clamped to the rig; the
+ * the window chooses; `?focus=` / `?sheet=` latched once per tab; `rigHeight` a wish the band clamps; the
  * sheet as one fact whose fold is `none`.
  */
 
@@ -136,19 +139,32 @@ describe('per-tab storage', () => {
   })
 })
 
-describe('rigRows', () => {
-  it('is clamped to the rig on read, without rewriting the wish', () => {
-    act(() => setBuskRigRows(5))
-    expect(renderHook(() => useBuskRigRows(4)).result.current).toBe(4)
-    expect(renderHook(() => useBuskRigRows(2)).result.current).toBe(2)
-    // The rig grows back and the window shows what it asked for, not what the clamp said.
-    expect(renderHook(() => useBuskRigRows(6)).result.current).toBe(5)
-    expect(renderHook(() => useBuskRigRows(0)).result.current).toBe(0)
+describe('rigHeight', () => {
+  it('is the wish, unclamped — null until the window chooses, whole pixels once it has', () => {
+    expect(renderHook(() => useBuskRigHeight()).result.current).toBeNull()
+    act(() => setBuskRigHeight(233.4))
+    expect(renderHook(() => useBuskRigHeight()).result.current).toBe(233)
+    expect(getBuskRigHeight()).toBe(233)
+    // The band clamps on read against the body it can measure; the store never does, so a window
+    // that shrinks and grows back shows what it asked for.
+    act(() => setBuskRigHeight(5000))
+    expect(getBuskRigHeight()).toBe(5000)
   })
 
-  it('never stores fewer than one row', () => {
-    act(() => setBuskRigRows(0))
-    expect(renderHook(() => useBuskRigRows(4)).result.current).toBe(1)
+  it('never stores zero, and a reset is back to the default', () => {
+    act(() => setBuskRigHeight(0))
+    expect(getBuskRigHeight()).toBe(1)
+    act(() => resetBuskRigHeight())
+    expect(getBuskRigHeight()).toBeNull()
+    expect(renderHook(() => useBuskRigHeight()).result.current).toBeNull()
+  })
+
+  it('is not announced: pixels on this screen say nothing about another, and no row control ever read the count', () => {
+    act(() => setBuskRigHeight(300))
+    const options = renderHook(() => useBuskViewOptions()).result.current
+    expect(Object.keys(options).sort()).toEqual(['focus', 'pageFollows', 'sheet'])
+    expect(options).not.toHaveProperty('rigRows')
+    expect(options).not.toHaveProperty('rigHeight')
   })
 })
 

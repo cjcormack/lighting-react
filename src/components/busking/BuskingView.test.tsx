@@ -36,17 +36,17 @@ vi.mock('./RigBand', async () => {
   }
 })
 vi.mock('./RigStrip', () => ({
-  RigStrip: ({ onUnfold, controls }: { onUnfold: () => void; controls?: React.ReactNode }) => (
+  RigStrip: ({ controls }: { controls?: React.ReactNode }) => (
     <div data-testid="rig-strip-row">
-      <button data-testid="rig-strip" onClick={onUnfold}>
+      <button data-testid="rig-strip">
         unfold
       </button>
       {controls}
     </div>
   ),
   // The strip's pieces, as the short board's merged row mounts them.
-  RigStripContent: ({ onUnfold }: { onUnfold: () => void }) => (
-    <button data-testid="rig-strip-content" onClick={onUnfold}>
+  RigStripContent: () => (
+    <button data-testid="rig-strip-content">
       unfold
     </button>
   ),
@@ -548,8 +548,14 @@ describe('the busk view', () => {
       expect(band.querySelector('[aria-label="Focus"]')).not.toBeNull()
       expect(within(band).getByRole('button', { name: 'Edit layout' })).toBeEnabled()
       expect(band.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      // And pressing it enters edit mode, which forces Split: the page unfolds.
-      fireEvent.click(within(band).getByRole('button', { name: 'Edit layout' }))
+      // The strip's chevron is the way back to Split — the rig strip's twin, in the same slot.
+      fireEvent.click(within(strip as HTMLElement).getByRole('button', { name: 'Show the page again: Split' }))
+      expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
+      expect(document.querySelector('[data-busk-page-strip="folded"]')).toBeNull()
+      setBuskFocus('rig')
+      await screen.findByText('1 bank')
+      // And pressing Edit layout enters edit mode, which forces Split: the page unfolds.
+      fireEvent.click(within(screen.getByTestId('target-band')).getByRole('button', { name: 'Edit layout' }))
       expect(await screen.findByText('Done')).toBeTruthy()
       expect(screen.getByTestId('target-band')).toHaveAttribute('data-focus', 'split')
     })
