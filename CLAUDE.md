@@ -932,10 +932,10 @@ pill and the desk chip), and what is selected is the lit tiles — or, in Pads, 
 row's gap. **Colour and Spread keep their verbs in a static footer** under the
 tab's one scroller, the save first on both (*Save as template…* / *Save as Look…*), so the two tabs
 put their save in one place; the Colour footer is its own `@container` and *Pick* and *Spread…* fold
-to icons below `SHEET_FOOTER_WORDS` (340px), since at the sheet's 320px default the worded three
-wrapped. The Spread footer also carries **Live** beside **Apply** — with its word at every width,
+to icons below `FOOTER_WORDS` (340px — `ColourEditor`'s, applied on the docked host alone), since
+at the sheet's 320px default the worded three wrapped. The Spread footer also carries **Live** beside **Apply** — with its word at every width,
 since *Save as Look… · Live · Apply* fits the floor — and while Live is on Apply reads *Send again*
-and stays pressable, the un-deduped resend. Their pickers are `fluid` (`ColourPickerBody`), taking the sheet's
+and stays pressable, the un-deduped resend. Their pickers are fluid (`ColourEditor`), taking the sheet's
 width, and their picker rows are padded to the knob's half-width — a tab body scrolls, a scroller
 clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All four have landed, and `LIVE_SHEET_TABS` stays the one list rather than
 collapsing into the sheet vocabulary: Show landed exactly the way Colour and Spread did, and a
@@ -1098,56 +1098,48 @@ exiting panel has to stay mounted for its duration, which here means holding a l
 list and their subscriptions — or a colour picker mid-drag — alive after the operator asked for
 them to go.
 
-**The Colour tab writes literals to Local, and only that** (D8, `components/busking/ColourSheet.tsx`).
-Every drag is `programmer.setColour` per selected target — a group as a group write, a cell by its
+**The Colour tab is the docked host of `ColourEditor`, and it writes literals to Local, and only
+that** (D8, `components/busking/ColourSheet.tsx`; editor-kit plan D10). What is the host's: the
+selection → write-targets planning (`planColourWrites` — a group as a group write, a cell by its
 element key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
-cells (`planColourWrites`) — which is what a template pad's click does and what the programmer's
-colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no library referent
-for a layer to follow, and *Save as template…* (`NewTemplateFromSelectionSheet` over the sheet's
-targets, family Colour) is the route to something trackable. **The family mask is not consulted**:
-the desk's mask gates presses, not value writes, so the sheet does not refuse under a Position
-marquee — the rig band's family pill, one row up, is where the mask is read (the tab's own header
-said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A *Recent* chip is a press and goes
-through `useTemplatePress` under the mask like any other. The writes go through
-`components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of `BuskSpeedRail` and made generic
-over the value: dedupe on an equality, a 50 ms floor, a deferred value sent when the floor lifts,
-the release bypassing both. The editor itself is `components/fixtures/ColourPickerBody.tsx` — the
-picker, the typed R/G/B, the emitter rows and the six-channel buffer, extracted from
-`ColourPickerPopover` so the sheet and the grid's cell cannot answer a drag differently; the popover
-keeps only the open state, the keyboard wiring and its two surfaces. The emitter rows are the
-selection's **union read off the colour descriptors** — the emitters a `setColour` can drive,
-deliberately narrower than `targetEmitters`' probe, which also counts a plain slider in an emitter
-category for the template offer — with the count of heads that take any, and a head without an
-emitter simply does not receive that byte (an undeliverable white folds into RGB, as
-`useCellWriters` does). **A group is one group write only where its members agree on emitters**;
-otherwise it fans to one write per member carrying `sourceGroup`, because the desk writes a group
-colour verbatim per member and adds white only on a head that has one — it can fold white for none
-of them, so pure white as a group write over a mixed group would black out its RGB heads. **The
-buffer is seeded from the rig** (a Pick on mount and on every selection change, retried until the
-heads have reported), so a single-channel edit leaves the other RGB bytes where the rig has them,
-as it does in the cell — the emitters start at 0, since the appearance store exposes one folded
-colour and nothing per emitter; and **the release is read from the window**, as the tempo fader's is, since the
-picker binds its own release to the document. **Recent** is `recentTemplates` over the colour-family, generic, value
-templates the selection can take; a tap is a template **apply**, so it stamps `lastPressedAt`.
-**Pick** reads the selection's current colour off `lib/liveAppearance.ts` — a store every
-appearance leaf reports into, because `FixtureAppearanceSource` is a render prop and cannot be
-asked from a click — into the picker *without writing*: the first head in rig order wins
-(`rigHeadOrder` over `effectiveRig`, the desk's own order for an empty rig) and the field says
-*mixed* where the heads disagree. It reads the stage's colour as the mini-stage draws it — the hue
-normalised to full brightness, emitters folded in — and **only heads with a colour descriptor**: the
-dispatch answers a gel or the default tungsten for a colourless head, which is no colour this sheet
-could write, so a dimmer-only par in the selection is neither read nor a reason to say *mixed*. The rig tiles report, and the sheet mounts a hidden leaf per
-selected head as well, so Pick answers in Pads focus with the tiles folded away. **The hex under
-the picker is a read-out, not a field** (session 8's call): the typed route is R/G/B, as the
-programmer's colour cell has no hex field either; it sits beside the emitter count with the swatch
-and the *mixed* marker, where the heading used to carry them. The *Spread to a
-second colour…* button — a plain button with a verb, since it opens a tab and holds no state a
-`role="switch"` could ever read as checked — hands the current channels to `onSpread`, which both sheet hosts wire
-(`SideSheet.tsx`'s `useSpreadSeed`): it opens the Spread tab with *From* set to their **RGB** —
-a colour intent has no emitter component, so a white or amber the tab was driving does not
-travel — through a seed the host holds and the Spread tab drops once it has read it, so a later
-visit by any other door is not re-seeded with a stale colour. A host with no Spread tab to open
-leaves `onSpread` out and the switch draws inert.
+cells; it is about the busk selection, not the editor), the rig order Pick reads in, the Spread
+hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
+typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, Recent, the footer — is
+`components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
+`programmer.setColour` per selected target, which is what a template pad's click does and what the
+programmer's colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no
+library referent for a layer to follow, and *Save as template…* (`NewTemplateFromSelectionSheet`
+over the sheet's targets, family Colour) is the route to something trackable. **The family mask is
+not consulted**: the desk's mask gates presses, not value writes, so the sheet does not refuse under
+a Position marquee — the rig band's family pill, one row up, is where the mask is read (the tab's
+own header said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A
+*Recent* chip is a press and goes through `useTemplatePress` under the mask like any other. The
+writes go through `components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of
+`BuskSpeedRail` and made generic over the value: dedupe on an equality, a 50 ms floor, a deferred
+value sent when the floor lifts, the release bypassing both. **A group is one group write only
+where its members agree on emitters**; otherwise it fans to one write per member carrying
+`sourceGroup`, because the desk writes a group colour verbatim per member and adds white only on a
+head that has one — it can fold white for none of them, so pure white as a group write over a mixed
+group would black out its RGB heads. **The buffer is seeded from the rig** — the editor's Pick on
+mount and on every change of heads, retried until they have reported (`pickOnTargets`) — so a
+single-channel edit leaves the other RGB bytes where the rig has them, as it does in the cell; the
+emitters start at 0, since the appearance store exposes one folded colour and nothing per emitter.
+The host hands the editor its write targets in **rig order** (`rigHeadOrder` over `effectiveRig`,
+the desk's own order for an empty rig, as the editor's `headOrder`), which is what makes *the first
+head in rig order wins* true there and *the first row of the marquee* true on the programmer. And
+**the release is read from the window**, as the tempo fader's is, since the picker binds its own
+release to the document; the host keeps its own copy of the channels for that flush and for the
+Spread hand-over, told through the editor's `onPick` when Pick moves them. **The knob's seed is a
+constant** (`NEUTRAL_CSS`): the editor re-seeds its knob from `combinedCss` whenever it changes,
+and here it is always open, so routing every write back into that prop was the ping-pong the
+editor's own docblock records — the knob moves only when the editor means it to, on Pick. The
+*Spread…* button — a plain button with a verb, since it opens a tab and holds no state a
+`role="switch"` could ever read as checked — hands the current channels to `onSpread`, which both
+sheet hosts wire (`SideSheet.tsx`'s `useSpreadSeed`): it opens the Spread tab with *From* set to
+their **RGB** — a colour intent has no emitter component, so a white or amber the tab was driving
+does not travel — through a seed the host holds and the Spread tab drops once it has read it, so a
+later visit by any other door is not re-seeded with a stale colour. A host with no Spread tab to
+open leaves `onSpread` out and the editor draws the button inert.
 
 **The Spread tab resolves on the desk, and the client never lerps** (D9,
 `components/busking/SpreadSheet.tsx`, `lib/spreadIntent.ts`). The tab sends two intents of one
@@ -1198,7 +1190,7 @@ mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replace
 tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property outside the
 selection's families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape —
 toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the mask names that
-the selection can take. The colour endpoints share one `ColourPickerBody` for whichever end is
+the selection can take. The colour endpoints share one `ColourEditor` (footer and read-out off) for whichever end is
 being edited, and its `combinedCss` is a **seed** that moves only when the tab means the knob to
 move (switching ends, Swap, the Colour tab's hand-over) — never the picker's own writes, for the
 ping-pong reason documented on that prop.
@@ -1330,8 +1322,10 @@ modes sit under a *Cells* heading in the band's verbs menu.
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
 leaf per fixture tile — one of **five** mounting readers of `components/fixtures/fixtureAppearance.tsx`,
 beside the DOM marker, the 2D plot, the side sheet's fold (one leaf for the selection's colour dot)
-and the Colour tab's **hidden leaf per selected head**, which reports into `lib/liveAppearance.ts`
-for *Pick* (§Focus and the side sheet); the cues' `MiniStage` borrows only its default colour — and a cell or run tile draws its own cells' colours off
+and the colour editor's **hidden leaf per parent fixture of the heads it is editing**
+(`components/editor/ColourEditor.tsx`, the busk Colour tab's and the programmer's colour cell's
+alike since the editor kit's session 2), which reports into `lib/liveAppearance.ts` for *Pick*
+(§Focus and the side sheet, §The editor kit); the cues' `MiniStage` borrows only its default colour — and a cell or run tile draws its own cells' colours off
 the parent's per-element `segments` by the element's **position in the patch's cell list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
 
@@ -2230,18 +2224,70 @@ each was:
   back. The label over every control.
 - **`EditorField`** — one 28px number field with the unit as a trailing muted glyph and
   `useNumberFieldDraft` inside. It replaced `ValueFieldRow`'s bare `Input`, the busk Spread tab's
-  private `NumberField` and the colour editor's `ChannelNumberInput` — which survives as a thin
-  wrapper over it, because its two callers sit in `ColourPickerBody`, session 2's file. **The
-  caller still clamps**: the field parses, and a channel byte is 0–255 where a slider cell's bounds
-  come from its resolution and a percent is 0–100. The native spinner is hidden so the unit glyph
-  has the right edge; the arrows still step the value.
+  private `NumberField` and the colour editor's `ChannelNumberInput` — which survived session 1 as
+  a thin wrapper and went in session 2, when `ColourEditor` took the field directly and its byte
+  clamp with it. **The caller still clamps**: the field parses, and a channel byte is 0–255 where a
+  slider cell's bounds come from its resolution and a percent is 0–100. The native spinner is hidden
+  so the unit glyph has the right edge; the arrows still step the value.
 - **`EditorReadout`** — the 10px muted line under a panel's controls, saying what the desk holds
   and what was skipped, with a `lines` arm that was `LandingLines` (the address editor's and the
   Key column's one-head-to-a-line landing; `LandingLines.tsx` is deleted).
 - **`EditorFooter`** — save slot · note · spacer · verbs, the shape the busk Colour and Spread tabs'
-  footers have. Drawn only where a panel writes on **Apply** — `TextCell` and `AddressCell` — never
-  by an editor that writes as it goes. The two busk tabs keep their own full-bleed footers; sessions
-  2 and 3 own rewiring them.
+  footers have. Drawn where a panel has **verbs beside the value**: Apply on `TextCell` and
+  `AddressCell`, and — since session 2 — the colour editor's Save · Pick · Spread…, which are
+  gestures about the batch and not writes of it (that editor writes as it goes; its footer writes
+  nothing). Never the level, position or setting editors, which write as they go and carry no
+  verb. A panel that docks it full-bleed says so at its own import — the busk Spread tab with its
+  `px-3 py-2` (session 3 rewires it), `ColourEditor` for its docked host.
+- **`ColourEditor`** — `fixtures/ColourPickerBody` moved and finished (D10, D12; session 2): the
+  picker, the typed R/G/B, the emitter rows and the six-channel buffer, **plus everything the busk
+  Colour tab had grown around them** — the read-out line (the emitter counts per head from
+  `emitterHeadCounts`, *mixed*, the swatch, the hex), **Pick**, **Recent** and the `EditorFooter`
+  with *Save as template… · Pick · Spread…*. The host says which pieces it draws: `targets` (the
+  heads, in the host's order — the busk selection expanded in rig order through `headOrder`, the
+  programmer's marquee column in row order), `projectId` (what the hidden leaves read the patch
+  list of), `recent` (where the chips come from and where a press lands, with `forms` for D11),
+  `footer`, `counts`, `labelLine`, `docked` (the busk tab's frame: one scroller, the footer static
+  under it), `pickOnTargets` (the busk tab's seed from the rig), `onPick`, `onSave`, `onSpread` (absent
+  draws the button inert — session 3 wires the programmer's). The cell hands it the batch's targets
+  **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell, a bar whose
+  colour lives on its cells expanded, a head with no RGB colour dropped — a colour-wheel head
+  resolves a `colour-setting` cell the batch counts and a colour commit refuses, so the label line
+  counts this list rather than `batch.count`, and the two lines say one number), and the container passes `projectId` for the **programmer alone**, since the
+  plain lists draw no template strip and Save records from the programmer. Five hosts: the programmer's colour
+  cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
+  in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
+  compact width, because the compact body sits its 208px emitter column beside a 256px picker row
+  and at 352 it wrapped under, costing the height compact exists to save; and both sheets, `wide`
+  on the side sheet),
+  the busk tab docked, the Spread tab's colour endpoint (`footer` and `counts` off — a colour intent
+  has no emitter component) and the two property visualisers (`channelFields` off as well: the
+  picker-only form, in a 224px popover measured the same day). **Pick reads the heads the editor is
+  editing** through one hidden `FixtureAppearanceSource` leaf per parent fixture, mounted by the
+  editor itself in a store-bound child (`AppearanceLeaves`) so a cell mounted with no project pays
+  nothing — the grid's rows do not report into `lib/liveAppearance.ts` and are not made to; it moves
+  the knob, the fields and the *mixed* marker and writes nothing, the picked colour becoming the
+  buffer the next single-channel edit builds on — and **an emitter the host does not hold stays
+  unstated**: the rows are the batch's union but the bytes are one row's, and `writeColour`
+  samples the wire only for an undefined component, so folding a missing white to 0 drove every
+  RGBW head in the marquee to white 0 on a byte typed from an RGB row's cell (found in review;
+  the picker gesture and Pick zero only what the editor holds) — (`targetHeads` in `liveAppearance.ts` is the fold,
+  over `WriteTarget`'s new `fixtureKey` / `cellIndex`, which `rowWriteTargets` stamps on an element
+  row and `writeTargetsOf` on a busk cell — element keys are never parsed). **Recent is drawn once
+  on a screen** (D11): the cell asks for it in the bottom sheet alone, since row C's strip is one
+  row up in the popover and folded away below 600px; the busk tab always. Its store hooks run in a
+  child mounted only where the chips are drawn, never per cell. **The guidance is the picker's
+  title everywhere**, the paragraph gone. **The picker is fluid in every host**: `index.css` keeps
+  the picker's look (saturation radius, the 12px hue bar and its 16px gap, the pointer) and the
+  `.colour-picker-fluid` and `.colour-picker-compact` rules, and the 200px `!important` pin is gone
+  — with two things recorded there. **The picker cannot be sized by a Tailwind utility**: v4 emits
+  utilities inside `@layer utilities` and react-colorful's stylesheet is unlayered, which beats any
+  layered declaration whatever its specificity (measured on 2026-09-22: `[&_.react-colorful]:h-44`
+  was generated, applied and lost to the library's 200px; and an arbitrary variant reads `_` as a
+  space, so `__hue` became ` hue`) — so the compact heights stayed in `index.css` after all, where
+  the plan had them reduce to the fluid rule. And `sheet/FanPopover`'s inline 150×120 takes effect
+  at last, having been beaten by the pin to 200×200 until now (session 3 replaces that popover). `ChannelNumberInput`
+  is deleted; the editor mounts `EditorField` and clamps the byte itself.
 - **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
   commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
   throttle were two copies of one rule — a floor, a dedupe, a release that always lands. Two things
@@ -2253,8 +2299,8 @@ each was:
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
   literal 33, the trailing call, and that a repeat is sent.
 
-**The label line replaced the count line** (D8). No editor body says *Applying to N targets* any
-more — `ColourCell`'s trigger `title` still does, until session 2 rebuilds that editor.
+**The label line replaced the count line** (D8). No editor says *Applying to N targets* any more,
+anywhere — `ColourCell`'s trigger `title` was the last place the sentence survived, until session 2.
 The popover form draws `EditorLabelLine` first — *4 heads · Local* on the left (the batch and the
 scope, or the focused Look's name in layer scope, which no editor said before; *4 cues* / *8
 channels* / *4 fixtures* on the kit sheets, from `SheetCellProps.batchLabel` and the sheet's `noun`)
@@ -2268,7 +2314,10 @@ editor says about the batch must be that column's, not the marquee's total — s
 editor said "1 head has no dimmer · skipped" for a par the *Gobo* column skipped. `scopeLabel` rides
 beside it from the scope and the Look store's `lookName`. The container's own 33 ms position merge
 goes through `mergePositionCommits`, which keeps `panDeg` / `tiltDeg` and one unit per axis. The read-out says the skip (*2 heads have no gobo · skipped*) where the write would
-silently drop it. `ColourCell` is session 2's and still takes `batchCount`.
+silently drop it. `ColourCell` takes the same `CellBatch` since session 2, and `CellBatch`
+gained the **`targets`** themselves beside the count — a count and a resolution list cannot name a
+head, and the colour editor needs the heads for its emitter union, its leaves and the template
+targets its Save and Recent land on.
 
 **The unit is the cell's** (D13). The programmer's dimmer cell reads *80%*, so `SliderCell`'s field
 is a percent — `toPct` / `fromPct`, 0 ↔ 0, 50 ↔ 128, 100 ↔ 255, pinned as literals in
@@ -2289,9 +2338,11 @@ batch mixing annotated and silent heads keeps bytes for all of them rather than 
 editor; the cell keeps its byte read-out either way. The field's range is the lead head's.
 
 **Widths by content** (D17): `w-72` for level, position, text and address (the busk endpoint editors'
-two fields plus a gutter, up from `w-64`) and `w-64` for the setting and option lists — measured in
-the app on 2026-09-22 as 288 and 256 (`getBoundingClientRect` on the open popover, with the field
-at 28 and the pad at 120), which is what each component's docblock records.
+two fields plus a gutter, up from `w-64`), `w-64` for the setting and option lists and `w-[352px]`
+for colour (`w-[528px]` compact, the side sheet's compact width) — measured in the app on
+2026-09-22 as 288, 256, 352 and 528 (`getBoundingClientRect` on the open popover, with the field at
+28, the pad at 120 and the colour picker at 234×200), which is what each component's docblock
+records.
 
 ### The cell editor's three forms
 
@@ -2312,8 +2363,8 @@ Three rules, each of which was learned rather than designed:
   plan's own `max-height: 500px` fold, duplicated and pinned by `shortViewport.test.ts` like every
   other site of that number.
 - **Width is the content's to ask for, and so is the compact layout.** `wide` on the surface is the
-  colour editor's alone — 35rem against 22rem for the other three, which looked absurd in that much
-  room. `useEditorCramped()` is a *separate* `max-height: 750px` question, because all three
+  colour editor's alone — `ColourPickerPopover` asks for it on `ColourEditor`'s behalf, 35rem
+  against 22rem for the other three, which looked absurd in that much room. `useEditorCramped()` is a *separate* `max-height: 750px` question, because all three
   forms can be short of height: below it the colour editor draws a two-column layout with its
   emitter rows beside the picker. 750 and not 500 because **a popover must fit beside its cell, and
   a cell can be any row**, so the room it really gets is about half the viewport — below ~725 there

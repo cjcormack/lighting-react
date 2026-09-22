@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils'
  *
  * It replaces three fields that had each answered the same questions their own way:
  * `ValueFieldRow`'s bare `Input`, the busk Spread tab's private `NumberField` and the colour
- * editor's `ChannelNumberInput` (which survives as a thin wrapper over this, because its two
- * callers sit in `ColourPickerBody`, session 2's file). What they share, and what lives here once:
+ * editor's `ChannelNumberInput` (deleted in session 2: `ColourEditor` mounts this directly and
+ * clamps the byte itself). What they share, and what lives here once:
  *
  * - **Mid-retype must not commit.** `useNumberFieldDraft` owns that rule — `Number('')` is 0, and
  *   a field that committed on its way to being retyped would black a channel out between the last

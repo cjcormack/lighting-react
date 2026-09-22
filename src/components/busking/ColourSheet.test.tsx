@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { BuskingTarget } from './buskingTypes'
 import type { Fixture } from '@/store/fixtures'
 import { resetLiveAppearance } from '@/lib/liveAppearance'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 /**
- * The Colour tab (busk-further plan D8): literals to Local per selected target — a group as a
- * group write, a cell by its element key — through the live push; the emitter rows by union with
- * the count of heads that take them; Pick off the appearance store, saying *mixed*; Recent as a
- * template apply; nothing written under an empty selection, toasted as the strip does; and no
- * mask refusal, only a header that says what it is about to do.
+ * The Colour tab as the docked **host** of `ColourEditor` (busk-further plan D8, editor-kit plan
+ * D10): what is the host's own. The selection → write-targets planning — literals to Local per
+ * selected target, a group as a group write, a cell by its element key, through the live push —
+ * the targets it hands the editor in rig order, the seed from the rig and its release, nothing
+ * written under an empty selection, no mask refusal, and the footer's verbs reaching the editor:
+ * Save over the selection as colour, Spread… handing the current colour or drawn inert. The
+ * editor's own pieces — the emitter rows and counts, Pick, Recent, the knob — are pinned in
+ * `ColourEditor.test.tsx`.
  */
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
@@ -19,19 +22,20 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
 
-const apply = vi.fn(() => ({ unwrap: () => Promise.resolve({ written: 3, skipped: [] }) }))
-const toggle = vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))
-let templates: unknown[] = []
 vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [apply],
-  useToggleTemplateMutation: () => [toggle],
+  useTemplateListQuery: () => ({ data: [] }),
+  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
+vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
 vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
   NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
-vi.mock('@/store/busk', () => ({ useBuskRigQuery: () => ({ data: { rows: [] } }) }))
+/** A built rig naming the bar first, so rig order and selection order differ. */
+vi.mock('@/store/busk', () => ({
+  useBuskRigQuery: () => ({ data: { rows: [{ id: 1, name: 'Row', tiles: [{ id: 1, kind: 'FIXTURE', patch: { key: 'bar' } }, { id: 2, kind: 'FIXTURE', patch: { key: 'par-1' } }] }] } }),
+}))
 
 const colour = (extra: Record<string, unknown> = {}) => ({
   type: 'colour',
@@ -43,15 +47,15 @@ const colour = (extra: Record<string, unknown> = {}) => ({
   blueChannel: { universe: 1, channelNo: 3 },
   ...extra,
 })
-const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds', 'Warm'], properties: [colour()] } as unknown as Fixture
+const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds'], properties: [colour()] } as unknown as Fixture
 /** RGB only, like par-1: with it, 'Reds' is a group whose members agree on emitters. */
 const par3 = { key: 'par-3', name: 'PAR 3', typeKey: 'par', groups: ['Reds'], properties: [colour()] } as unknown as Fixture
-/** A dimmer-only head in two groups: nothing to write, nothing to read. */
+/** A dimmer-only head: nothing to write, nothing to read. */
 const dim = {
   key: 'dim',
   name: 'Dimmer',
   typeKey: 'dimmer',
-  groups: ['Front wash', 'Warm'],
+  groups: ['Front wash'],
   properties: [{ type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }],
 } as unknown as Fixture
 const par2 = {
@@ -83,7 +87,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
 }))
 vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({
-    data: ['Front wash', 'Reds', 'Warm'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
+    data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
   }),
 }))
 vi.mock('@/store/patches', () => ({
@@ -99,7 +103,7 @@ vi.mock('@/components/fixtures/fixtureAppearance', () => ({
 }))
 
 import { lightingApi } from '@/api/lightingApi'
-import { ColourSheet, emitterHeadCounts, planColourWrites } from './ColourSheet'
+import { ColourSheet, planColourWrites, writeTargetsOf } from './ColourSheet'
 
 const groupOf = (name: string, memberCount: number): BuskingTarget => ({
   type: 'group',
@@ -110,8 +114,6 @@ const groupOf = (name: string, memberCount: number): BuskingTarget => ({
 const group = groupOf('Front wash', 3)
 /** Uniform: par-1 and par-3, both RGB. */
 const reds = groupOf('Reds', 2)
-/** One colour head and one dimmer. */
-const warm = groupOf('Warm', 2)
 const cell: BuskingTarget = { type: 'fixture', key: 'bar.c2', fixture: bar, element: bar.elements![1] }
 const whole: BuskingTarget = { type: 'fixture', key: 'par-2', fixture: par2 }
 
@@ -123,6 +125,7 @@ function draw(targets: BuskingTarget[], props: Partial<React.ComponentProps<type
   return render(<ColourSheet projectId={1} selectedTargets={selectionOf(...targets)} families={null} {...props} />)
 }
 
+const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement
 const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
 
 beforeEach(() => {
@@ -147,10 +150,8 @@ beforeEach(() => {
   appearances['par-1'] = { color: '#ff0000', intensity: 1 }
   appearances['par-2'] = { color: 'rgb(0, 0, 255)', intensity: 1 }
   appearances['par-3'] = { color: '#ff0000', intensity: 1 }
-  // The default tungsten a colourless head reports: never a colour to read.
   appearances['dim'] = { color: '#fff8d5', intensity: 1 }
   appearances['bar'] = { color: '#00ff00', intensity: 1, segments: [{ css: '#111111', intensity: 1 }, { css: '#222222', intensity: 1 }] }
-  templates = []
 })
 
 afterEach(() => {
@@ -161,25 +162,47 @@ afterEach(() => {
   resetEditorSurfaceMedia()
 })
 
+describe('targets', () => {
+  it('hands the editor the selection expanded — a group to its members, a cell named by its parent and position', () => {
+    expect(writeTargetsOf([group, cell], fixtures).map((t) => [t.key, t.fixtureKey ?? null, t.cellIndex ?? null])).toEqual([
+      ['par-1', null, null],
+      ['par-2', null, null],
+      ['dim', null, null],
+      ['bar.c2', 'bar', 1],
+    ])
+  })
+
+  it('reads Pick in rig order — the bar before the par the rig names second, whatever the selection’s order', () => {
+    draw([reds, cell])
+    // The seed from the rig is a Pick: bar.c2's segment, not par-1's red, because the built rig
+    // puts the bar first.
+    expect(field('R').value).toBe('34')
+    expect(document.querySelector('[data-colour-picked="mixed"]')).not.toBeNull()
+    expect(setColour).not.toHaveBeenCalled()
+  })
+})
+
 describe('writes', () => {
   it('seeds the buffer from the rig, so a typed byte leaves the other five where the rig has them — a cell by its element key, a mixed group per member', () => {
-    draw([group, cell])
-    // Seeded from the first head in rig order (par-1, red) before anything is typed; nothing sent.
-    expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('255')
-    expect((screen.getByLabelText('G') as HTMLInputElement).value).toBe('0')
+    // The bar is not in this selection, so rig order puts par-1 first: red.
+    draw([group, cell].slice(0, 1))
+    expect(field('R').value).toBe('255')
+    expect(field('G').value).toBe('0')
     expect(setColour).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByLabelText('G'), { target: { value: '20' } })
+    cleanup()
+    draw([group, cell])
+    fireEvent.change(field('G'), { target: { value: '20' } })
     // Front wash is mixed (RGB + RGBW + a dimmer), so it fans per member carrying the group's name;
     // the dimmer takes nothing; the cell has amber and no white or UV, so those bytes are not sent.
     expect(setColour).toHaveBeenCalledTimes(3)
-    expect(setColour).toHaveBeenCalledWith('fixture', 'par-1', 'rgbColour', { r: 255, g: 20, b: 0, w: undefined, a: undefined, uv: undefined }, 0, 'Front wash')
-    expect(setColour).toHaveBeenCalledWith('fixture', 'par-2', 'rgbColour', { r: 255, g: 20, b: 0, w: 0, a: undefined, uv: undefined }, 0, 'Front wash')
-    expect(setColour).toHaveBeenCalledWith('fixture', 'bar.c2', 'rgbColour', { r: 255, g: 20, b: 0, w: undefined, a: 0, uv: undefined }, 0, undefined)
+    expect(setColour).toHaveBeenCalledWith('fixture', 'par-1', 'rgbColour', { r: 34, g: 20, b: 34, w: undefined, a: undefined, uv: undefined }, 0, 'Front wash')
+    expect(setColour).toHaveBeenCalledWith('fixture', 'par-2', 'rgbColour', { r: 34, g: 20, b: 34, w: 0, a: undefined, uv: undefined }, 0, 'Front wash')
+    expect(setColour).toHaveBeenCalledWith('fixture', 'bar.c2', 'rgbColour', { r: 34, g: 20, b: 34, w: undefined, a: 0, uv: undefined }, 0, undefined)
   })
 
   it('writes a group whose members agree on emitters as one group write', () => {
     draw([reds])
-    fireEvent.change(screen.getByLabelText('B'), { target: { value: '9' } })
+    fireEvent.change(field('B'), { target: { value: '9' } })
     expect(setColour).toHaveBeenCalledTimes(1)
     expect(setColour).toHaveBeenCalledWith('group', 'Reds', 'rgbColour', { r: 255, g: 0, b: 9, w: undefined, a: undefined, uv: undefined }, 0, undefined)
   })
@@ -209,31 +232,14 @@ describe('writes', () => {
 
   it('writes nothing under an empty selection, and toasts as the strip does', () => {
     draw([])
-    fireEvent.change(screen.getByLabelText('R'), { target: { value: '10' } })
+    fireEvent.change(field('R'), { target: { value: '10' } })
     expect(setColour).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith('Select the fixtures this should land on first', expect.objectContaining({ id: expect.any(String) }))
   })
 
-  it('leaves the picker’s knob where it is on a typed byte, and moves it only on Pick — the seed is not the live colour', () => {
-    // Two changes in one task is what put react-colorful into a ping-pong with the sheet when the
-    // live colour was its seed; the knob must not follow the fields at all. With nothing reported
-    // the buffer stays neutral, so the knob starts at white.
-    delete appearances['par-1']
-    delete appearances['par-2']
-    delete appearances['dim']
-    draw([group])
-    const knob = () => document.querySelector('.react-colorful__saturation [aria-valuetext]')!.getAttribute('aria-valuetext')
-    expect(knob()).toBe('Saturation 0%, Brightness 100%')
-    fireEvent.change(screen.getByLabelText('R'), { target: { value: '10' } })
-    fireEvent.change(screen.getByLabelText('G'), { target: { value: '20' } })
-    expect(knob()).toBe('Saturation 0%, Brightness 100%')
-    // The first byte went at once, one write per member; the second sits under the floor.
-    expect(setColour).toHaveBeenCalledTimes(2)
-  })
-
   it('ends the gesture on a release anywhere in the window, and never flushes a stale colour onto a new selection', () => {
     const { rerender } = draw([reds])
-    fireEvent.change(screen.getByLabelText('R'), { target: { value: '10' } })
+    fireEvent.change(field('R'), { target: { value: '10' } })
     expect(setColour).toHaveBeenCalledTimes(1)
     // The picker binds its release to the document; a release outside the sheet still ends it.
     fireEvent.pointerUp(window)
@@ -244,131 +250,40 @@ describe('writes', () => {
     fireEvent.pointerUp(document.querySelector('[data-colour-sheet]')!)
     expect(setColour).toHaveBeenCalledTimes(1)
     // The field keeps its typed draft until it blurs; the value underneath is the cell's.
-    fireEvent.blur(screen.getByLabelText('R'))
-    expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('34')
+    fireEvent.blur(field('R'))
+    expect(field('R').value).toBe('34')
   })
 
   it('does not consult the mask: a drag under a Position mask still lands — and the tab draws no heading, only the hex read-out', () => {
     draw([group, cell], { families: ['POSITION'] })
-    // No *Colour of 4 heads* line and no mask pill: the tab strip names the tab and the rig band's
-    // label row already says what is selected and under which mask.
     expect(document.querySelector('[data-colour-sheet-heading]')).toBeNull()
     expect(screen.queryByText('Position')).toBeNull()
-    expect(document.querySelector('[data-colour-sheet-hex]')).toHaveTextContent(/^#[0-9a-f]{6}$/i)
-    fireEvent.change(screen.getByLabelText('G'), { target: { value: '5' } })
+    expect(document.querySelector('[data-colour-editor-hex]')).toHaveTextContent(/^#[0-9a-f]{6}$/i)
+    fireEvent.change(field('G'), { target: { value: '5' } })
     expect(setColour).toHaveBeenCalledTimes(3)
   })
 
-  it('keeps its verbs in a footer below the scroller, the save first — the Spread tab’s shape', () => {
-    draw([group, cell])
-    const footer = document.querySelector('[data-colour-sheet-footer]')!
-    expect(footer.className).toContain('shrink-0')
-    expect(document.querySelector('[data-colour-sheet-body]')!.className).toContain('overflow-y-auto')
-    const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
-    expect(names[0]).toMatch(/Save as template/)
-    expect(names).toContain('Spread to a second colour…')
-  })
-})
-
-describe('emitters', () => {
-  it('draws the rows for the selection’s union with the count of heads that take them', () => {
-    draw([group, cell])
-    // par-2 has white, the cell has amber, nothing has UV.
-    expect(screen.getByLabelText('W value')).toBeInTheDocument()
-    expect(screen.getByLabelText('A value')).toBeInTheDocument()
-    expect(screen.queryByLabelText('UV value')).toBeNull()
-    // par-2 (white) and the cell (amber) take an emitter; par-1 and the dimmer do not.
-    expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 2 of 4 heads · the rest take RGB only')
-    expect(emitterHeadCounts([{ key: 'bar', properties: [], elements: bar.elements }])).toEqual({ white: 0, amber: 1, uv: 0, any: 1 })
-    // `any` counts heads, not emitters: one head with both is one head.
-    expect(
-      emitterHeadCounts([{ key: 'x', properties: [colour({ whiteChannel: { universe: 1, channelNo: 4 }, amberChannel: { universe: 1, channelNo: 5 } }) as never] }]),
-    ).toEqual({ white: 1, amber: 1, uv: 0, any: 1 })
-  })
-})
-
-describe('Pick', () => {
-  it('reads the first head in rig order into the picker without writing, and says mixed when the heads disagree', () => {
+  it('is a read and not a write after Pick: a pointer lifted over the sheet afterwards sends nothing', () => {
     draw([group])
-    fireEvent.change(screen.getByLabelText('B'), { target: { value: '40' } })
-    fireEvent.blur(screen.getByLabelText('B'))
-    fireEvent.click(screen.getByRole('button', { name: /Pick/ }))
-    expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('255')
-    expect((screen.getByLabelText('G') as HTMLInputElement).value).toBe('0')
-    expect((screen.getByLabelText('B') as HTMLInputElement).value).toBe('0')
-    expect(document.querySelector('[data-colour-picked="mixed"]')).not.toBeNull()
-    expect(document.querySelector('.react-colorful__saturation [aria-valuetext]')!.getAttribute('aria-valuetext')).toBe('Saturation 100%, Brightness 100%')
-    // The typed byte was the only write; Pick added none.
-    expect(setColour).toHaveBeenCalledTimes(2)
-  })
-
-  it('ignores a head with no colour descriptor: a dimmer’s default tungsten is neither read nor counted as mixed', () => {
-    draw([warm])
-    fireEvent.click(screen.getByRole('button', { name: /Pick/ }))
-    expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('255')
-    expect((screen.getByLabelText('G') as HTMLInputElement).value).toBe('0')
-    expect(document.querySelector('[data-colour-picked="mixed"]')).toBeNull()
-  })
-
-  it('reads a cell off its parent’s segment, and a selection that agrees is not mixed', () => {
-    draw([cell])
-    fireEvent.click(screen.getByRole('button', { name: /Pick/ }))
-    expect((screen.getByLabelText('R') as HTMLInputElement).value).toBe('34')
-    expect(document.querySelector('[data-colour-picked="mixed"]')).toBeNull()
-  })
-
-  it('is a read and not a write: a pointer lifted over the sheet afterwards sends nothing', () => {
-    draw([group])
-    fireEvent.click(screen.getByRole('button', { name: /Pick/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pick' }))
     fireEvent.pointerUp(document.querySelector('[data-colour-sheet]')!)
     expect(setColour).not.toHaveBeenCalled()
   })
 })
 
-describe('Recent', () => {
-  const template = (id: number, name: string, extra: Record<string, unknown> = {}) => ({
-    id,
-    uuid: `t${id}`,
-    name,
-    notes: null,
-    fadeDurationMs: null,
-    family: 'COLOUR',
-    isGeneric: true,
-    kind: 'value',
-    rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
-    effect: null,
-    requiredEmitters: [],
-    lastPressedAt: '2026-09-18T10:00:00Z',
-    layerCount: 0,
-    ...extra,
-  })
-
-  it('draws the colour recents most recent first, and a tap is a template apply', () => {
-    templates = [
-      template(1, 'Deep Blue', { lastPressedAt: '2026-09-18T09:00:00Z' }),
-      template(2, 'Warm Amber'),
-      template(3, 'Home', { family: 'POSITION' }),
-      template(4, 'UV wash', { requiredEmitters: ['uv'] }),
-      template(5, 'Never', { lastPressedAt: null }),
-    ]
+describe('the footer’s verbs reach the editor', () => {
+  it('docks the editor: the footer static under the scroller, the save first', () => {
     draw([group, cell])
-    const chips = document.querySelectorAll('[data-recent-template]')
-    expect([...chips].map((c) => c.textContent)).toEqual(['Warm Amber', 'Deep Blue'])
-    fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'))
-    expect(apply).toHaveBeenCalledWith({
-      projectId: 1,
-      templateId: 2,
-      targets: [
-        { type: 'group', key: 'Front wash' },
-        { type: 'fixture', key: 'bar.c2' },
-      ],
-      families: undefined,
-    })
-    expect(toggle).not.toHaveBeenCalled()
+    const scroller = document.querySelector('[data-colour-editor-scroller]')!
+    expect(scroller.className).toContain('overflow-y-auto')
+    const footer = document.querySelector('[data-editor-footer]')!
+    expect(footer.className).toContain('shrink-0')
+    expect(scroller.contains(footer)).toBe(false)
+    const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names[0]).toMatch(/Save as template/)
+    expect(names).toContain('Spread to a second colour…')
   })
-})
 
-describe('the two doors out', () => {
   it('opens the new-template sheet over the selection as colour', () => {
     draw([group, cell])
     fireEvent.click(screen.getByRole('button', { name: /Save as template/ }))
@@ -380,16 +295,15 @@ describe('the two doors out', () => {
     ])
   })
 
-  it('hands Spread to a second colour… the current colour once wired, as a plain button — never a switch — and draws it inert on a host with no Spread tab', () => {
-    const { unmount } = draw([group])
-    // A button with a verb, not a `role="switch"` that never reads checked: it opens a tab and holds no state.
+  it('hands Spread to a second colour… the current colour once wired, and draws it inert on a host with no Spread tab', () => {
+    const { unmount } = draw([reds])
     expect(screen.queryByRole('switch')).toBeNull()
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
     unmount()
     const onSpread = vi.fn()
-    draw([group], { onSpread })
+    draw([reds], { onSpread })
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('B'), { target: { value: '7' } })
+    fireEvent.change(field('B'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 255, g: 0, b: 7, w: 0, a: 0, uv: 0 })
   })

@@ -17,7 +17,8 @@ import { ColourPickerPopover } from './ColourPickerPopover'
  *    every keystroke.
  *
  * And the fields are **opt-in**: this popover has three callers, and only the grid cell's editor
- * asks for them — the last block pins that.
+ * asks for them — the second block pins that, with the visualisers' picker-only form (no footer,
+ * no read-out) unchanged by the editor kit.
  */
 function open(props: Partial<React.ComponentProps<typeof ColourPickerPopover>> = {}) {
   const onColourChange = vi.fn()
@@ -133,7 +134,10 @@ describe('ColourPickerPopover without channelFields', () => {
    * shape those two have always had: the `R:… G:… B:…` readout and the emitter sliders.
    */
   it('draws the readout and no typed fields for a caller that does not ask for them', () => {
-    open({ channelFields: false, hasWhiteChannel: true, w: 40 })
+    open({ channelFields: false, footer: false, counts: false, hasWhiteChannel: true, w: 40 })
+    // The picker-only form: no footer verbs, no read-out line — the visualisers' bank is both.
+    expect(document.querySelector('[data-editor-footer]')).toBeNull()
+    expect(document.querySelector('[data-editor-readout]')).toBeNull()
     expect(screen.queryByLabelText('R')).toBeNull()
     expect(screen.queryByLabelText('G')).toBeNull()
     expect(screen.queryByLabelText('B')).toBeNull()
@@ -144,6 +148,8 @@ describe('ColourPickerPopover without channelFields', () => {
   it('still writes one emitter without touching RGB or the other emitters', () => {
     const { onColourChange } = open({
       channelFields: false,
+      footer: false,
+      counts: false,
       hasWhiteChannel: true,
       hasAmberChannel: true,
       hasUvChannel: true,

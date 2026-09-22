@@ -1,33 +1,10 @@
 import { useState, useCallback } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ColourEditor, type ColourEditorProps } from '@/components/editor/ColourEditor'
 import { EditorSurface } from '@/components/editor/EditorSurface'
 import { useEditorKeyboard } from '@/components/editor/useEditorKeyboard'
-import { ColourPickerBody } from './ColourPickerBody'
 
-interface ColourPickerPopoverProps {
-  /** Current RGB channel values */
-  r: number
-  g: number
-  b: number
-  /** Current extended channel values (undefined when fixture lacks the channel) */
-  w?: number
-  a?: number
-  uv?: number
-  /** Combined preview CSS colour (includes W/A/UV effect) */
-  combinedCss: string
-  /** Whether the fixture has extended channels */
-  hasWhiteChannel: boolean
-  hasAmberChannel: boolean
-  hasUvChannel: boolean
-  /** Callback when colour is picked */
-  onColourChange: (r: number, g: number, b: number, w?: number, a?: number, uv?: number) => void
-  /**
-   * Rendered above the picker. The programmer sheet uses it to warn that editing a cell which
-   * references a palette replaces that reference with a fixed value — a slot rather than a
-   * boolean prop, so callers that have nothing to say pay nothing and this component stays
-   * ignorant of palettes.
-   */
-  notice?: React.ReactNode
+type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 'onKeyDown' | 'docked'> & {
   /**
    * Drive the popover from outside instead of letting it keep its own open state. Pass both or
    * neither — `ColourCell` does, so the container's request (Enter over a selection, or the
@@ -92,19 +69,24 @@ interface ColourPickerPopoverProps {
   children: React.ReactNode
 }
 
+/**
+ * The colour editor's **popover half**: the open state, the keyboard wiring and the two surfaces.
+ * Everything the editor *is* — the picker, the fields, the emitter rows, the read-out, Pick, Recent,
+ * the footer and the six-channel buffer — is `ColourEditor` (editor-kit plan D10), which the busk
+ * view's Colour tab docks and this component floats; every editor prop is passed straight through.
+ *
+ * **The cell's popover is 352px** (D17, `contentClassName`): measured in the app on 2026-09-22 as
+ * 352 on the open popover's `getBoundingClientRect`, with the picker taking the 234px the R/G/B
+ * column leaves at that width and its 200px height from the library. **Compact, it is 528** — the
+ * side sheet's compact width: the compact body puts the emitter column *beside* the picker row
+ * (256 + 16 + 208 = 480px of flex items), which at 352 wrapped under it and cost the ~110px the
+ * layout exists to save, exactly where `EditorSurface` says a popover gets flipped and clipped.
+ * Measured 2026-09-22 at a 1100×700 viewport: 528 wide, emitters on the picker row's line. The
+ * two visualisers' plain popover is `w-56` — measured 224, the picker at 198×200 inside the
+ * popover's 12px gutters and its own borders — so their picker-only form is the size it always was,
+ * now that nothing pins `react-colorful` to 200 and the square takes its row's width instead.
+ */
 export function ColourPickerPopover({
-  r,
-  g,
-  b,
-  w,
-  a,
-  uv,
-  combinedCss,
-  hasWhiteChannel,
-  hasAmberChannel,
-  hasUvChannel,
-  onColourChange,
-  notice,
   open: controlledOpen,
   onOpenChange,
   channelFields = false,
@@ -115,6 +97,7 @@ export function ColourPickerPopover({
   triggerOpens,
   editorAnchorRef,
   children,
+  ...editor
 }: ColourPickerPopoverProps) {
   // Radix owns the open state for an uncontrolled caller — `open` below is `undefined` for them,
   // which is exactly how `Popover` asks for its own internal state. What is mirrored here is only
@@ -142,23 +125,9 @@ export function ColourPickerPopover({
     onDone: useCallback(() => setIsOpen(false), [setIsOpen]),
   })
 
-  // Everything the editor *is* — the picker, the fields, the emitter rows and the six-channel
-  // buffer — lives in `ColourPickerBody`, which the busk view's Colour tab hosts in a sheet. This
-  // component is the popover half: the open state, the keyboard wiring and the two surfaces.
   const body = (
-    <ColourPickerBody
-      r={r}
-      g={g}
-      b={b}
-      w={w}
-      a={a}
-      uv={uv}
-      combinedCss={combinedCss}
-      hasWhiteChannel={hasWhiteChannel}
-      hasAmberChannel={hasAmberChannel}
-      hasUvChannel={hasUvChannel}
-      onColourChange={onColourChange}
-      notice={notice}
+    <ColourEditor
+      {...editor}
       channelFields={channelFields}
       compact={compact}
       keyboardOpen={keyboardOpen}
@@ -174,7 +143,7 @@ export function ColourPickerPopover({
         open={controlledOpen}
         onOpenChange={setIsOpen}
         title={title}
-        contentClassName="w-auto"
+        contentClassName={compact ? 'w-[528px]' : 'w-[352px]'}
         onOpenAutoFocus={onOpenAutoFocus}
         trigger={children}
         triggerOpens={triggerOpens}
@@ -190,7 +159,7 @@ export function ColourPickerPopover({
   return (
     <Popover open={controlledOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-auto" align="start" onOpenAutoFocus={onOpenAutoFocus}>
+      <PopoverContent className="w-56" align="start" onOpenAutoFocus={onOpenAutoFocus}>
         {body}
       </PopoverContent>
     </Popover>

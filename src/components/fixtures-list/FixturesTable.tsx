@@ -80,6 +80,14 @@ export interface FixturesTableProps {
    * row subscribes to either for it.
    */
   scopeLabel: string
+  /**
+   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
+   * the patch list, Recent lists templates and *Save as template…* records into it. The container
+   * passes it for the programmer scope only — the two plain lists draw no template strip and get
+   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
+   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   */
+  projectId?: number
   /** Open the detail sheet for a row (group → group sheet, fixture/element →
    *  fixture sheet). */
   onShowInfo: (row: InfoRow) => void
@@ -187,6 +195,7 @@ export function FixturesTable({
   onCellCommit,
   batchFor,
   scopeLabel,
+  projectId,
   onShowInfo,
   scrollToRowId,
   onScrolledToRow,
@@ -446,6 +455,7 @@ export function FixturesTable({
                     onCellCommit={onCellCommit}
                     batchFor={batchFor}
                     scopeLabel={scopeLabel}
+                    projectId={projectId}
                     onShowInfo={onShowInfo}
                     showOwnership={showOwnership}
                     cellSelection={cellSelection}
@@ -544,6 +554,14 @@ interface RowViewProps {
    * per row, like `deskConnected`.
    */
   scopeLabel: string
+  /**
+   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
+   * the patch list, Recent lists templates and *Save as template…* records into it. The container
+   * passes it for the programmer scope only — the two plain lists draw no template strip and get
+   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
+   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   */
+  projectId?: number
   onShowInfo: (row: InfoRow) => void
   showOwnership: boolean
   /** Required, like the table's own — `RowView` has one caller and it always passes it. */
@@ -627,6 +645,7 @@ const RowView = React.memo(function RowView({
   onCellCommit,
   batchFor,
   scopeLabel,
+  projectId,
   onShowInfo,
   showOwnership,
   cellSelection,
@@ -974,6 +993,7 @@ const RowView = React.memo(function RowView({
               placeholder={state !== undefined && state.value === undefined}
               batch={batchFor(row, col)}
               scopeLabel={scopeLabel}
+              projectId={projectId}
               // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
               // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
               // otherwise walk straight past the guard and open an editor whose commit is dropped.
@@ -1064,6 +1084,7 @@ function PropertyCell({
   placeholder,
   batch,
   scopeLabel,
+  projectId,
   disabled,
   autoOpen,
   autoClose,
@@ -1094,6 +1115,14 @@ function PropertyCell({
   batch: CellBatch
   /** *Local*, or the focused Look's name — see `FixturesTableProps`. */
   scopeLabel: string
+  /**
+   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
+   * the patch list, Recent lists templates and *Save as template…* records into it. The container
+   * passes it for the programmer scope only — the two plain lists draw no template strip and get
+   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
+   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   */
+  projectId?: number
   /** The desk is unreachable, so an edit here would go nowhere. */
   disabled: boolean
   /**
@@ -1157,7 +1186,9 @@ function PropertyCell({
           value={value}
           resolutions={cell.resolutions}
           label={label}
-          batchCount={batch.count}
+          batch={batch}
+          scopeLabel={scopeLabel}
+          projectId={projectId}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}

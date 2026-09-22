@@ -145,6 +145,10 @@ export const ColourSwatch = memo(function ColourSwatch({
               hasAmberChannel={!!property.amberChannel}
               hasUvChannel={!!property.uvChannel}
               onColourChange={updateColour}
+              // The picker-only form: the channel bank beside this swatch is the read-out and the
+              // fields, so the editor draws neither its own read-out nor its footer here.
+              footer={false}
+              counts={false}
             >
               {swatchElement}
             </ColourPickerPopover>

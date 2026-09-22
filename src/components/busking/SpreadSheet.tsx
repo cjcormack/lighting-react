@@ -5,7 +5,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { ColourPickerBody } from '@/components/fixtures/ColourPickerBody'
+import { ColourEditor } from '@/components/editor/ColourEditor'
 import { targetFamilies } from '@/components/fixtures-list/rowModel'
 import { hexToRgb } from '@/components/fx/colourUtils'
 import { isOfferableColourTemplate } from '@/components/fx/FxColourTemplates'
@@ -76,7 +76,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * **The verbs are a footer, static at the
  * bottom of the tab** — *Save as Look…* first, then *Apply* — the Colour tab's footer's shape with
  * its own save first, so both tabs keep their save in one place; the body above them is the tab's
- * one scroller. The picker is `fluid`, so it takes the width the sheet is dragged to.
+ * one scroller. The picker is fluid, as every `ColourEditor`'s is, so it takes the width the sheet is dragged to.
  *
  * **A spread is a result, not a template** (D10). *Save as Look…* opens `RecordLookSheet` over
  * the selection — `record-look`, the same gesture every busked state is kept by — and nothing here
@@ -95,7 +95,7 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * toasted in `skippedRowsMessage`'s vocabulary; the rig band's family pill is where the operator
  * sees the mask before pressing.
  *
- * **The colour picker is seeded, never fed its own writes.** `ColourPickerBody`'s `combinedCss`
+ * **The colour picker is seeded, never fed its own writes.** `ColourEditor`'s `combinedCss`
  * moves only when the tab means the knob to move — switching the endpoint being edited, Swap, the
  * Colour tab's *Second colour* hand-over — for the ping-pong reason documented on that prop.
  *
@@ -504,7 +504,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
               })
             }
           >
-            <ColourPickerBody
+            <ColourEditor
               r={editingEndpoint.kind === 'colour' ? hexToRgb(editingEndpoint.hex).r : 0}
               g={editingEndpoint.kind === 'colour' ? hexToRgb(editingEndpoint.hex).g : 0}
               b={editingEndpoint.kind === 'colour' ? hexToRgb(editingEndpoint.hex).b : 0}
@@ -519,7 +519,8 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
               }}
               channelFields
               compact
-              fluid
+              footer={false}
+              counts={false}
               open
             />
           </ColourEndpoints>

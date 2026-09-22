@@ -1324,6 +1324,11 @@ export function FixturesListContainer({
           onCellCommit={handleCellCommit}
           batchFor={batchFor}
           scopeLabel={scopeLabel}
+          // The route's, as a number, for the **programmer alone** — what the colour editor's
+          // leaves, Recent and Save need. All three routes are under `/projects/:projectId`, but the
+          // two plain lists deliberately draw no template strip (§List shell) and Save records from
+          // the programmer, so their colour cells get none of the three, like the strip.
+          projectId={selectionScope === 'programmer' && projectId != null ? Number(projectId) : undefined}
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}

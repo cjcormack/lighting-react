@@ -226,6 +226,20 @@ export interface WriteTarget {
   /** Present on fixture targets. When a column resolves to nothing against
    *  `properties`, planBatchWrites falls through to one write per element. */
   elements?: ElementDescriptor[]
+  /**
+   * Present on **element** targets: the owning fixture's key. Element keys are never parsed
+   * (`.pixel-N` vs `.element-N` varies by fixture type), so this is the one way a reader that has
+   * only the target — the colour editor, mounting one appearance leaf per parent for Pick — gets
+   * back to the head it belongs to. Absent on a fixture target, whose `key` is its own.
+   */
+  fixtureKey?: string
+  /**
+   * With [fixtureKey]: the element's **position** in its parent's element list, which is the index
+   * the parent's appearance `segments` are read by (the rig tile's rule). Position rather than
+   * `ElementDescriptor.index` so a reader and the segment list cannot disagree on a fixture whose
+   * indices are not dense.
+   */
+  cellIndex?: number
 }
 
 /** The write targets a single row stands for: a group row its members, a
@@ -238,8 +252,12 @@ export function rowWriteTargets(row: Row): WriteTarget[] {
       return row.members
     case 'fixture':
       return [row.fixture]
-    case 'element':
-      return [row.element]
+    case 'element': {
+      // Stamped here, the one place a row becomes targets, so every consumer of an element target
+      // — the batch, the marquee's expansion, the colour editor's heads — sees the same parent.
+      const cellIndex = (row.fixture.elements ?? []).findIndex((element) => element.key === row.element.key)
+      return [{ ...row.element, fixtureKey: row.fixture.key, cellIndex: cellIndex < 0 ? undefined : cellIndex }]
+    }
     case 'divider':
       return []
   }
@@ -591,6 +609,15 @@ export interface CellBatch {
   count: number
   skipped: number
   resolutions: readonly NonNullable<CellResolution>[]
+  /**
+   * The targets themselves, in visible row order — the marquee's heads for this column. The colour
+   * editor reads them for its emitter counts, its hidden appearance leaves and the template
+   * targets its Save and Recent land on (editor-kit plan D10, D12); a count and a resolution list
+   * cannot name a head. Optional only because a cell mounted with no batch (`CueValueGrid`, a
+   * read-only row) builds a one-row stand-in from its own resolutions, which name no head;
+   * [batchForTargets] always fills it.
+   */
+  targets?: readonly WriteTarget[]
 }
 
 /** One column's [CellBatch] over its targets — the container keeps one per marquee column. */
@@ -602,7 +629,7 @@ export function batchForTargets(targets: readonly WriteTarget[], col: ColumnKey)
     if (cells.length === 0) skipped += 1
     for (const cell of cells) resolutions.push(cell.resolution)
   }
-  return { count: resolutions.length, skipped, resolutions }
+  return { count: resolutions.length, skipped, resolutions, targets }
 }
 
 /**

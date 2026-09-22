@@ -316,7 +316,6 @@ describe('the colour editor', () => {
           b: 30,
           combinedCss: 'rgb(10, 20, 30)',
         }}
-        batchCount={1}
         resolutions={[COLOUR_RESOLUTION]}
         label="Colour"
         autoOpen

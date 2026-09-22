@@ -165,30 +165,45 @@
   }
 }
 
-/* react-colorful colour picker styles */
-.react-colorful {
-  width: 200px !important;
-  height: 200px !important;
-}
+/* react-colorful colour picker styles.
 
+   **No size pin any more.** `.react-colorful { width: 200px !important; height: 200px !important }`
+   sat here until the editor kit's session 2, sizing every picker on the desk to one square and
+   forcing every host that wanted another size to fight it with `!important` of its own. Every
+   picker is fluid now (`.colour-picker-fluid`, below) or sizes itself: the library's own 200×200
+   default stands where nothing says otherwise. The pin also silently beat an inline `style` — the
+   sheet kit's `FanPopover` asks for 150×120 on its two pickers and drew 200×200 until the pin went.
+
+   **Size rules for the picker live here and not as Tailwind utilities, and that is a mechanism, not
+   a preference.** Tailwind v4 emits every utility inside `@layer utilities`, and react-colorful
+   injects its own stylesheet unlayered; an unlayered declaration beats a layered one whatever its
+   specificity, so `[&_.react-colorful]:h-44` on a wrapper is generated, applied, and loses to the
+   library's `height: 200px`. (`TemplateEditor`'s `!w-40` / `!h-32` work only because an important
+   layered declaration beats an unlayered normal one.) And an arbitrary variant reads `_` as a
+   space, so `[&_.react-colorful__hue]:…` targets `.react-colorful hue`. Measured in the app on
+   2026-09-22: the square drew 200 and the hue 12 with both utilities on the row.
+
+   The three rules that stay are the picker's *look*, and every picker's, deliberately — the
+   selectors are unscoped so that they stay that way: `ColourEditor` (the programmer's colour cell,
+   `fixtures/PropertyVisualizers` and its group twin through `ColourPickerPopover`, the busk Colour
+   tab and the Spread tab's endpoint picker), plus `fx/ColourEditorBody`, `templates/TemplateEditor`
+   and `sheet/FanPopover`, which mount `react-colorful` directly. One app should not hold two
+   answers to how far a hue strip sits from its square. Anything added here lands on all of them:
+   check them. */
 .react-colorful__saturation {
   border-radius: var(--radius-sm);
 }
 
 .react-colorful__hue {
+  /* 12px is a mouse's target; the compact colour editor grows it to 20px (`.colour-picker-compact`
+     below), since that arm is always a thumb. The important flag is what beats the library's own
+     24px whichever stylesheet the browser sees first. */
   height: 12px !important;
   border-radius: var(--radius-sm);
   /* The gap is smaller than it reads here: the round thumb below is 20px on a 12px bar, so it
      overhangs by 4px at each end and eats a third of this margin. 16px is what leaves the hue
-     strip looking like a separate control from the saturation square above it.
-
-     **This rule is every picker's, deliberately**, and the selector is unscoped so that it stays
-     that way: the grid's cell editor, `fixtures/PropertyVisualizers` and its group twin through
-     `ColourPickerPopover`, plus `fx/ColourEditorBody`, `templates/TemplateEditor` and
-     `fixtures-list/FanPopover`, which mount `react-colorful` directly. The gap was equally tight in
-     all six and one app should not hold two answers to how far a hue strip sits from its square.
-     The cost is 4px off the saturation square, which `.react-colorful`'s `!important` height fixes
-     — checked in each of them, and invisible. Anything added here lands on all six: check them. */
+     strip looking like a separate control from the saturation square above it. The cost is 4px off
+     the saturation square — checked in each host, and invisible. */
   margin-top: 16px;
 }
 
@@ -199,34 +214,31 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* The compact picker: the colour cell editor on any viewport too short for its full layout,
-   whichever of the three forms it is wearing (`useEditorCramped`). Here rather
-   than as a Tailwind arbitrary variant because the rules above are `!important` and would win —
-   and because a reader looking for the picker's size will look here. Height only: the width is
-   what keeps the hue bar draggable.
-
-   11rem is what the height budget allows, not a guess: the compact editor puts its emitter rows
-   beside the picker (they wrap back under it when there is no width), so the picker alone is the
-   editor's height, and a landscape iPhone leaves ~236px of sheet body after Safari and the header.
-   Raising it past ~13rem starts to scroll again on the shortest screens this runs on.
-
-   The hue bar goes the other way and grows. 12px is a mouse's target; this is the one arm that is
-   always a thumb. */
+/* The compact picker: the colour editor on any viewport too short for its full layout, whichever
+   of the three forms it is wearing (`useEditorCramped`). Height only: the width is what keeps the
+   hue bar draggable. 11rem is what the height budget allows, not a guess: the compact editor puts
+   its emitter rows beside the picker (they wrap back under it when there is no width), so the
+   picker alone is the editor's height, and a landscape iPhone leaves ~236px of sheet body after
+   Safari and the header. Raising it past ~13rem starts to scroll again on the shortest screens
+   this runs on. The hue bar goes the other way and grows: 12px is a mouse's target; this is the
+   one arm that is always a thumb. Unlayered two-class selectors, so the square needs no important
+   flag against the library's one-class rule; the hue does, against the 12px rule above. */
 .colour-picker-compact .react-colorful {
-  height: 11rem !important;
+  height: 11rem;
 }
 
 .colour-picker-compact .react-colorful__hue {
   height: 20px !important;
 }
 
-/* The fluid picker: the busk view's side sheet, which is dragged to width (`fluid` on
-   `ColourPickerBody`). The square takes the row's width beside the R/G/B boxes and keeps the
-   pinned height; `flex: 1 1 0%` with `min-width: 0` is what lets it shrink below 200px in a
-   narrow sheet as readily as it grows in a wide one. Here for the reason the compact rule is:
-   the width above is `!important` and a utility would lose to it. */
+/* The fluid picker: the square takes the row's width beside the R/G/B boxes and keeps the library's
+   height. `flex: 1 1 0%` with `min-width: 0` is what lets it shrink below 200px in a narrow sheet as
+   readily as it grows in a wide one — the busk side sheet is dragged to width, the programmer's
+   popover is 352. On the row that `ColourEditor` draws in every host; a host that wants a fixed
+   square gives the row a fixed width (the visualisers' 224px popover). No `!important`: nothing
+   pins the width any more, and the two-class selector already beats the library's one. */
 .colour-picker-fluid .react-colorful {
-  width: auto !important;
+  width: auto;
   flex: 1 1 0%;
   min-width: 0;
 }

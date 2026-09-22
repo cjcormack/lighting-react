@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
-import type { BuskingTarget } from '@/components/busking/buskingTypes'
+import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import type { BuskRigRow } from '@/api/buskRigApi'
 import type { Fixture } from '@/store/fixtures'
 import { parseCssRgb } from './colourMath'
@@ -99,25 +99,27 @@ export function rigHeadOrder(rows: readonly BuskRigRow[], fixtures: readonly Fix
 const hasColourDescriptor = (properties: readonly { type: string }[]) => properties.some((p) => p.type === 'colour')
 
 /** A head the colour picker can *write*: its own colour descriptor, or one on any of its cells. */
-function hasColour(fixture: Fixture): boolean {
-  return hasColourDescriptor(fixture.properties) || (fixture.elements ?? []).some((element) => hasColourDescriptor(element.properties))
+function hasColour(target: WriteTarget): boolean {
+  return hasColourDescriptor(target.properties) || (target.elements ?? []).some((element) => hasColourDescriptor(element.properties))
 }
 
 /**
- * The heads a selection names, expanded — a group to its members, a cell to its parent and index
- * — and sorted into rig order, with any head the rig does not name after them in selection order.
+ * The heads a set of write targets names — a fixture as itself, an element as its parent and its
+ * position (`WriteTarget.fixtureKey` / `cellIndex`, stamped where a row becomes a target) — sorted
+ * into [order] with any head the order does not name after them, in target order.
+ *
+ * The colour editor's own list (editor-kit plan D12): the busk tab hands it the selection expanded
+ * in rig order, the programmer's cell the marquee's column in row order, and both read Pick off
+ * the same fold. A group never reaches here — the hosts expand one to its members first, so a
+ * member the rig names sorts by its own rank.
  *
  * **Only heads with a colour descriptor.** The appearance dispatch answers for every head — a
  * gelled or colourless one with its gel or the default tungsten, an unmatched patch with the
- * placeholder grey — and none of those is a colour this sheet could write back. Reading them would
+ * placeholder grey — and none of those is a colour the editor could write back. Reading them would
  * count a dimmer-only par as a head and flag *mixed* against a real RGB head beside it; the write
- * planner skips the same heads for the same reason, so the two agree on what a head is.
+ * planners skip the same heads for the same reason, so the two agree on what a head is.
  */
-export function selectedHeads(
-  selected: readonly BuskingTarget[],
-  order: readonly string[],
-  fixtures: readonly Fixture[] | undefined,
-): SelectedHead[] {
+export function targetHeads(targets: readonly WriteTarget[], order: readonly string[] = []): SelectedHead[] {
   const heads: SelectedHead[] = []
   const seen = new Set<string>()
   const add = (head: SelectedHead) => {
@@ -126,19 +128,15 @@ export function selectedHeads(
     seen.add(id)
     heads.push(head)
   }
-  for (const target of selected) {
-    if (target.type === 'group') {
-      for (const fixture of fixtures ?? []) {
-        if (fixture.groups.includes(target.name) && hasColour(fixture)) add({ fixtureKey: fixture.key, cellIndex: null })
-      }
-    } else if (target.element != null) {
-      if (!hasColourDescriptor(target.element.properties)) continue
-      const index = (target.fixture.elements ?? []).findIndex((element) => element.key === target.element?.key)
-      add({ fixtureKey: target.fixture.key, cellIndex: index < 0 ? null : index })
-    } else if (hasColour(target.fixture)) {
-      add({ fixtureKey: target.fixture.key, cellIndex: null })
+  for (const target of targets) {
+    if (target.fixtureKey != null) {
+      if (!hasColourDescriptor(target.properties)) continue
+      add({ fixtureKey: target.fixtureKey, cellIndex: target.cellIndex ?? null })
+    } else if (hasColour(target)) {
+      add({ fixtureKey: target.key, cellIndex: null })
     }
   }
+  if (order.length === 0) return heads
   const rank = new Map(order.map((key, index) => [key, index]))
   const unranked = order.length
   return heads

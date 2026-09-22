@@ -186,6 +186,9 @@ export const GroupColourSwatch = memo(function GroupColourSwatch({
               hasAmberChannel={hasAmber}
               hasUvChannel={hasUv}
               onColourChange={handleColourChange}
+              // The picker-only form, as in `PropertyVisualizers`.
+              footer={false}
+              counts={false}
             >
               {swatchElement}
             </ColourPickerPopover>
