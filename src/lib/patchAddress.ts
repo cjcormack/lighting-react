@@ -1,4 +1,4 @@
-import { fanAddresses } from '@/components/sheet/fanMath'
+import { walkAddresses } from '@/components/editor/spreadPlans'
 
 /** A patched head as the address arithmetic sees it. */
 export interface AddressedHead {
@@ -38,7 +38,7 @@ export function consecutiveLanding(
   }
   const landing = new Map<number, number>()
   for (const run of byUniverse.values()) {
-    const channels = fanAddresses(
+    const channels = walkAddresses(
       start,
       null,
       run.map((head) => head.footprint),
@@ -85,7 +85,7 @@ export function formatPatchAddress(universe: number, channel: number): string {
 
 /**
  * Check a proposed landing of some heads against every head on the rig, naming the first problem
- * — the address editor's "names the collision before Apply", and the Fan's preview.
+ * — the address editor's "names the collision before Apply", and the Spread panel's landing line.
  *
  * Every head is checked against the rig *as it would be*: the moved heads at their new channels,
  * the rest where they are. So a batch can land on channels its own members are vacating, and two

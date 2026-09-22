@@ -47,7 +47,7 @@ const DEFAULT_SEPARATOR = '-'
  * One head takes the typed key exactly — re-keying a single fixture is a rename, not a scheme.
  * Several count up from it.
  */
-export function fanKeys(typed: string, count: number): string[] {
+export function spreadKeys(typed: string, count: number): string[] {
   if (count <= 0) return []
   if (count === 1) return [typed]
   const parsed = parseKeySuffix(typed)

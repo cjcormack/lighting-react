@@ -10,7 +10,7 @@ import type { RowId } from './cellSelectionModel'
 /** The row half of a sheet's selection — the same shape `fixtures-list/useListSelection` returns. */
 export interface LocalListSelection {
   selectedIds: ReadonlySet<RowId>
-  /** Selected ids in *visible row order* (top→bottom) — the order a fan and a batch run in. */
+  /** Selected ids in *visible row order* (top→bottom) — the order a raw spread and a batch run in. */
   orderedSelected: readonly RowId[]
   anchor: RowId | null
   count: number

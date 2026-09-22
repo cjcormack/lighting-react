@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkKeyLanding, fanKeys, parseKeySuffix, planKeyWrites } from './fixtureKey'
+import { checkKeyLanding, spreadKeys, parseKeySuffix, planKeyWrites } from './fixtureKey'
 
 /**
  * The patch list's key scheme (CLAUDE.md §Sheet kit) — the arithmetic behind "re-key the selection
@@ -19,24 +19,24 @@ describe('parseKeySuffix', () => {
   })
 })
 
-describe('fanKeys', () => {
+describe('spreadKeys', () => {
   it('leaves one head with exactly the typed key — re-keying one fixture is a rename', () => {
-    expect(fanKeys('house', 1)).toEqual(['house'])
-    expect(fanKeys('par-4', 1)).toEqual(['par-4'])
+    expect(spreadKeys('house', 1)).toEqual(['house'])
+    expect(spreadKeys('par-4', 1)).toEqual(['par-4'])
   })
 
   it('continues the typed number, keeping its separator and its padding', () => {
-    expect(fanKeys('par-3', 4)).toEqual(['par-3', 'par-4', 'par-5', 'par-6'])
-    expect(fanKeys('par_08', 3)).toEqual(['par_08', 'par_09', 'par_10'])
-    expect(fanKeys('par1', 3)).toEqual(['par1', 'par2', 'par3'])
+    expect(spreadKeys('par-3', 4)).toEqual(['par-3', 'par-4', 'par-5', 'par-6'])
+    expect(spreadKeys('par_08', 3)).toEqual(['par_08', 'par_09', 'par_10'])
+    expect(spreadKeys('par1', 3)).toEqual(['par1', 'par2', 'par3'])
   })
 
   it('appends `-1`, `-2`, … to a key with no number of its own', () => {
-    expect(fanKeys('foh', 3)).toEqual(['foh-1', 'foh-2', 'foh-3'])
+    expect(spreadKeys('foh', 3)).toEqual(['foh-1', 'foh-2', 'foh-3'])
   })
 
   it('outgrows the padding rather than wrapping inside it', () => {
-    expect(fanKeys('par-09', 3)).toEqual(['par-09', 'par-10', 'par-11'])
+    expect(spreadKeys('par-09', 3)).toEqual(['par-09', 'par-10', 'par-11'])
   })
 })
 
@@ -49,14 +49,14 @@ describe('checkKeyLanding', () => {
 
   it('names a key another head holds, and says whose', () => {
     const batch = [head(1, 'par-1'), head(2, 'par-2')]
-    const landing = checkKeyLanding(batch, fanKeys('spot-1', 2), all)
+    const landing = checkKeyLanding(batch, spreadKeys('spot-1', 2), all)
     expect(landing.error).toBe("“spot-1” is already Spot 1's key")
     expect(landing.lines).toEqual(['Head 1 → spot-1', 'Head 2 → spot-2'])
   })
 
   it('allows a key a member of the batch itself holds — that is an ordering problem, not a clash', () => {
     const batch = [head(1, 'par-1'), head(2, 'par-2')]
-    const landing = checkKeyLanding(batch, fanKeys('par-2', 2), all)
+    const landing = checkKeyLanding(batch, spreadKeys('par-2', 2), all)
     expect(landing.error).toBeNull()
     // It carries the writes it had to plan to answer, so the caller never re-plans them.
     expect(landing.writes).toEqual([
@@ -67,7 +67,7 @@ describe('checkKeyLanding', () => {
 
   it('carries no writes whenever it carries an error', () => {
     const batch = [head(1, 'par-1'), head(2, 'par-2')]
-    expect(checkKeyLanding(batch, fanKeys('spot-1', 2), all).writes).toBeNull()
+    expect(checkKeyLanding(batch, spreadKeys('spot-1', 2), all).writes).toBeNull()
     expect(checkKeyLanding([head(1, 'par-1')], [''], all).writes).toBeNull()
     const swap = [head(1, 'par-2'), head(2, 'par-1')]
     expect(checkKeyLanding(swap, ['par-1', 'par-2'], rig(head(1, 'par-2'), head(2, 'par-1'))).writes).toBeNull()
@@ -82,7 +82,7 @@ describe('checkKeyLanding', () => {
 describe('planKeyWrites', () => {
   it('writes in an order where every target is free when it is written', () => {
     const batch = [head(1, 'par-1'), head(2, 'par-2'), head(3, 'par-3')]
-    const steps = planKeyWrites(batch, fanKeys('par-2', 3), ['par-1', 'par-2', 'par-3'])
+    const steps = planKeyWrites(batch, spreadKeys('par-2', 3), ['par-1', 'par-2', 'par-3'])
     // Walking up would put `par-2` on head 1 while head 2 still holds it, and the PUT refuses a
     // duplicate — so it walks down instead.
     expect(steps).toEqual([
@@ -111,7 +111,7 @@ describe('planKeyWrites', () => {
 
   it('every step it does return writes a key that is free at that moment', () => {
     const batch = [head(1, 'par-1'), head(2, 'par-2'), head(3, 'par-3')]
-    const steps = planKeyWrites(batch, fanKeys('par-2', 3), ['par-1', 'par-2', 'par-3'])!
+    const steps = planKeyWrites(batch, spreadKeys('par-2', 3), ['par-1', 'par-2', 'par-3'])!
     const taken = new Set(['par-1', 'par-2', 'par-3'])
     const holds = new Map(batch.map((h) => [h.id, h.key]))
     for (const step of steps) {

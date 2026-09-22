@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 // The source itself, as text. `?raw` rather than `node:fs`, for `shortViewport.test.ts`'s reason:
 // this file is compiled by `tsc` under the app's tsconfig, which has no Node types.
 import spreadIntentSrc from './spreadIntent.ts?raw'
+import spreadPanelSrc from '@/components/editor/SpreadPanel.tsx?raw'
+import spreadPopoverSrc from '@/components/fixtures-list/SpreadPopover.tsx?raw'
 import {
   SPREAD_CURVES,
   SPREAD_ORDERS,
@@ -100,8 +102,23 @@ describe('spreadIntent', () => {
   it('imports no resolver — it serialises and nothing more (D9)', () => {
     const imports = [...spreadIntentSrc.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort()
     expect(imports).toEqual(['./attributeFamily', './templateIntent', '@/components/fx/colourUtils', '@/store/programmerOps'])
-    // The docblock may *name* the resolver; the import list may not reach one, nor the client fan.
-    expect(imports.some((name) => /fanMath|colourMath|[Rr]esolver/.test(name))).toBe(false)
+    // The docblock may *name* the resolver; the import list may not reach one, nor the client walk.
+    expect(imports.some((name) => /spreadPlans|fanMath|colourMath|[Rr]esolver/.test(name))).toBe(false)
     expect(spreadIntentSrc).not.toMatch(/lerp\(|mixLab|interpolateIntent/)
+  })
+
+  it('neither the panel nor the programmer’s popover reaches a lerp — only `rawValues`, and only from the raw arm (editor-kit D3, D15)', () => {
+    const importsOf = (src: string) => [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1])
+    // The panel imports the client walk for its raw and duration kinds, and calls `rawValues` in
+    // exactly one place — the raw arm's send; nothing resolves or interpolates an intent.
+    const panelImports = importsOf(spreadPanelSrc)
+    expect(panelImports).toContain('./spreadPlans')
+    expect(panelImports.some((name) => /fanMath|colourMath\b.*lerp|[Rr]esolver/.test(name))).toBe(false)
+    expect(spreadPanelSrc.match(/\brawValues\(/g)).toHaveLength(1)
+    expect(spreadPanelSrc).not.toMatch(/\bmixLab\(|\binterpolateIntent\(|\bfanColours\(|\bfanValues\(/)
+    // The popover builds plans and never walks a value at all.
+    const popoverImports = importsOf(spreadPopoverSrc)
+    expect(popoverImports.some((name) => /spreadPlans|fanMath|colourMath|[Rr]esolver/.test(name))).toBe(false)
+    expect(spreadPopoverSrc).not.toMatch(/\brawValues\(|\bspreadFractions\(|\bmixLab\(|\binterpolateIntent\(/)
   })
 })

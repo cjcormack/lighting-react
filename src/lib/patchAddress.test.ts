@@ -18,7 +18,7 @@ const head = (id: number, channel: number, footprint = 6, universe = 1, name = `
 /**
  * The patch list's batch Set: N addresses land consecutively by footprint from the typed one. This
  * is the rule every desk surveyed has and the one a naive "set them all to 7" would break —
- * pinned at the arithmetic so the editor, the Fan and the write cannot each spell it differently.
+ * pinned at the arithmetic so the editor, the Spread panel and the write cannot each spell it differently.
  */
 describe('consecutiveLanding', () => {
   it('lands each head after the previous one by its own footprint, in the order given', () => {

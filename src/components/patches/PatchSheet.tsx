@@ -13,7 +13,7 @@ import {
   lastChannel,
   type AddressedHead,
 } from '@/lib/patchAddress'
-import { checkKeyLanding, fanKeys, type KeyedHead } from '@/lib/fixtureKey'
+import { checkKeyLanding, spreadKeys, type KeyedHead } from '@/lib/fixtureKey'
 import { toast } from 'sonner'
 import { useDeletePatchMutation, useUpdatePatchMutation } from '@/store/patches'
 import { useFixtureListQuery, type Fixture } from '@/store/fixtures'
@@ -21,7 +21,7 @@ import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from 
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useHighlight } from '@/components/fixtures-list/useHighlight'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
-import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
+import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch } from '@/components/sheet/SheetPage'
 
@@ -114,11 +114,11 @@ const STAGE_OPTIONS: SheetOption[] = [
 /**
  * The patch list as a sheet (CLAUDE.md §Sheet kit): the patch list's rows on the
  * programmer's grid — 36px rows, a sticky name column, drag-select from the name column for rows
- * and from a value column for cells, one editor per column fanned over the selection.
+ * and from a value column for cells, one editor per column spread over the selection.
  *
  * Three things are this surface's rather than the kit's:
  *
- *  - **Set over N addresses lands them consecutively by footprint from the typed one**, and Fan on
+ *  - **Set over N addresses lands them consecutively by footprint from the typed one**, and Spread on
  *    the Address column is From + Step in visible-row order (blank step = footprint). The
  *    arithmetic is `lib/patchAddress.ts`, pinned there; the write is N PUTs, one per head whose
  *    channel moved. There is no bulk route (a new lighting7 route is a restart, and Chris's call),
@@ -230,7 +230,7 @@ export function PatchSheet({
   const keyLanding = useCallback(
     (batch: readonly SheetRow[], draft: string) => {
       const heads = keyedHeads(batch)
-      return checkKeyLanding(heads, fanKeys(draft.trim(), heads.length), allPatches)
+      return checkKeyLanding(heads, spreadKeys(draft.trim(), heads.length), allPatches)
     },
     [allPatches],
   )
@@ -286,7 +286,7 @@ export function PatchSheet({
           return true
         },
         clearRefusal: 'An address cannot be empty',
-        fan: (batch): FanPlan | null => {
+        spread: (batch): SpreadPlan | null => {
           if (batch.length === 0) return null
           const universe = batch[0].patch.universe
           const mixed = batch.some((row) => row.patch.universe !== universe)
@@ -298,7 +298,7 @@ export function PatchSheet({
             universe,
             footprints: batch.map((row) => row.patch.channelCount ?? 1),
             check: (channels) => {
-              if (mixed) return 'Select heads on one universe to fan their addresses'
+              if (mixed) return 'Select heads on one universe to spread their addresses'
               return checkLanding(allHeads, new Map(batch.map((row, i) => [row.patch.id, channels[i]]))).error
             },
             apply: (channels) => {
@@ -358,7 +358,7 @@ export function PatchSheet({
             plan={keyLanding}
           />
         ),
-        // **A typed key fans over the selection**, the way a typed address does: one head takes it
+        // **A typed key spreads over the selection**, the way a typed address does: one head takes it
         // as it is, several count up from it in visible-row order, continuing the number, the
         // separator and the zero padding the typed key already carries (`lib/fixtureKey.ts`). The
         // landing is refused before Apply where it would take a key another head holds — and the
@@ -373,7 +373,7 @@ export function PatchSheet({
           const typed = value.trim()
           const heads = keyedHeads(batch)
           // The landing carries the writes it had to plan to answer, so this does not re-plan them.
-          const { error, writes } = checkKeyLanding(heads, fanKeys(typed, heads.length), allPatches)
+          const { error, writes } = checkKeyLanding(heads, spreadKeys(typed, heads.length), allPatches)
           if (error || !writes) return false
           void applyKeyWrites(writes)
           return true
@@ -596,7 +596,7 @@ export function PatchSheet({
             setRef={sheet.setButtonRef}
             onSet={sheet.toggleCellEditor}
             onClear={sheet.clearSelectedCells}
-            fan={<FanPopover plans={sheet.fanPlans} drivableHint="address" className={PHONE_FOLDED_CLASS} />}
+            spread={<SpreadPanel host="popover" plans={sheet.spreadPlans} drivableHint="address" className={PHONE_FOLDED_CLASS} />}
           />
         )}
         <Tooltip>

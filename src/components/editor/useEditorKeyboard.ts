@@ -53,9 +53,9 @@ export function useEditorKeyboard({
   onDone,
 }: {
   /**
-   * Take focus on open at all. Defaults to true, which is every cell editor; `FanPopover` opts out
-   * only when its marquee spans several fannable columns, because then its first control is the
-   * column chooser rather than a value, and `ColourPickerPopover` does for its two non-cell
+   * Take focus on open at all. Defaults to true, which is every cell editor; `SpreadPanel` opts out
+   * in both sheet forms and when its marquee spans several spreadable columns or families, because
+   * then its first control is a chooser rather than a value, and `ColourPickerPopover` does for its two non-cell
    * callers, which draw no text fields to focus.
    *
    * It is not a *gesture* switch — see the docblock. Whether this editor was opened by a click, the

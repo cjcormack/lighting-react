@@ -1141,31 +1141,41 @@ does not travel — through a seed the host holds and the Spread tab drops once 
 later visit by any other door is not re-seeded with a stale colour. A host with no Spread tab to
 open leaves `onSpread` out and the editor draws the button inert.
 
-**The Spread tab resolves on the desk, and the client never lerps** (D9,
-`components/busking/SpreadSheet.tsx`, `lib/spreadIntent.ts`). The tab sends two intents of one
-property's shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`
-(`useSpreadMutation` in `store/programmerOps.ts` — REST for that file's own reason, the structured
-reply); the desk interpolates in the intent's own space, resolves one literal per head through the
-same `TemplateResolver` a template click uses, writes each into Local as an ordinary entry (so it
-rides `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and
-answers what it wrote. Only the desk knows a group's member order, each head's range, which cells a
-fixture has and what a colour means on a head with amber — the same rule that keeps
-`templateIntent.ts` a serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per
-family over `templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference
-through `colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an
-emitter) and `spreadIntent.test.ts` asserts its import list reaches no resolver. **There is no
-preview strip** (2026-09-21): there was one, drawn from `written[]` and `skipped[]` — one bar per
-head in the desk's order — and it went because it cost the tab its height and the rig itself is the
-preview. The rule it embodied stands and is why nothing replaced it client-side: the tab never shows
-what it thinks the desk *would* do. The desk's answer is read for `skippedFamilies` alone, and only
-the **latest** request's: Live keeps several in flight and their answers can land out of order, so a
-property or selection change disowns whatever is in flight (`requestSeq`).
-`SpreadSheet.test.tsx` asserts the file never imports `sheet/fanMath.ts`, the client fan that lerps
-bytes over rows it can see. The family segment is **Intensity · Colour · Position · Beam** with a
+**The Spread tab is the docked host of `SpreadPanel`, and the client never lerps** (D9;
+`components/busking/SpreadSheet.tsx`, `lib/spreadIntent.ts`; editor-kit plan D2, session 3).
+What is the host's: the busk selection → the request's targets (`lookLayerTarget` — a group as a
+group, a cell by its element key) and the families the heads can take (`targetFamilies` over the
+selection's write targets), the selection's mask, the mutation with the programmer fade read at
+send time (`useSpreadMutation` in `store/programmerOps.ts` — REST for that file's own reason, the
+structured reply), the colour templates an endpoint may name (`isSpreadColourTemplate` in
+`fx/FxColourTemplates.tsx`), the *Over: Cells* count (`selectedCells` in `lib/cellsSubSelection.ts`,
+the Cells chip's own expansion, so the chip and the tab cannot count cells two ways), the Colour
+tab's seed hand-over, and *Save as Look…* in the footer's `save` slot. Everything else — the form,
+the endpoint editors, Curve · Order · Parts · Over, Live and Apply / Send again, the keyboard, the
+answer read for `skippedFamilies` alone — is the panel's, shared with the programmer's row C (§Sheet
+kit), and nothing changed to the eye when it moved. The tab sends two intents of one property's
+shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`; the desk
+interpolates in the intent's own space, resolves one literal per head through the same
+`TemplateResolver` a template click uses, writes each into Local as an ordinary entry (so it rides
+`programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and answers
+what it wrote. Only the desk knows a group's member order, each head's range, which cells a fixture
+has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
+serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per family over
+`templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference through
+`colourUtils`; `pct:` for a level or a beam role; degrees for a position; `dmx:` for an emitter) and
+`spreadIntent.test.ts` asserts its import list reaches no resolver — and the panel's and the
+popover's reach no lerp but `rawValues`, from the raw arm alone. **There is no preview strip**
+(2026-09-21): there was one, drawn from `written[]` and `skipped[]` — one bar per head in the desk's
+order — and it went because it cost the tab its height and the rig itself is the preview. The rule
+it embodied stands and is why nothing replaced it client-side: the tab never shows what it thinks
+the desk *would* do. Only the **latest** request's answer is read: Live keeps several in flight and
+their answers can land out of order, so a property or selection change disowns whatever is in
+flight (`requestSeq`). The family segment is **Intensity · Colour · Position · Beam** with a
 **Property** row beneath it where a family holds more than one (zoom and frost under Beam): the
-board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each
-drawn as a picture — Wings as **two strokes meeting at a marked centre**, since its eight fractions
-are Mirror's and one polyline through them *was* Mirror's V); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
+board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's
+four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each drawn as a picture — Wings as **two strokes
+meeting at a marked centre**, since its eight fractions are Mirror's and one polyline through them
+*was* Mirror's V); order is a `DistributionStrategy` name — Rig · Reverse · Centre · Random are
 `LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
@@ -1173,27 +1183,26 @@ is Rig again), offering it as something it is not would be worse than withholdin
 disabled item in the row wrapped at 288px and read as a control that was merely off. A position
 spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
 convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
-hard stop. *Over: Cells* is enabled only where a
-selected fixture has elements, with the cell count (`selectedCells` in `lib/cellsSubSelection.ts`, the
-Cells chip's own expansion). **Live** sends every
-adjustment through `useLivePush` with an equality over the whole request, the release read from the
-window as the Colour tab's is; off, only *Apply* writes. An explicit Apply always sends — and stays
-pressable while Live is on, reading *Send again*, because it is the one un-deduped resend after a
-write the desk refused; turning Live on sends nothing by itself. The
+hard stop. *Over: Cells* is enabled only where a selected fixture has elements, with the cell count.
+**Live** sends every adjustment through `useLivePush` with an equality over the whole request, the
+release read from the window as the Colour tab's is; off, only *Apply* writes. An explicit Apply
+always sends — and stays pressable while Live is on, reading *Send again*, because it is the one
+un-deduped resend after a write the desk refused; turning Live on sends nothing by itself. The
 window release flushes only while Live is on, since the switch can be toggled from the keyboard
 with no `pointerup` to clear the gesture; the typed fields keep a draft and commit only a number,
 so clearing one writes nothing and a leading minus can be typed; and the `skippedFamilies` toast is
 keyed like the endpoint's error toast, since a Live drag under a mask answers it on every write.
-Under an empty selection nothing is sent and the tab's own sentence is toasted — the desk would
+Under an empty selection nothing is sent and the panel's own sentence is toasted — the desk would
 answer `SPREAD_NEEDS_SELECTION` otherwise, and `errorToastMiddleware` renders every 400 (the
 mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replaces one toast), so the
-tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property outside the
-selection's families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape —
-toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the mask names that
-the selection can take. The colour endpoints share one `ColourEditor` (footer and read-out off) for whichever end is
-being edited, and its `combinedCss` is a **seed** that moves only when the tab means the knob to
-move (switching ends, Swap, the Colour tab's hand-over) — never the picker's own writes, for the
-ping-pong reason documented on that prop.
+tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property
+outside the selection's families writes nothing and answers `skippedFamilies` — a 200, the Look
+press's shape — toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the
+mask names that the selection can take. The colour endpoints share one `ColourEditor` (compact,
+footer and read-out off — the busk tab's shipped measurement, which every host of the panel now
+takes) for whichever end is being edited, and its `combinedCss` is a **seed** that moves only when
+the panel means the knob to move (switching ends, Swap, the Colour tab's hand-over) — never the
+picker's own writes, for the ping-pong reason documented on that prop.
 
 **A spread is a result, not a template** (D10). *Save as Look…* opens `RecordLookSheet` over the
 selection — `record-look`, the same gesture every busked state is kept by; the sheet gained an
@@ -1979,7 +1988,7 @@ layer: `programmer.layerState` carries the mask and `LookStack` draws the badge.
 
 **One sheet, four surfaces.** The programmer's grid gestures — drag selection, single click
 selects a cell, double click / ⏎ / typing opens one editor for every selected cell, ⌫ clears, one
-editor per column fanned over the selected columns, the Set · Clear · Fan bar — are a kit in
+editor per column spread over the selected columns, the Set · Clear · Spread bar — are a kit in
 `components/sheet/`, mounted by the **patch list** (`components/patches/PatchSheet.tsx`), the
 **DMX sheet** (`components/channels/DmxSheet.tsx`) and the **cue sheet**
 (`components/runner/CueSheet.tsx`) as well as the programmer. The design record is
@@ -1994,7 +2003,8 @@ and the *shapes* `CellKeyboardPermission` / `CellActionCopy`; the programmer's o
 the cell editor's surface and its two hooks, `ValueFieldRow` and `UnsetCellMark` (all four moved on
 again since, to `components/editor/` — §The editor kit), the three fold
 constants (`toolbarFolds.ts`, re-exported by `SelectionToolbar`), `CellSelectionActions`,
-`FanPopover` + `fanMath`, `selectionBand`, `useEscapeEditorSnapshot`. Three were extractions rather
+the fan popover and its `fanMath` (both since replaced by `editor/SpreadPanel` + `spreadPlans`,
+below), `selectionBand`, `useEscapeEditorSnapshot`. Three were extractions rather
 than moves: `useCellMarquee` (a local of `FixturesTable`, now generic over rows with a
 `rowHeight` and an `isSelectableRow`), `useCellEditorRequests` (the open/close one-shots and the
 Set toggle from the container), and `commitToSelectedCells` / `selectedRowsByColumn`
@@ -2004,9 +2014,9 @@ targets). The fixtures list keeps its columns, row model, ownership and scope, a
 Redux-scoped for readers outside the list.
 
 **A `SheetColumn<Row, C>` per surface** says how to read a row (`value`), which cell it draws
-(`cell`, or `display` for a read-out), whether it fans (`fan` → a `FanPlan`), and what a commit
-does (`write(rows, value)`, over the **batch**, answering false for a value it refuses) and what
-Clear does (`clear`, or `clearRefusal` as the button's reason). **A commit fans only to the
+(`cell`, or `display` for a read-out), whether it spreads (`spread` → a `SpreadPlan`), and what a
+commit does (`write(rows, value)`, over the **batch**, answering false for a value it refuses) and
+what Clear does (`clear`, or `clearRefusal` as the button's reason). **A commit spreads only to the
 selected columns that share its origin's `kind`**: the programmer tells commits apart by shape,
 but a cue's name, notes and fade are all one string, so each surface column names its vocabulary
 (`level` on all sixteen DMX columns, one kind per column on the cue and patch sheets) and a `3s`
@@ -2022,15 +2032,96 @@ same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
 
 **`SelectionBar` is a shell** — counts · family pill · ⏎/⌫ hints · a `strip` slot · a `verbs`
 slot — and the programmer's `SelectionBar` wraps it with the template strip in the slot.
-`CellSelectionActions` takes a `permission` of `CellKeyboardPermission`'s shape and a `fan` slot,
-so a disabled button and a refused key always read one object, and each surface hands in its own
-`FanPopover` instance. Surface verbs come after Fan; Deselect is always last and ghost.
+`CellSelectionActions` takes a `permission` of `CellKeyboardPermission`'s shape and a `spread`
+slot, so a disabled button and a refused key always read one object, and each surface hands in its
+own `SpreadPanel` instance. Surface verbs come after Spread; Deselect is always last and ghost.
 
-**The kit's `FanPopover` has four plan kinds** and the programmer's is the first one unchanged:
-`value` (From · To bytes, Reverse), `colour` (two pickers), `address` (From · Step in visible-row
-order, blank step = footprint) and `duration` (From · To · Spread — Linear, the one spread there
-is). `fixtures-list/FanPopover.tsx` is the adapter that builds value and colour plans through
-`planBatchWrites`. `useSheetKeyboard` is the kit's window listener and it is **capture-phase**:
+**Spread is one panel, four plan kinds, every host — and the desk resolves it on both sides**
+(editor-kit plan D1–D7, D15; `Spread.dc.html` is the layout authority, the busk tab wins on a
+measurement). The verb was *Fan* until session 3 of that plan, and "Fan" survives only in the desk
+survey as what other desks call it: the desk already called the route spread, a Look press
+"spreads" its rows, and nothing on either side called anything else fan but this one verb.
+`components/editor/SpreadPanel.tsx` is the busk tab's body plus the old fan popover's surface,
+chooser and keyboard, hosted by the programmer's row C as a popover in the cell editor's three forms
+(`fixtures-list/SpreadPopover.tsx` builds its plans from the marquee), by the busk view as the
+docked tab (`busking/SpreadSheet.tsx`, §Focus and the side sheet), and by the patch list, the cue
+sheet and the DMX sheet with plans of their own. The kinds: **`intent`** — desk-resolved, the
+template vocabulary: two intents of one property's shape, a curve, an order, parts and an
+over-switch go to `POST /programmer/spread`, and one literal per head lands in Local (D3: the
+programmer's rows are heads the desk knows better than the browser does — a group's member order,
+each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
+are intents — a percent, a colour + policy or a `tmpl:` reference, degrees — so a spread from 0 to
+full is *0% → 100%* on every head whatever its range, which the byte form never was, and the old
+position exclusion went with the byte lerp it objected to. **`raw`** — bytes on a column outside
+the vocabulary, Speed alone (D15; `rawValues` in `editor/spreadPlans.ts` is `fanValues` renamed and
+kept for that one column, under the same Curve · Order · Parts · Over, with `spreadFractions`
+mirroring `fx/SpreadPlan.kt`; if Speed ever stops offering Spread the kind goes with it).
+**`address`** — From · Step in visible order, the patch list's walk (`walkAddresses`, which
+`lib/patchAddress.ts` shares with the consecutive Set). **`duration`** — From · To with the curve
+row where the one-option select was, the cue sheet's fade times (`spreadDurations`;
+`FU-SPREAD-DURATION-CURVES`). `fanColours` is deleted: the client never interpolates an intent, and
+`spreadIntent.test.ts` pins the import lists of `spreadIntent.ts`, `SpreadPanel` and
+`SpreadPopover` — the panel reaches `spreadPlans.ts` only for the raw arm, the popover walks
+nothing. The panel is **store-free**, so the three kit sheets mount it without a store; the two
+hosts that draw a colour endpoint hand `ColourEditor` in (`colourEditor`), because its leaves and
+Recent reach the store.
+
+**The marquee answers the panel's first two questions** (D4). Targets are the marquee's heads —
+`spreadTargetsFor` in `rowModel.ts`, beside `templateTargetsFor` and deliberately **not** it: a
+group row expanded to its **visible** members, an element row as `{type: 'fixture', key:
+element.key}` (the cells contract the desk already takes), a fixture row as itself, where the
+template rule folds an element row into its fixture because that route resolves keys against the
+patch. It is `expandSelectionToTargets`'s walk read as cue targets (`spreadTargetsOf`), so the
+container's per-column targets and the request cannot name different heads. `families` is the pair
+the press sends (`usePressFamilies`) — on the programmer, the one surface that bridges; the two
+plain lists send the marquee's own families, as their pill shows (`desk` on `SpreadPopover`). The
+family segment is drawn **answered and checked, never
+hidden** — a row that appears only in some hosts is how two hosts drift — with the marquee's
+families live and the rest the heads can take disabled with the reason, and both live when the
+marquee spans two (Dimmer + Colour), which is the chooser Fan drew for the same case. The
+**Property** row appears wherever the family holds more than one property the heads can take
+(`spreadPropertiesOffered`, from the column → `TemplateProperty` map `spreadPropertyForColumn`):
+a Colour marquee over RGBW heads offers Colour · White, a Dimmer marquee over heads with a strobe
+Level · Strobe. **Over: Heads is the default on both sides** (D5) — Fan expanded a bar into its
+cells always; Spread treats a fixture row as one head unless the switch says Cells, offered with
+the count where a selected fixture has cells (`spreadCellCount`, the busk `selectedCells` reading)
+and disabled with the reason otherwise. The popover host applies the **chosen** plan only where it
+has two points (one point is a set), where the docked tab keeps the busk rule and applies one head
+at *from*; a template endpoint is drawn and nudged from the template's swatch colour, on both
+hosts. **Live** comes to the programmer too (D7), off by default,
+through the same `useLivePush` with an equality over the whole request; Apply always sends and
+reads *Send again* while Live is on; the release is read from the window. The popover is
+**336px** (`contentClassName`; measured in the app on 2026-09-22 at 1100×700 as 336, the board's
+number — read after the open animation settles, since a hidden pane freezes it at 0.95 and reads
+319), its colour arm 611px tall with the endpoint picker at 218×176 (`ColourEditor` compact, the
+busk tab's shipped measurement), and **its body scrolls under the viewport's room with the footer
+outside the scroller**, as the docked host keeps it: a desk window between the short-viewport fold
+and ~700px would otherwise put Live · Apply below the fold. The bound takes off the surface's
+padding and its border, or the box hangs 2px below the viewport (measured).
+
+**The focused-Look-layer arm is one flag on the route** (D6): `SpreadRequest.write`, default true.
+Local sends **no `write` key at all** — the REST Json refuses an unknown key, so a desk mid-upgrade
+would 400 every Local spread that carried `write: true`; `spreadRequestOf` in `SpreadPanel` is the
+one builder and adds the key only when false. A focused Look layer sends `write: false`: the desk
+resolves exactly as it does for Local and answers without writing, and `SpreadPopover` lands each
+`written[].value` — the head's **literal** in the Look row grammar (`"0".."255"`, `"#rrggbb;w128"`,
+`"pan,tilt"`), which the route answers since session 3 in place of the interpolated intent — in the
+layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope edit
+does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the intent is
+told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `deg:` / `dmx:` /
+`tmpl:` prefix or a `;policy=` tag — `parseProgrammerValue` alone would take a colour intent as a
+colour, since it splits on `;` and tests only the head) and refused with a toast naming the desk
+rather than landing an intent in a Look row; in practice such a desk 400s the request first, its
+Json refusing the unknown key. Two things the desk does for this arm: a **colour-wheel** head's
+resolution is a wheel *slot*, which a Look row cannot hold (the cook re-reads a COLOUR row as a
+colour), so under `write: false` the desk skips it by name; and the curve is spread over the heads
+that can take the property, found in a first pass, so a par swept up by a geometric Colour marquee
+is skipped and consumes no position on it — two RGB heads among eight rows land at *from* and
+*to*, not at 0 and ⅐. Output and a focused template layer
+refuse as they always did, with the same words, disabled rather than hidden. The response is read
+for `skippedFamilies` (toasted in `skippedRowsMessage`'s vocabulary, keyed) and, in layer scope,
+for `written[]`; nothing draws a preview from it — the grid is the preview, as the rig is on the
+busk view. `useSheetKeyboard` is the kit's window listener and it is **capture-phase**:
 `useTransportKeys` toggles the lock on `L` from a bubble listener whether or not the transport is
 enabled, and a name typed into a cue cell begins with a character — so the sheet claims the key
 first and the transport now stands aside from a key whose default is already prevented.
@@ -2039,7 +2130,7 @@ Three surface rules, each pinned by its test:
 
 - **Patch list** (`PatchSheet.test.tsx`, `lib/patchAddress.test.ts`): **Set over N addresses lands
   them consecutively by footprint from the typed one**, in visible-row order, each head on its own
-  universe (the PUT cannot move a head across universes); Fan on Address is From + Step. An
+  universe (the PUT cannot move a head across universes); Spread on Address is From + Step. An
   overlap is a destructive ring on the Address cell with the other head on its title and a legend
   line under the sheet; the address editor **names the collision before Apply and refuses it**.
   That refusal is the only overlap check there is — **the patch PUT has none today** (only the
@@ -2075,8 +2166,8 @@ Three surface rules, each pinned by its test:
   `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
   ownership rings read through the property that drives the channel. No row axis: the row head
-  hangs no `data-grid-name-header`, so every press is a cell press, and Fan is one plan over every
-  selected cell in address order. Writes are `channels.update` per address; Clear is 0; Park /
+  hangs no `data-grid-name-header`, so every press is a cell press, and Spread is one `raw` plan
+  over every selected cell in address order (an address has no intent for the desk to resolve). Writes are `channels.update` per address; Clear is 0; Park /
   Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
   confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
 
@@ -2122,7 +2213,7 @@ Three surface rules, each pinned by its test:
   Output is the programmer's — locked, every value cell is inert in all four places, the marquee
   still works, and a click on the Cue column arms
   the cue as next; unlocked, cells edit under the amber wash. **A refused edit asks to unlock**
-  rather than doing nothing: Set · Clear · Fan stay live and open a confirm, and so does ⏎ — through
+  rather than doing nothing: Set · Clear · Spread stay live and open a confirm, and so does ⏎ — through
   `useSheetKeyboard`'s `onRefused`, which reports the refused gesture **and the key** and lets the
   *surface* say whether to claim it. The kit takes no view on which keys are safe: that depends on
   what else the surface has bound, and here it is Enter alone, because while a show is locked
@@ -2285,8 +2376,9 @@ each was:
   layered declaration whatever its specificity (measured on 2026-09-22: `[&_.react-colorful]:h-44`
   was generated, applied and lost to the library's 200px; and an arbitrary variant reads `_` as a
   space, so `__hue` became ` hue`) — so the compact heights stayed in `index.css` after all, where
-  the plan had them reduce to the fluid rule. And `sheet/FanPopover`'s inline 150×120 takes effect
-  at last, having been beaten by the pin to 200×200 until now (session 3 replaces that popover). `ChannelNumberInput`
+  the plan had them reduce to the fluid rule. The old fan popover's inline 150×120 pickers went
+  with it in session 3: the Spread panel's colour endpoint is `ColourEditor` compact in every host
+  — the busk tab's shipped measurement, `.colour-picker-compact`'s 11rem — and never a utility. `ChannelNumberInput`
   is deleted; the editor mounts `EditorField` and clamps the byte itself.
 - **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
   commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
@@ -2295,7 +2387,7 @@ each was:
   pending one first, and an unmount lands whatever is pending. **The sheet switches the hook's
   dedupe off** (`neverEqual`): the hook dedupes a gesture's moves against what it last sent and
   relies on `reset()` for a fresh gesture, and a sheet's value moves by routes the hook never sees
-  — ⌫ through `column.clear`, Fan, Park, the wire — so a value set, cleared and retyped would
+  — ⌫ through `column.clear`, Spread, Park, the wire — so a value set, cleared and retyped would
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
   literal 33, the trailing call, and that a repeat is sent.
 
@@ -2445,14 +2537,14 @@ Three consequences worth knowing before touching any of it:
   `cellSelection`, so a click there opened the editor *and* selected the clicked **row** — which
   was the honest answer while they had no cell selection for the toolbar, `commitNow` or
   `batchCountFor` to read, and which made one component answer one gesture two ways depending on
-  the route it was mounted under. They have the marquee, the keyboard, Set · Clear · Fan and the
+  the route it was mounted under. They have the marquee, the keyboard, Set · Clear · Spread and the
   double click now, and `showOwnership` is back to meaning only what it says: draw provenance.
   `clickSelectsCell` went with the branch — `FixturesListContainer` is this table's one caller, so
   the flag was a constant — and the cells keep their own `clickSelects` for `CueValueGrid`, which
   has no selection and would otherwise lose every way into an editor.
-- **What the two plain lists keep of their own is the *row* Fan** (`!showOwnership`), over the whole
+- **What the two plain lists keep of their own is the *row* Spread** (`!showOwnership`), over the whole
   row selection with the column chosen in the panel. A row selection there is made by dragging the
-  name column or by ⌘A, and fanning across eight whole heads without first drawing a rectangle over
+  name column or by ⌘A, and spreading across eight whole heads without first drawing a rectangle over
   one of their columns is a gesture those views already offered; the programmer trades it away
   because there the marquee is what a selection is *for*. They also now mount `useClearCellEffects`
   — a subscription of their own, which the programmer gets free from `ProgrammerFxList` — because
@@ -2474,12 +2566,12 @@ Three consequences worth knowing before touching any of it:
   a keydown is discrete so React has already flushed the unmount — asking in the bubble handler
   always answers "nothing open" and clears anyway. Capture on the window is the first thing any
   keydown in the document reaches.
-- **Set closes the editor it opened**, the way Fan's own button always has — through a `close`
+- **Set closes the editor it opened**, the way Spread's own button always has — through a `close`
   one-shot mirroring `keyboardOpen` (`closeEditorCell` → `autoClose`). It needs one: a press on Set
   is **not** the outside click that dismisses a popover, because Set is that popover's own anchor.
   Verified at the desk rather than reasoned — pressing Set twice left the panel open with focus
   stranded on the button, which is what made Escape clear the selection. Which cell to shut is read
-  from the `data-state` the cell's anchor carries, scoped `[data-cell]` so `FanPopover`'s own panel
+  from the `data-state` the cell's anchor carries, scoped `[data-cell]` so `SpreadPanel`'s own panel
   — a cell editor in every way but this one — does not read as one.
 
 **The editor opens where the gesture was made.** Set is pressed at the toolbar, so its editor opens
@@ -2544,7 +2636,7 @@ it went instead:
   so ask before reaching for it.
 
 `components/editor/useEditorKeyboard.ts` is the one copy of the rule, shared by
-every cell — the programmer's four and the kit's — **and by `FanPopover`**, which is the same kind
+every cell — the programmer's four and the kit's — **and by `SpreadPanel`**, which is the same kind
 of panel and had the same gap. Two
 things in it are not arbitrary. The focus is taken in **`onOpenAutoFocus`**, not in an effect:
 Radix's own auto-focus is a *parent* effect and parent effects run after a child's, so a focus set
@@ -2572,10 +2664,11 @@ being the surface's own.
 **The one thing that does differ is the *form*, not the gesture.** Focus is taken in the popover
 and in neither sheet (`useEditorForm`), because both sheets are reached by a finger and there
 the keyboard rises over the grid for nothing. That is a question about the surface, so on any one
-surface every way in still behaves identically. `FanPopover` opts out with `autoFocus: false` only
-when the marquee spans several fannable columns: then its first question is *which column*, and
-jumping to the From box would skip the chooser that decides what From means. With one column the
-selection has answered that, and From is focused like any editor's first field.
+surface every way in still behaves identically. `SpreadPanel` opts out with `autoFocus: false`
+where the marquee spans several spreadable plans or families: then its first question is *which*,
+and jumping to the From box would skip the chooser that decides what From means. With one column
+the selection has answered that, and From is focused like any editor's first field — in the
+popover host alone; the docked busk tab is reached by a finger.
 
 **`keyboardSeed` carries the character and nothing else.** A string (`''` for a bare Enter, null
 for a click or a drag) threaded container → table → cell, latched by `useEditorOpen` into
@@ -2737,29 +2830,34 @@ sheet, which is weaker. Recorded rather than argued: if it turns out to matter, 
 exempt the name cell's own text, not to put the narrow arm back, because that arm leans on `arm()`
 clearing whatever the browser began selecting in the five pixels before the threshold.
 
-**The selection bar's cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
+**The selection bar's cell verbs are Set · Clear · Spread** (`CellSelectionActions`), drawn before
 Locate and Highlight when the selection is cells. Set and Clear are Enter and Backspace with a
 button on them, and take the container's gate (`cellKeyboardPermission`) and words
 (`cellActionCopy`) so a button cannot promise a gesture the keyboard refuses; Output and a focused
-template layer show them disabled with the reason, and Fan makes the same two refusals itself
+template layer show them disabled with the reason, and Spread makes the same two refusals itself
 (it is also drawn on the two plain routes, which have no scope). There is **one** Set —
 its title names where the value lands (Local, or the focused Look's rows), and that is the scope's
 answer rather than the press's. A "track it" arm the way a template chip has (⌥click) makes no
 sense on a value: a typed number has no referent for a layer to follow, and *Make layer* on the
 rail is how local literals become something trackable afterwards. Set and Clear keep their icons
-at every width and only Fan folds on the phone arm, because on a phone Set is the only way into a
-selection's editor now that a drag opens nothing.
+at every width and only Spread folds on the phone arm, because on a phone Set is the only way into
+a selection's editor now that a drag opens nothing.
 
-**Fan reads the marquee, not the fixture selection**, and opens in `EditorSurface` like the four
-cell editors. The column comes from the selection — `FanPopover` takes one `FanColumn` per selected
-column, targets in visible row order, from the same `columnTargets` expansion `commitToCells`,
-Backspace and the batch count use — and the chooser is drawn only when the selection spans more
-than one fannable column. Focus follows: with one column the first question is From and it is
-focused on open; with several it is still *which column*, so nothing is. Enter still *applies*,
-since a fan is the one panel here that does not write as it is edited. The two plain list routes
-select cells like the programmer, but they *also* keep the whole-selection row Fan they always had
-(`fanColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows —
-the cell verbs replace it the moment a cell is.
+**Spread reads the marquee, not the fixture selection**, and opens in `EditorSurface` like the four
+cell editors. The column comes from the selection — `SpreadPopover` takes one `SpreadColumn` per
+selected column, targets in visible row order, from the same `columnTargets` expansion
+`commitToCells`, Backspace and the batch count use — and answers the panel's family from it; a
+chooser is drawn only when the selection spans a desk-resolved plan and the raw Speed one. Focus
+follows: with one column the first question is From and it is focused on open; with several it is
+still *which*, so nothing is. Enter still *applies*, since Spread is the one panel here that does
+not write as it is edited until Live is on. The two plain list routes select cells like the
+programmer, but they *also* keep the whole-selection row Spread they always had
+(`spreadColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows —
+the cell verbs replace it the moment a cell is. The colour editor's **Spread…** is wired here too
+(editor-kit session 3): `ColourCell` hands its RGB to the container as a one-shot the shape
+`keyboardOpen` uses (`SpreadSeed` — RGB only, no emitter travels, the busk hand-over's rule), the
+container threads it to row C's `SpreadPopover` as `seed`, and the panel opens on Colour with
+*From* seeded and asks for the seed to be dropped.
 
 ### The programmer's scoped grid
 
@@ -2856,7 +2954,7 @@ Things that will bite:
 
   `LookRowStore` engages **only for a LOOK layer**, so a template layer's answer comes from its
   sibling `FocusedTemplateLayer` — one context above the grid, read by `useScopedRowValues`,
-  `LayerRowNotices`, `ProgrammerScopeBand`, `AddToTargetsButton` and `FanPopover`, because that
+  `LayerRowNotices`, `ProgrammerScopeBand`, `AddToTargetsButton` and `SpreadPopover`, because that
   hook runs per row and a query in it would be a subscription per visible row. Until that arm
   existed the layer scope fell through to *no* states, which the grid renders as live editable cells
   writing straight to Local while the band overhead says "One layer" — the notice had been claiming
@@ -2864,15 +2962,16 @@ Things that will bite:
 
   **"Read-only" has to be said in four places, not one.** `CellState.editable` reaches only the
   pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
-  takes `disabled` from it too; `FanPopover` — which writes through `useCellWriters` from the
-  toolbar, nowhere near a cell — gates on the focused template as well; and the marquee's
+  takes `disabled` from it too; `SpreadPopover` — which writes through the desk's spread route or
+  `useCellWriters` from the toolbar, nowhere near a cell — gates on the focused template as well; and the marquee's
   **keyboard** (the Enter/character arm of the grid's window handler, §The programmer's keyboard)
   gates on `cellKeyboardPermission`,
   because the marquee itself arms in every scope — its `pointerdown` sits on the rows wrapper and a
   read-only cell's `pointer-events-none` only retargets the press there. A commit through any hole
   is not dropped: `useCellWriters` has no arm for a template layer, so it falls through to a **live**
-  write and puts literals in Local. The Fan gate is on the *template* case only, not on layer scope
-  generally: a focused Look layer has a row draft and the fan correctly lands in it — and the
+  write and puts literals in Local. The Spread gate is on the *template* case only, not on layer
+  scope generally: a focused Look layer has a row draft and the spread lands in it through the
+  route's `write: false` arm (§Sheet kit) — and the
   keyboard makes the same split, taking a typed value into a Look layer's draft and refusing it on
   a template layer and in Output.
 

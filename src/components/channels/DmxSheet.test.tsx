@@ -196,7 +196,7 @@ describe('DmxSheet', () => {
     expect(unparkChannel).toHaveBeenCalledWith({ universe: 1, channelNo: 8 })
   })
 
-  it('makes every cell inert with the desk offline — pointer, keyboard, verbs and Fan', async () => {
+  it('makes every cell inert with the desk offline — pointer, keyboard, verbs and Spread', async () => {
     draw({ connected: false })
     // The trigger is disabled and its wrapper takes no pointer, so Tab-then-Enter goes nowhere.
     expect(cell(7)).toBeDisabled()
@@ -204,7 +204,7 @@ describe('DmxSheet', () => {
     // The marquee still arms — its press sits on the rows wrapper — and the verbs then say why.
     dragRow0(6, 7)
     expect(screen.getByText('2 channels')).toBeInTheDocument()
-    for (const name of ['Set', 'Clear cells', 'Fan']) {
+    for (const name of ['Set', 'Clear cells', 'Spread']) {
       const button = screen.getByRole('button', { name })
       expect(button).toBeDisabled()
       expect(button).toHaveAttribute('title', expect.stringMatching(/desk|connect/i))

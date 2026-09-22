@@ -11,6 +11,7 @@ import {
   serializeTemplateIntent,
   templateRowsSwatch,
   describeTemplateRows,
+  templatePropertyFor,
   EMITTER_PROPERTIES,
 } from '@/lib/templateIntent'
 import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
@@ -59,6 +60,21 @@ import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
  */
 export function isOfferableColourTemplate(template: TemplateSummary): boolean {
   return template.family === 'COLOUR' && template.isGeneric && template.kind === 'value'
+}
+
+/**
+ * A template a **spread** endpoint may name: the offer rule above **and** a `rgbColour` row. The
+ * desk's `spreadEndpoint` resolves a `tmpl:` through the template's colour row alone and answers
+ * 400 `SPREAD_INVALID` for a template made only of emitter rows (a UV-only template is a legal
+ * template but has no hex to interpolate), so one is not offered rather than refused after the
+ * press. Here beside its sibling rather than in `editor/SpreadPanel.tsx`, which is store-free and
+ * takes the filtered list from its host.
+ */
+export function isSpreadColourTemplate(template: TemplateSummary): boolean {
+  return (
+    isOfferableColourTemplate(template) &&
+    (template.rows ?? []).some((row) => templatePropertyFor(row.propertyName)?.intent === 'colour')
+  )
 }
 const isOfferable = isOfferableColourTemplate
 

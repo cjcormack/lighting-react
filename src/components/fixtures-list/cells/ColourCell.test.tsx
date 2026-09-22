@@ -9,7 +9,8 @@ import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
 /**
  * The programmer's colour cell as a host of `ColourEditor` (editor-kit plan D10–D12): Recent only
  * in the bottom-sheet form; Save opening the new-template sheet with Colour answered over the
- * marquee's fixtures; Spread… inert until session 3 wires it; the label line in the popover; and
+ * marquee's fixtures; Spread… handing the colour to row C's panel as *From*, RGB only, and closing
+ * this editor (session 3); the label line in the popover; and
  * no *Applying to N targets* anywhere on it.
  */
 
@@ -163,7 +164,18 @@ describe('ColourCell', () => {
     expect(templateTargetsOf([{ key: 'bar.c1', properties: [], fixtureKey: 'bar' }, { key: 'bar.c2', properties: [], fixtureKey: 'bar' }])).toEqual([{ type: 'fixture', key: 'bar' }])
   })
 
-  it('Spread… is drawn inert until it is wired, and Save is disabled with no project over the cell', () => {
+  it('Spread… hands the RGB to the host as From — no emitter travels — and closes this editor; inert with no host to open', () => {
+    const onSpread = vi.fn()
+    const onOpenChange = vi.fn()
+    draw({ onSpread, resolutions: [RGBW], value: { kind: 'colour', isUniform: true, r: 10, g: 20, b: 30, w: 200, combinedCss: 'rgb(10, 20, 30)' } })
+    expect(document.querySelector('[data-cell-editor-surface]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    expect(onSpread).toHaveBeenCalledWith({ r: 10, g: 20, b: 30 })
+    // The seed is RGB alone: the busk `SpreadSeed` shape, since a colour intent has no emitter component.
+    expect(Object.keys(onSpread.mock.calls[0][0]).sort()).toEqual(['b', 'g', 'r'])
+    expect(document.querySelector('[data-cell-editor-surface]')).toBeNull()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    cleanup()
     draw()
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
     cleanup()

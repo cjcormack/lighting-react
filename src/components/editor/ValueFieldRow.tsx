@@ -7,7 +7,7 @@ import { EditorLabel } from './EditorLabel'
  * `EditorLabel` (editor-kit plan D9).
  *
  * Shared because the two panels that draw it are the two the keyboard work gave text fields to —
- * `PositionCell`'s Pan and Tilt, and `FanPopover`'s From and To — and they had arrived at
+ * `PositionCell`'s Pan and Tilt, and the old fan popover's From and To — and they had arrived at
  * byte-identical markup. A row is the unit an editor's keyboard rules land on (`useEditorKeyboard`
  * finds "the next field" by walking the inputs in DOM order), so a future change to the field's
  * height, its aria wiring or its select-on-focus behaviour has to reach both or neither.
@@ -18,10 +18,10 @@ import { EditorLabel } from './EditorLabel'
  * stops sharing anything.
  *
  * **One unit per row.** [min], [max], [value] and [onChange] are all in the row's unit — bytes on
- * a fan, degrees on an annotated mover's position — and the caller converts on both sides, so the
+ * a spread, degrees on an annotated mover's position — and the caller converts on both sides, so the
  * box and the slider can never disagree about what a number means. The field owns the draft rule
  * (`EditorField`); the caller owns the clamp, because a position's bounds come from its resolution
- * while a fan's ends are flat bytes.
+ * while a raw spread's ends are flat bytes.
  */
 export function ValueFieldRow({
   label,

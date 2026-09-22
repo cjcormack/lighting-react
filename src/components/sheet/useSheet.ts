@@ -14,7 +14,7 @@ import {
   type SheetColumn,
   type SheetRow,
 } from './sheetModel'
-import type { FanPlan } from './FanPopover'
+import type { SpreadPlan } from '../editor/SpreadPanel'
 import type { SheetTableProps } from './SheetTable'
 
 /**
@@ -40,7 +40,7 @@ interface PendingCommit<Row extends SheetRow, C extends string> {
  *
  * The hook dedupes a gesture's own moves against the value it last sent, and its `reset()` is how
  * a caller says a fresh gesture has begun. A sheet cannot say that: its value moves by routes the
- * hook never sees — ⌫ clears through `column.clear`, Fan and Park write through the surface, a
+ * hook never sees — ⌫ clears through `column.clear`, Spread and Park write through the surface, a
  * WebSocket frame or another tab moves the channel — so a value set, cleared and typed again would
  * read as "the value last sent" and never reach the rig while the field showed it (editor-kit
  * session 1 review, finding 2). The old throttle sent every commit; so does this one.
@@ -69,7 +69,7 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * The surface has a way out of its own refusal. Given, a refused key reaches it rather than being
    * swallowed — see `useSheetKeyboard`, which leaves it to the surface to decide whether to claim
    * the key. The bar's verbs are the other half and are wired separately, being presses rather than
-   * keys (`CellSelectionActions`, `FanPopover`).
+   * keys (`CellSelectionActions`, `SpreadPanel`).
    */
   onRefused?: (refusal: SheetKeyRefusal) => boolean | void
   /**
@@ -81,7 +81,7 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
 
 /**
  * The container half of a sheet — one selection in two shapes, the keyboard, the editor requests,
- * the batch commit and Fan — written once for the patch list, the DMX sheet and the cue sheet
+ * the batch commit and Spread — written once for the patch list, the DMX sheet and the cue sheet
  * (CLAUDE.md §Sheet kit). `FixturesListContainer` is the same shape over the fixtures' row model
  * and scope, and is deliberately not rewired onto this: its tests pin it, and its selection lives
  * in Redux for readers outside the list.
@@ -196,7 +196,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     },
     [cellSelection, columnByKey, commitToCells, rowSelection, selectedRows],
   )
-  // Continuous drag commits are throttled to ~30 Hz with a trailing call — a level slider fans out
+  // Continuous drag commits are throttled to ~30 Hz with a trailing call — a level slider spreads out
   // to one frame per selected channel — through `useLivePush`, the busk tabs' discipline (D16):
   // the first commit goes at once, a second inside the floor is held and sent when the floor
   // lifts. The hook's dedupe is switched off (`neverEqual`, above). `send` reads `commitNow`
@@ -294,11 +294,11 @@ export function useSheet<Row extends SheetRow, C extends string>({
     [selectCells],
   )
 
-  // ── Fan ──
-  const fanPlans = useMemo<FanPlan[]>(
+  // ── Spread ──
+  const spreadPlans = useMemo<SpreadPlan[]>(
     () =>
       columnGroups.flatMap(({ col, rows: group }) => {
-        const plan = columnByKey.get(col)?.fan?.(group)
+        const plan = columnByKey.get(col)?.spread?.(group)
         return plan ? [plan] : []
       }),
     [columnByKey, columnGroups],
@@ -344,7 +344,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     permission: effective,
     copy: actionCopy,
     family,
-    fanPlans,
+    spreadPlans,
     setButtonRef,
     toggleCellEditor: requests.toggleCellEditor,
     clearSelectedCells,

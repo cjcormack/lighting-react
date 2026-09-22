@@ -15,7 +15,7 @@ import { OwnershipSwatch } from '@/components/fixtures-list/OwnershipLegend'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { aggregateCellOwnership, type CellOwnership } from '@/components/fixtures-list/useRowOwnership'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
-import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
+import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
@@ -402,10 +402,10 @@ export function DmxSheet({
   }
 
   /**
-   * The selected addresses, in address order — what Park, Unpark and Fan act on.
+   * The selected addresses, in address order — what Park, Unpark and Spread act on.
    *
    * Filtered by the columns this arm actually has, the way `useSheet`'s own `selectedColumns` and
-   * `fanPlans` are (they go through `columnByKey`): `columnGroups` is built from the stored cell
+   * `spreadPlans` are (they go through `columnByKey`): `columnGroups` is built from the stored cell
    * keys, so a `c9` held from the sixteen-wide arm would otherwise resolve to `base + 9` — a real
    * address, and one the operator can see no highlight on. The reset above means that cannot
    * outlive a render; this means it cannot be *read* even within one.
@@ -417,21 +417,24 @@ export function DmxSheet({
       .flatMap(({ col, rows }) => rows.map((row) => row.base + Number(col.slice(1))))
       .sort((a, b) => a - b)
   }, [columnKeys, sheet.columnGroups])
-  // One fan over every selected cell in address order, rather than one per column: a marquee
-  // across eight addresses in a row is eight columns of one, and a fan is what that gesture means.
-  const fanPlans = useMemo<FanPlan[]>(
+  // One spread over every selected cell in address order, rather than one per column: a marquee
+  // across eight addresses in a row is eight columns of one, and a spread is what that gesture
+  // means. Raw bytes — a DMX address has no intent for the desk to resolve — walked by the panel
+  // under its Curve · Order · Parts, with *Order: Reverse* where a Reverse checkbox was; over
+  // Heads only, since an address has no cells.
+  const spreadPlans = useMemo<SpreadPlan[]>(
     () =>
       selectedChannels.length === 0
         ? []
         : [
             {
-              kind: 'value',
+              kind: 'raw',
               col: 'value',
               label: 'Value',
               count: selectedChannels.length,
-              apply: (values, reverse) => {
-                const order = reverse ? [...selectedChannels].reverse() : selectedChannels
-                order.forEach((channelNo, i) => write(channelNo, values[i]))
+              cellCount: 0,
+              apply: (values) => {
+                selectedChannels.forEach((channelNo, i) => write(channelNo, values[i]))
               },
             },
           ],
@@ -462,9 +465,10 @@ export function DmxSheet({
           setRef={sheet.setButtonRef}
           onSet={sheet.toggleCellEditor}
           onClear={sheet.clearSelectedCells}
-          fan={
-            <FanPopover
-              plans={fanPlans}
+          spread={
+            <SpreadPanel
+              host="popover"
+              plans={spreadPlans}
               disabledReason={connected ? null : DESK_OFFLINE_LABEL}
               drivableHint="value"
               className={PHONE_FOLDED_CLASS}

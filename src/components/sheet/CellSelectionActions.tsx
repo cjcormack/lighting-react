@@ -5,7 +5,7 @@ import { WORD_CLASS } from './toolbarFolds'
 import type { CellActionCopy, CellKeyboardPermission } from './cellEntry'
 
 /**
- * The selection bar's verbs for a **cell** selection: Set, Clear, Fan.
+ * The selection bar's verbs for a **cell** selection: Set, Clear, Spread.
  *
  * Set and Clear are the marquee's two keys with a button on them — Enter and Backspace — and they
  * exist because a phone has neither, and because a released drag no longer opens an editor by
@@ -15,14 +15,17 @@ import type { CellActionCopy, CellKeyboardPermission } from './cellEntry'
  * button can never promise a gesture the keyboard refuses — and a refused key and a disabled
  * button always agree, since they read one object.
  *
- * Fan is a **slot** rather than a component drawn here, because which fan a surface has is the
- * surface's: the programmer's fans levels and colours through `planBatchWrites`, the patch list's
- * re-spaces addresses by a step, the cue sheet's spreads fade times. Each hands in its own
- * `FanPopover` instance, already folded with `PHONE_FOLDED_CLASS` where the surface folds.
+ * Spread is a **slot** rather than a component drawn here, because which spread a surface has is
+ * the surface's: the programmer's resolves levels, colours and positions on the desk and walks
+ * Speed itself, the patch list's re-spaces addresses by a step, the cue sheet's spreads fade times.
+ * Each hands in its own `SpreadPanel` instance (`fixtures-list/SpreadPopover` on the programmer),
+ * already folded with `PHONE_FOLDED_CLASS` where the surface folds. The verb reads **Spread** with
+ * the wave glyph on every sheet (editor-kit plan D1): the desk already calls the route spread, a
+ * Look press "spreads" its rows, and nothing on either side called anything else fan but this verb.
  *
- * Set and Clear keep their icons at every width; only Fan folds on the phone arm. On a phone Set
- * is the only way into a selection's editor, and Clear the only way to clear one cell — so the two
- * controls the phone has no key for are the two it keeps.
+ * Set and Clear keep their icons at every width; only Spread folds on the phone arm. On a phone
+ * Set is the only way into a selection's editor, and Clear the only way to clear one cell — so the
+ * two controls the phone has no key for are the two it keeps.
  */
 export function CellSelectionActions({
   copy,
@@ -31,7 +34,7 @@ export function CellSelectionActions({
   onSet,
   onClear,
   onRefused,
-  fan,
+  spread,
 }: {
   copy: CellActionCopy
   /** Whether Set and Clear are offered — the keyboard's own gate, read here so the two agree. */
@@ -53,8 +56,8 @@ export function CellSelectionActions({
    * before; it only stops being silent.
    */
   onRefused?: () => void
-  /** The surface's Fan popover, or nothing where the surface has no column that fans. */
-  fan?: ReactNode
+  /** The surface's Spread panel, or nothing where the surface has no column that spreads. */
+  spread?: ReactNode
 }) {
   return (
     <>
@@ -81,7 +84,7 @@ export function CellSelectionActions({
         <Delete className="size-3.5" />
         <span className={WORD_CLASS}>Clear</span>
       </Button>
-      {fan}
+      {spread}
     </>
   )
 }

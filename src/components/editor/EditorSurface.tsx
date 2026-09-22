@@ -79,7 +79,7 @@ export type EditorForm = 'popover' | 'bottom-sheet' | 'side-sheet'
 const SURFACE_ATTR = 'data-cell-editor-surface'
 
 /**
- * Is a cell editor — or `FanPopover`, which is one in every way that matters — on screen?
+ * Is a cell editor — or `SpreadPanel`, which is one in every way that matters — on screen?
  *
  * The grid's window-level **Escape** asks this. Radix closes an open editor from a listener on the
  * document, so it closes wherever focus happens to be; the selection clear beside it was guarded
@@ -344,9 +344,9 @@ interface EditorSurfaceProps {
    * top of the editor's reach entirely. Enter and a typed character are gestures made at the
    * selection and keep the cell anchor; the cells decide, by withholding this.
    *
-   * Fan lands beside its own button *by default*, that button being its own `PopoverTrigger`.
+   * Spread lands beside its own button *by default*, that button being its own `PopoverTrigger`.
    * **This is new machinery rather than that idea reused** — the only `virtualRef` in the repo — so
-   * don't read `FanPopover` as a precedent for pointing a panel at an element elsewhere in the
+   * don't read `SpreadPanel` as a precedent for pointing a panel at an element elsewhere in the
    * tree. It has never needed to.
    *
    * Read at render time and only while [open]: a `virtualRef` whose `current` is null would set

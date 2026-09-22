@@ -342,9 +342,21 @@ export interface SpreadRequest {
   fadeMs?: number
   /** For `order = RANDOM`. */
   seed?: number
+  /**
+   * `false` resolves and answers without writing — the programmer's focused-Look-layer arm, which
+   * lands `written[]` in the layer's draft (editor-kit plan D6). **Present only when false**: the
+   * desk's REST Json refuses an unknown key, so a desk mid-upgrade would 400 every Local spread
+   * that carried `write: true` (plan §6). `SpreadPanel.spreadRequestOf` is the one builder.
+   */
+  write?: boolean
 }
 
-/** One head's literal: the head, the property it actually landed on, and the intent it was given. */
+/**
+ * One head's literal: the head, the property it actually landed on, and the **value it got** in
+ * the Look row grammar (`"0".."255"`, `"#rrggbb;w128"`, `"pan,tilt"`) — `parseProgrammerValue`
+ * reads it. It carried the interpolated intent until the editor kit's session 3; a desk that still
+ * answers one is told apart by parsing, and the Look-layer arm refuses rather than landing it.
+ */
 export interface SpreadWrite {
   target: CueTarget
   propertyName: string
@@ -454,13 +466,15 @@ export const programmerOpsApi = restApi.injectEndpoints({
     }),
 
     /**
-     * `POST /projects/{id}/programmer/spread` — fan, resolved on the desk (busk-further plan D9).
+     * `POST /projects/{id}/programmer/spread` — spread, resolved on the desk (busk-further plan D9).
      *
      * A REST mutation for this file's reason: the tab reads the **structured reply** — the desk's
      * `skippedFamilies`, toasted in the press's vocabulary (a preview strip read `written[]` too,
      * until 2026-09-21) — and the programmer WS channel has no reply to read.
-     * It invalidates nothing — every write lands as an ordinary Local entry and rides
-     * `programmer.entryChanged`, which is how the rig tiles and the grid already learn of it.
+     * It invalidates nothing — a write lands as an ordinary Local entry and rides
+     * `programmer.entryChanged`, which is how the rig tiles and the grid already learn of it; and
+     * a `write: false` request lands nothing at all — its `written[]` is the programmer's to put
+     * in the focused Look layer's draft (editor-kit plan D6).
      *
      * **Not** in `SILENT_ENDPOINTS`: the two 400s (`SPREAD_INVALID`, `SPREAD_NEEDS_SELECTION`) are
      * toasted by `errorToastMiddleware` under the endpoint's own id, so a Live gesture that keeps

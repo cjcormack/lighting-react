@@ -86,7 +86,7 @@ describe('useSheet commit cadence', () => {
     expect(write).toHaveBeenLastCalledWith([rows[0]], 20)
   })
 
-  it('sends a commit that repeats the last one — the sheet does not dedupe, since ⌫, Fan or the wire may have moved the value since', () => {
+  it('sends a commit that repeats the last one — the sheet does not dedupe, since ⌫, Spread or the wire may have moved the value since', () => {
     const { write, result } = harness()
     const commit = result.current.tableProps.onCellCommit
     act(() => commit(rows[0], 'level', 10))

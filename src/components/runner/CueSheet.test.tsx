@@ -7,9 +7,9 @@ import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
  * The cue sheet's own rules on the kit (CLAUDE.md §Sheet kit), and above all **the lock as the
  * sheet's read-only scope**: locked, every value cell is inert in the four places the programmer's
  * Output scope is — the wrapper's `pointer-events-none`, the trigger's `disabled`, the keyboard
- * through the permission, and the bar's Set · Clear · Fan with the reason — while the marquee
+ * through the permission, and the bar's Set · Clear · Spread with the reason — while the marquee
  * still works and a click on the Cue column arms the cue as next. Unlocked, a cell writes one
- * PATCH per cue, and Fan on Fade spreads first→last.
+ * PATCH per cue, and Spread on Fade spreads first→last.
  */
 const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
@@ -352,12 +352,12 @@ describe('CueSheet', () => {
     expect(screen.queryByText('2 cells')).toBeNull()
   })
 
-  it('unlocked: Fan on Fade spreads first→last over the selection, in visible order', async () => {
+  it('unlocked: Spread on Fade spreads first→last over the selection, in visible order', async () => {
     draw()
     // Rows 3 and 4 are cues 4 and 5 (row 2 is the marker, which a rectangle skips).
     dragFade(0, 4)
     expect(screen.getByText('4 cells')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
     const from = await screen.findByLabelText('From')
     fireEvent.change(from, { target: { value: '1s' } })
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '4s' } })
@@ -382,7 +382,7 @@ describe('CueSheet', () => {
     expect(screen.getByText('2 cells')).toBeInTheDocument()
     expect(screen.getByText(/Locked — cells are read-only/)).toBeInTheDocument()
     // 3. The bar's verbs, with the reason. 4. The window keyboard, refused through the permission.
-    for (const name of ['Set', 'Clear cells', 'Fan']) {
+    for (const name of ['Set', 'Clear cells', 'Spread']) {
       const button = screen.getByRole('button', { name })
       expect(button).toBeDisabled()
       expect(button).toHaveAttribute('title', expect.stringContaining('Locked'))

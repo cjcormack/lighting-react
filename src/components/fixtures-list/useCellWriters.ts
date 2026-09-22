@@ -64,11 +64,11 @@ export interface CellWriters {
  */
 /**
  * Dispatch one planned write to the matching writer. The single place that maps a
- * `(target, resolution, commit)` triple onto a writer call — cell edits, batch apply and Fan
+ * `(target, resolution, commit)` triple onto a writer call — cell edits, batch apply and the raw Spread
  * all funnel through it, so the property names the programmer is keyed by are derived once.
  *
  * Commits whose shape doesn't match the resolution are skipped (planBatchWrites already
- * filters those, but Fan builds its commits directly).
+ * filters those, but the raw Spread builds its commits directly).
  */
 export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): void {
   const { target, resolution, commit } = planned
@@ -178,7 +178,7 @@ export function useCellWriters(): CellWriters {
         // A colour entry is atomic — a component the write omits is set to 0, not left alone.
         // So for any channel the fixture actually has, an undefined component is filled from
         // its current value rather than dropped. Without this, callers that legitimately
-        // supply only RGB (Fan, which ramps a hue across a selection) would black out the
+        // supply only RGB (the old client colour fan did) would black out the
         // white/amber/UV emitters on every RGBW fixture they touched.
         const current = (ref?: ChannelRef) =>
           ref ? lightingApi.channels.get(ref.universe, ref.channelNo) : undefined

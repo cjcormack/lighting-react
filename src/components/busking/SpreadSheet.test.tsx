@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 // The source as text, for the one assertion that is about what this file must *not* reach for.
 import spreadSheetSrc from './SpreadSheet.tsx?raw'
 import type { BuskingTarget } from './buskingTypes'
@@ -9,20 +9,19 @@ import type { SpreadRequest, SpreadResponse } from '@/store/programmerOps'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 /**
- * The Spread tab (busk-further plan D9, D10): the request per family — a `TemplateIntent` per
- * endpoint, or a `tmpl:` reference for a colour — sent with the selection pair; Live throttled
- * through the live push with the release landing; the desk's answer read for its skipped
- * families and nothing drawn from it (the preview strip is gone, and this file still reaches
- * nothing that interpolates); Over: Cells gated on the selection's cells; skips and `skippedFamilies`
- * reported the way a press reports them; nothing sent under an empty selection; Save as Look…
- * opening `RecordLookSheet` over the selection, never a template.
+ * The Spread tab as the **docked host** of `SpreadPanel` (busk-further plan D9, D10; editor-kit
+ * plan session 3): what this file owns is the host's — the selection → the request's targets and
+ * the families the heads can take, the mask, the mutation with the fade, the template offer, the
+ * *Over: Cells* count from the desk's own expansion, the Colour tab's seed, and *Save as Look…*
+ * opening `RecordLookSheet` over the selection, never a template. The panel's own behaviour — the
+ * curves and orders, Live, Send again, the desk's answer read for `skippedFamilies` and nothing
+ * drawn from it — is `editor/SpreadPanel.test.tsx`'s.
  */
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
 
 /** Every request's settle handles, in send order — `answer(value, i)` resolves one, `refuse(i)` rejects one. */
-let response: SpreadResponse = { written: [], skipped: [], skippedFamilies: [] }
 let pending: { resolve: (value: SpreadResponse) => void; reject: (reason: unknown) => void }[] = []
 const spread = vi.fn((_request: SpreadRequest) => ({
   unwrap: () =>
@@ -96,12 +95,6 @@ const lastRequest = () => spread.mock.calls.at(-1)![0]
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 /** A radio inside one of the tab's named groups — Family and Property both offer a *Colour*. */
 const radio = (group: string, name: string | RegExp) => within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })
-async function answer(value: SpreadResponse = response, index = pending.length - 1) {
-  await act(async () => {
-    pending[index]?.resolve(value)
-    await Promise.resolve()
-  })
-}
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -122,7 +115,6 @@ beforeEach(() => {
     onchange: null,
     dispatchEvent: () => false,
   }))
-  response = { written: [], skipped: [], skippedFamilies: [] }
   pending = []
   templates = []
 })
@@ -210,43 +202,6 @@ describe('the request', () => {
     expect(radio('Family', 'Colour')).toHaveAttribute('aria-checked', 'true')
   })
 
-  it('commits nothing for an emptied field or a lone minus, so a negative degree can be typed and no 0 reaches the rig', () => {
-    draw([moverTarget])
-    fireEvent.click(radio('Family', 'Position'))
-    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
-    const pan = screen.getByRole('spinbutton', { name: 'From pan, degrees' }) as HTMLInputElement
-    fireEvent.change(pan, { target: { value: '' } })
-    expect(spread).not.toHaveBeenCalled()
-    expect(pan.value).toBe('')
-    // A lone minus: the browser (and jsdom) report it as '' — nothing is committed, and the
-    // field is not snapped back to a number the operator did not type.
-    fireEvent.change(pan, { target: { value: '-' } })
-    expect(spread).not.toHaveBeenCalled()
-    fireEvent.change(pan, { target: { value: '-5' } })
-    expect(spread).toHaveBeenCalledTimes(1)
-    expect(lastRequest()).toMatchObject({ from: 'deg:-5,135' })
-  })
-
-  it('sends a level spread as percents, a position spread in degrees, and an emitter as dmx bytes', () => {
-    draw([group, moverTarget])
-    fireEvent.click(radio('Family', 'Intensity'))
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '60' } })
-    apply()
-    expect(lastRequest()).toMatchObject({ property: 'dimmer', from: 'pct:0', to: 'pct:60' })
-
-    fireEvent.click(radio('Family', 'Position'))
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'From tilt, degrees' }), { target: { value: '15' } })
-    apply()
-    // Absolute degrees about the desk's centre (270 / 135), the convention every editor here uses.
-    expect(lastRequest()).toMatchObject({ property: 'position', from: 'deg:240,15', to: 'deg:300,135' })
-
-    fireEvent.click(radio('Family', 'Colour'))
-    fireEvent.click(radio('Property', 'White'))
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'From, 0–255' }), { target: { value: '40' } })
-    apply()
-    expect(lastRequest()).toMatchObject({ property: 'white', from: 'dmx:40', to: 'dmx:255' })
-  })
-
   it('offers only the families the selection can take, and Swap exchanges the ends', () => {
     draw([moverTarget])
     const families = within(screen.getByRole('radiogroup', { name: 'Family' })).getAllByRole('radio')
@@ -257,83 +212,11 @@ describe('the request', () => {
     expect(lastRequest()).toMatchObject({ from: 'deg:300,135', to: 'deg:240,135' })
   })
 
-  it('names the curve, order, parts and over the desk resolves — and Stage L→R is not on offer', () => {
-    draw([barTarget])
-    fireEvent.click(radio('Curve', 'Wings'))
-    fireEvent.click(radio('Order', 'Centre'))
-    fireEvent.click(radio('Parts', '3'))
-    fireEvent.click(radio('Over', /^Cells/))
-    // Said, not offered: the desk has no stage order, so the design's fifth label is a footnote.
-    expect(within(screen.getByRole('radiogroup', { name: 'Order' })).queryByRole('radio', { name: 'Stage L→R' })).toBeNull()
-    expect(document.querySelector('[data-spread-order-unavailable="Stage L→R"]')).toHaveTextContent('not on the desk yet')
-    apply()
-    expect(lastRequest()).toMatchObject({ curve: 'WINGS', order: 'CENTER_OUT', parts: 3, over: 'CELLS' })
-    // Random again is a reshuffle: the seed moves, so the desk deals a different permutation.
-    fireEvent.click(radio('Order', 'Random'))
-    apply()
-    expect(lastRequest()).toMatchObject({ order: 'RANDOM', seed: 0 })
-    fireEvent.click(radio('Order', 'Random'))
-    apply()
-    expect(lastRequest()).toMatchObject({ order: 'RANDOM', seed: 1 })
-  })
-
   it('sends nothing under an empty selection, and toasts as the strip does', () => {
     draw([])
     apply()
     expect(spread).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith('Select the fixtures this should land on first', expect.objectContaining({ id: expect.any(String) }))
-  })
-})
-
-describe('Live', () => {
-  it('writes every adjustment through the live push — floored, deduplicated — and the release lands', () => {
-    vi.useFakeTimers()
-    draw([group])
-    expect(spread).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
-    fireEvent.click(radio('Family', 'Intensity'))
-    // Off Live nothing was sent; on, the first adjustment goes at once.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '80' } })
-    expect(spread).toHaveBeenCalledTimes(1)
-    expect(lastRequest()).toMatchObject({ property: 'dimmer', to: 'pct:80' })
-    // Two more inside the floor: held, not sent.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '70' } })
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '65' } })
-    expect(spread).toHaveBeenCalledTimes(1)
-    // The release bypasses the floor with the value let go on — read from the window.
-    fireEvent.pointerUp(window)
-    expect(spread).toHaveBeenCalledTimes(2)
-    expect(lastRequest()).toMatchObject({ to: 'pct:65' })
-    // A release with nothing new says nothing.
-    fireEvent.pointerUp(window)
-    expect(spread).toHaveBeenCalledTimes(2)
-    // A deferred value with no release is sent when the floor lifts.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '50' } })
-    expect(spread).toHaveBeenCalledTimes(2)
-    act(() => {
-      vi.advanceTimersByTime(60)
-    })
-    expect(spread).toHaveBeenCalledTimes(3)
-    expect(lastRequest()).toMatchObject({ to: 'pct:50' })
-  })
-
-  it('does not flush on a release once Live is off — the switch can be toggled from the keyboard, with no pointerup', () => {
-    vi.useFakeTimers()
-    draw([group])
-    const live = screen.getByRole('switch', { name: 'Live — apply as I adjust' })
-    fireEvent.click(live)
-    fireEvent.click(radio('Family', 'Intensity'))
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '80' } })
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '70' } })
-    expect(spread).toHaveBeenCalledTimes(1)
-    // Keyboard activation is a click with no pointer release, so the gesture flag would survive it.
-    fireEvent.click(live)
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '60' } })
-    fireEvent.pointerUp(window)
-    act(() => {
-      vi.advanceTimersByTime(100)
-    })
-    expect(spread).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -369,42 +252,6 @@ describe('the desk’s answer', () => {
     expect(resend).toBeEnabled()
     fireEvent.click(resend)
     expect(spread).toHaveBeenCalledTimes(1)
-  })
-
-  it('toasts skipped families in the press’s vocabulary — rows, naming the mask — keyed so a Live burst replaces one toast', async () => {
-    draw([group], { families: ['POSITION'] })
-    fireEvent.click(radio('Family', 'Colour'))
-    apply()
-    await answer({ skippedFamilies: ['COLOUR'] })
-    expect(toast.warning).toHaveBeenCalledWith('Colour rows skipped — the selection is Position', { id: expect.any(String) })
-  })
-
-  it('reads the latest request’s answer only: an older answer landing late, or one from before a property change, is not toasted', async () => {
-    draw([group], { families: ['POSITION'] })
-    fireEvent.click(radio('Family', 'Intensity'))
-    apply()
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'To, percent' }), { target: { value: '80' } })
-    apply()
-    expect(pending).toHaveLength(2)
-    // The second answer lands first, clean; the first, older answer must not report a skip over it.
-    await answer({ skippedFamilies: [] }, 1)
-    await answer({ skippedFamilies: ['INTENSITY'] }, 0)
-    expect(toast.warning).not.toHaveBeenCalled()
-    // A property change disowns an answer still in flight from before it.
-    apply()
-    fireEvent.click(radio('Family', 'Colour'))
-    await answer({ skippedFamilies: ['INTENSITY'] })
-    expect(toast.warning).not.toHaveBeenCalled()
-  })
-
-  it('draws Wings as two fans meeting at the centre, so it is not Mirror’s V', () => {
-    draw([group])
-    const wings = document.querySelector('[data-curve-picture="WINGS"]')!
-    const mirror = document.querySelector('[data-curve-picture="MIRROR"]')!
-    expect(wings.querySelectorAll('polyline')).toHaveLength(2)
-    expect(wings.querySelector('line')).not.toBeNull()
-    expect(mirror.querySelectorAll('polyline')).toHaveLength(1)
-    expect(wings.innerHTML).not.toBe(mirror.innerHTML)
   })
 })
 

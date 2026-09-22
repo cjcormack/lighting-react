@@ -159,7 +159,7 @@ describe('cellActionCopy', () => {
     expect(copy.clearTitle).toMatch(/switch to Local/)
   })
 
-  it("uses Fan's own template wording on a focused template layer", () => {
+  it("uses Spread's own template wording on a focused template layer", () => {
     const copy = cellActionCopy({ kind: 'layer', layerId: 7 }, true, 2)
     expect(copy.setTitle).toMatch(/applies a template/)
     expect(copy.clearTitle).toBe(copy.setTitle)
@@ -191,10 +191,10 @@ describe('openCellEditorTarget', () => {
     expect(openCellEditorTarget()).toEqual({ rowId: 'fixture:b', col: 'colour' })
   })
 
-  it('ignores an open panel that is not a cell\'s — Fan opens from the toolbar', () => {
-    // `FanPopover` is a cell editor in every way but this one: its trigger lives in the selection
+  it('ignores an open panel that is not a cell\'s — Spread opens from the toolbar', () => {
+    // `SpreadPanel` is a cell editor in every way but this one: its trigger lives in the selection
     // bar, outside any `[data-cell]`. Set must not try to close it.
-    grid('<div><button data-state="open" aria-label="Fan"></button></div>')
+    grid('<div><button data-state="open" aria-label="Spread"></button></div>')
     expect(openCellEditorTarget()).toBeNull()
   })
 })

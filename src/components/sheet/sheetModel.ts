@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react'
-import type { FanPlan } from './FanPopover'
+import type { SpreadPlan } from '../editor/SpreadPanel'
 import type { CellRef, RowId } from './cellSelectionModel'
 import type { CellSelection } from './useCellSelection'
 
@@ -39,7 +39,7 @@ export interface SheetCellProps<V> {
   selectionEmpty?: boolean
   editorAnchorRef?: RefObject<HTMLElement | null>
   onBeginEdit: () => void
-  /** The editor's commit, which the container fans over every selected cell of this column. */
+  /** The editor's commit, which the container spreads over every selected cell of this column. */
   onCommit: (value: V) => void
 }
 
@@ -55,7 +55,7 @@ const noop = () => {}
  * The props for a kit cell mounted **outside the marquee** — the first column's own editor: the
  * patch list's fixture name, the cue sheet's cue number.
  *
- * The first column is the row axis, so it is never in a cell selection: no batch to fan over, no
+ * The first column is the row axis, so it is never in a cell selection: no batch to spread over, no
  * keyboard seed, no Set to anchor at, and `onBeginEdit` does nothing — a single click on the
  * trigger simply bubbles to the sticky cell's `onRowClick` and selects the row, and a double click
  * opens the editor beside it. That is the same popover, in the same three forms, as every value
@@ -94,7 +94,7 @@ export function firstColumnCellProps<V>({
 }
 
 /**
- * One column of a sheet: how to read a row, which editor it takes, whether it fans, and what a
+ * One column of a sheet: how to read a row, which editor it takes, whether it spreads, and what a
  * commit does (CLAUDE.md §Sheet kit).
  *
  * `write` takes the **rows** of the batch, not one row at a time, because some columns land a
@@ -113,7 +113,7 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   width: string
   /**
    * The value vocabulary this column takes — `level` on every DMX column, `fade` on the cue
-   * sheet's Fade, and so on. **A commit fans only to the selected columns that share its
+   * sheet's Fade, and so on. **A commit spreads only to the selected columns that share its
    * origin's kind.** The programmer's columns tell their commits apart by shape (`CellCommit.kind`),
    * but a cue's name, its notes and its fade are all one `string`, so shape discriminates nothing
    * there: a `3s` typed into Fade over a Fade→Follow marquee would otherwise switch auto-advance
@@ -132,8 +132,8 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   /** Clear these rows' cells. Absent means Clear is refused here, with [clearRefusal] as the reason. */
   clear?: (rows: readonly Row[]) => void
   clearRefusal?: string
-  /** The fan over these rows in visible order, or null where this column does not fan. */
-  fan?: (rows: readonly Row[]) => FanPlan | null
+  /** The spread over these rows in visible order, or null where this column does not spread. */
+  spread?: (rows: readonly Row[]) => SpreadPlan | null
   /**
    * Whether the cell reserves the **18px marks gutter** on its right for the corner glyphs (a
    * Look layer, an effect, a clash). True by default, which is every column that has one.
@@ -157,7 +157,7 @@ export type SheetCellRef<C extends string> = CellRef<C>
 
 /**
  * The selected cells grouped by column, each with its rows in **visible order** — the one
- * expansion behind every per-column consumer (the commit, Clear, the batch count and Fan), so a fan
+ * expansion behind every per-column consumer (the commit, Clear, the batch count and Spread), so a spread
  * and a typed value cannot reach different rows for one selection.
  *
  * The programmer's `columnTargets` is this over write targets; the kit's is over rows, since a

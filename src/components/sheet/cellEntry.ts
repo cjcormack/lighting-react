@@ -108,7 +108,7 @@ export interface CellActionCopy {
  *
  * `data-state` is Radix's word, restored by hand on the cell's anchor (`EditorSurface`) because
  * an anchor does not carry one — and `[data-cell]` is what scopes the question to a *cell* editor,
- * so `FanPopover`'s panel, mounted from the toolbar and a cell editor in every other way, does not
+ * so `SpreadPanel`'s panel, mounted from the toolbar and a cell editor in every other way, does not
  * answer it. Read with `data-row-id`, the same pair `marqueeOwnsKeyTarget` below walks.
  *
  * The selection bar's **Set** asks, because Set has to be able to close what it opened: a press on

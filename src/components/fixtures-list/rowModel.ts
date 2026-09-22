@@ -6,7 +6,8 @@ import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
-import { EMITTER_PROPERTIES } from '../../lib/templateIntent'
+import { EMITTER_PROPERTIES, templatePropertyFor, type TemplateProperty } from '../../lib/templateIntent'
+import { spreadPropertiesFor } from '../../lib/spreadIntent'
 import { degreesToDmx } from '../../lib/axisDegrees'
 
 /**
@@ -398,6 +399,122 @@ export function templateTargetsFor(
 }
 
 /**
+ * Where a **spread** lands for these rows: the marquee's heads as the desk takes them
+ * (editor-kit plan D4) — a group row expanded to its **visible** members (the filter rule every
+ * group-row action keeps), a fixture row as itself, and an element row **as a cell**,
+ * `{type: 'fixture', key: element.key}`, the cells contract the desk already takes
+ * (`rowLocateTarget` publishes it and `BuskRigOrder` sorts it).
+ *
+ * Not [templateTargetsFor], deliberately: that one folds an element row into its fixture because
+ * the template route resolves keys against the patch, and a spread over a bar's cells has to keep
+ * the cells. It is [expandSelectionToTargets]'s walk — the same dedupe, the same drop of an element
+ * row under a covered parent — read as cue targets, through [spreadTargetsOf], so the container's
+ * per-column targets and this answer cannot name different heads for one marquee.
+ */
+export function spreadTargetsFor(
+  rows: readonly Row[],
+  selectedIds: ReadonlySet<RowId>,
+): LocateTarget[] {
+  return spreadTargetsOf(expandSelectionToTargets(rows, selectedIds))
+}
+
+/** [spreadTargetsFor] over write targets already expanded: every target by its own key, a cell by its element key. */
+export function spreadTargetsOf(targets: readonly WriteTarget[]): LocateTarget[] {
+  const seen = new Set<string>()
+  const out: LocateTarget[] = []
+  for (const target of targets) {
+    if (seen.has(target.key)) continue
+    seen.add(target.key)
+    out.push({ type: 'fixture', key: target.key })
+  }
+  return out
+}
+
+/**
+ * The template property a grid column spreads as — the column → `TemplateProperty` map of
+ * editor-kit plan D4. Null for a column outside the vocabulary: Speed spreads as **raw** bytes
+ * (D15), and Gobo and Prism do not spread at all (a wheel slot is per-model; a prism is a switch).
+ */
+export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null {
+  switch (col) {
+    case 'dimmer':
+      return templatePropertyFor('dimmer')
+    case 'strobe':
+      return templatePropertyFor('strobe')
+    case 'colour':
+      return templatePropertyFor('rgbColour')
+    case 'position':
+      return templatePropertyFor('position')
+    case 'zoom':
+      return templatePropertyFor('zoom')
+    case 'focus':
+      return templatePropertyFor('focus')
+    case 'iris':
+      return templatePropertyFor('iris')
+    case 'gobo':
+    case 'prism':
+    case 'speed':
+      return null
+  }
+}
+
+/** Whether one head — a fixture or an element — has something this template property resolves against. */
+function headTakesProperty(properties: readonly PropertyDescriptor[], property: TemplateProperty): boolean {
+  switch (property.propertyName) {
+    case 'rgbColour':
+      return properties.some((p) => p.type === 'colour')
+    // The bundled emitters are omitted from the flat descriptor list, so read the colour
+    // descriptor's channels (`targetEmitters`'s rule).
+    case 'white':
+      return properties.some((p) => (p.type === 'colour' && p.whiteChannel != null) || p.category === 'white')
+    case 'amber':
+      return properties.some((p) => (p.type === 'colour' && p.amberChannel != null) || p.category === 'amber')
+    case 'uv':
+      return properties.some((p) => (p.type === 'colour' && p.uvChannel != null) || p.category === 'uv')
+    case 'position':
+      return resolveCell([...properties], 'position') != null
+    case 'prism':
+      return properties.some((p) => p.category === 'prism')
+    default:
+      // dimmer, strobe, zoom, focus, iris, frost: a property in that category.
+      return properties.some((p) => p.category === property.propertyName)
+  }
+}
+
+/**
+ * The properties of [family] a spread over these targets can carry — the Property row's items
+ * (D4): the template vocabulary for the family, minus the switch, kept to what **some** head in
+ * the selection has. A Colour marquee over RGBW heads offers Colour · White, over RGB heads Colour
+ * alone; a Dimmer marquee over heads with a strobe offers Level · Strobe. An element's properties
+ * count for its fixture, as [targetFamilies] counts them.
+ */
+export function spreadPropertiesOffered(targets: readonly WriteTarget[], family: AttributeFamily): TemplateProperty[] {
+  return spreadPropertiesFor(family).filter((property) =>
+    targets.some(
+      (target) =>
+        headTakesProperty(target.properties, property) ||
+        (target.elements ?? []).some((element) => headTakesProperty(element.properties, property)),
+    ),
+  )
+}
+
+/**
+ * How many steps a spread **over Cells** has for these targets, and 0 where the switch has nothing
+ * to split (D5): a fixture target's cells count, and a cell selected on its own is one — the busk
+ * tab's `selectedCells` reading, so *Over: Cells* counts the same way from either surface. Zero
+ * unless some fixture target has cells, since a selection of lone cells is already over cells.
+ */
+export function spreadCellCount(targets: readonly WriteTarget[]): number {
+  if (!targets.some((target) => (target.elements?.length ?? 0) > 0)) return 0
+  let count = 0
+  for (const target of targets) {
+    const cells = target.elements?.length ?? 0
+    count += cells > 0 ? cells : 1
+  }
+  return count
+}
+
+/**
  * The attribute families these targets can take at all — what a head *has*, never what it is
  * currently showing. An element's properties count for its fixture, so a pixel bar whose colour
  * lives on its elements is a colour target.
@@ -692,7 +809,7 @@ export function resolveTargetCells(target: WriteTarget, col: ColumnKey): TargetR
  * target's own ranges. Targets without the property, or whose property can't
  * take the commit's shape, are skipped. Multi-head expansion and parent
  * precedence come from resolveTargetCells; element writes land inline at the
- * parent's position (the ordering Fan depends on).
+ * parent's position (the ordering the raw spread depends on).
  */
 export function planBatchWrites(
   targets: readonly WriteTarget[],

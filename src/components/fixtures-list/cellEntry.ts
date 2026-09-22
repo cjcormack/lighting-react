@@ -52,7 +52,7 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  * rely on there being no cells to type at. And `useCellWriters` has no arm for Output or for a focused
  * *template* layer — `ProgrammerGrid` supplies a `live` context for both — so a commit taken in
  * either would put literals into Local under a grid drawing itself as a read. That is the hole
- * `PropertyCell`'s `disabled` and `FanPopover`'s template gate each close for their own path, and
+ * `PropertyCell`'s `disabled` and `SpreadPopover`'s template gate each close for their own path, and
  * this closes it for the keyboard and the bar.
  *
  *  - **Local**, or no scope at all — the two plain list routes, whose cells write straight to the
@@ -80,7 +80,7 @@ export function cellKeyboardPermission(
  * Set is one gesture — open the first selected cell's editor over the whole selection, which is
  * what Enter does — and the title names where the value lands, because that is the scope's
  * answer and not the button's: Local, or the focused Look's rows. Where the gesture is refused the
- * title carries the reason, in the words `FanPopover` already uses for its own template gate, so
+ * title carries the reason, in the words `SpreadPopover` already uses for its own template gate, so
  * the three disabled controls on one bar do not explain themselves three ways. The reasons follow
  * [cellKeyboardPermission] rather than restating it: a title can never promise a gesture the gate
  * refuses.

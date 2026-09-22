@@ -24,7 +24,7 @@ export type { ListSelectIntent, ListSelectionState } from '../sheet/listSelectio
 
 export interface ListSelection {
   selectedIds: ReadonlySet<RowId>
-  /** Selected ids in *visible row order* (top→bottom) — the order fan and
+  /** Selected ids in *visible row order* (top→bottom) — the order a raw spread and
    *  batch operations run in. */
   orderedSelected: readonly RowId[]
   anchor: RowId | null

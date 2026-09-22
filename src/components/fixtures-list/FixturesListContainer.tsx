@@ -71,7 +71,8 @@ import { SelectionBar as ListSelectionBar } from '../programmer/SelectionBar'
 import { SheetPage } from '../sheet/SheetPage'
 import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
-import { FanPopover, fanColumnsForTargets, type FanColumn } from './FanPopover'
+import { SpreadPopover, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
+import type { SpreadSeed } from '../editor/SpreadPanel'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
@@ -109,7 +110,7 @@ export interface FixturesListContainerProps {
    *
    * **Not the cell-selection gate any more.** It was, which made one flag mean two things: every
    * list this container mounts now drag-selects cells, types into them and clears them, and this
-   * says only whether provenance is drawn. The one behaviour still keyed off it is the *row* Fan
+   * says only whether provenance is drawn. The one behaviour still keyed off it is the *row* Spread
    * below, which the programmer trades away for the marquee's.
    */
   showOwnership?: boolean
@@ -152,7 +153,7 @@ export interface FixturesListContainerProps {
     /**
      * Null when nothing *visible* is selected; the caller should render nothing rather than a
      * shell. Rows or cells — the two are one selection, and this toolbar serves both, with the
-     * cell verbs (Set · Clear · Fan) drawn first when it is cells.
+     * cell verbs (Set · Clear · Spread) drawn first when it is cells.
      */
     selection: React.ReactNode | null
     /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
@@ -235,7 +236,7 @@ const EMPTY_BATCH: CellBatch = { count: 0, skipped: 0, resolutions: [] }
  * **All three select cells and edit them the same way.** Drag a rectangle over the value columns,
  * click to narrow it to one cell, double click / ⏎ / a typed character to open that column's
  * editor over the whole marquee, ⌫ to take those cells out of Local. Until this session the
- * marquee, the keyboard and the Set · Clear · Fan verbs were the programmer's alone and the two
+ * marquee, the keyboard and the Set · Clear · Spread verbs were the programmer's alone and the two
  * plain lists had click-to-open and a row selection; the gestures were the same component's either
  * way, so the split was one prop rather than a design, and it made the same grid answer a click
  * two ways depending on the route it was mounted on.
@@ -588,10 +589,10 @@ export function FixturesListContainer({
 
   /**
    * The marquee by column, each with the heads its cells stand for in visible row order. The one
-   * expansion behind every per-column consumer — the commit, Backspace, the batch count and Fan —
-   * so a fan and a typed value cannot reach different heads for one selection.
+   * expansion behind every per-column consumer — the commit, Backspace, the batch count and Spread
+   * — so a spread and a typed value cannot reach different heads for one selection.
    */
-  const columnTargets = useMemo<FanColumn[]>(
+  const columnTargets = useMemo<SpreadColumn[]>(
     () =>
       cellSelection.byColumn().map(({ col, rowIds }) => ({
         col,
@@ -684,7 +685,7 @@ export function FixturesListContainer({
    * first selected cell happened to be, which for a marquee near the bottom of a long list is
    * nowhere near the hand that pressed Set. Only Set anchors here: a double click is made at the
    * cell, so its editor opens there, like Enter's.
-   * Fan already opened at its own button; this is the two behaving alike. Threaded down to the
+   * Spread already opened at its own button; this is the two behaving alike. Threaded down to the
    * cells rather than resolved here, because the popover belongs to the cell that owns the editor.
    */
   const setButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -750,7 +751,7 @@ export function FixturesListContainer({
   // the panel. Converting to rows keeps that flag false, so the edge never comes — and an open
   // popover is not inert in a read-only scope: `disabled` reaches the cell's *trigger*, never the
   // fields inside an already-open panel, and `useCellWriters` has no Output or template arm, so a
-  // commit from one falls through to a live write and puts literals in Local. Same hole the Fan
+  // commit from one falls through to a live write and puts literals in Local. Same hole the Spread
   // and keyboard gates are written against, reached through a stale panel instead.
   //
   // **Not merely Radix's job.** A press on the scope band is an outside press, so at the desk the
@@ -872,9 +873,19 @@ export function FixturesListContainer({
     [flushPendingCommit],
   )
 
-  // The plain routes' whole-selection fan, memoised so `FanPopover`'s per-column plans are not
-  // re-probed on every render of the container.
-  const rowFanColumns = useMemo(() => fanColumnsForTargets(selectedTargets), [selectedTargets])
+  // The plain routes' whole-selection spread, memoised so `SpreadPopover`'s per-column plans are
+  // not re-probed on every render of the container.
+  const rowSpreadColumns = useMemo(() => spreadColumnsForTargets(selectedTargets), [selectedTargets])
+
+  // The colour editor's *Spread…*: a one-shot the way `keyboardOpen` is one — the seed opens the
+  // row C panel on Colour with *From* set to the editor's RGB (`SpreadSeed`), and the panel asks
+  // for it to be dropped once read, so a later open by any other door is not re-seeded.
+  const [spreadSeed, setSpreadSeed] = useState<SpreadSeed | null>(null)
+  const onSpreadFromColour = useCallback((from: { r: number; g: number; b: number }) => {
+    setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
+  }, [])
+  const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
+  const routeProjectId = projectId != null ? Number(projectId) : undefined
 
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
   // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
@@ -1215,16 +1226,17 @@ export function FixturesListContainer({
     />
   )
 
-  // The cell verbs — Set, Clear, Fan — with the container's own gate and words behind them, so a
-  // button cannot promise a gesture the keyboard refuses. Set *is* Enter: the same request, the
+  // The cell verbs — Set, Clear, Spread — with the container's own gate and words behind them, so
+  // a button cannot promise a gesture the keyboard refuses. Set *is* Enter: the same request, the
   // same first cell, the same commit to every selected cell.
   //
-  // On the programmer a rows-only selection gets none of them: Fan reads the marquee there, which
-  // is what the selection is for. The two plain list routes keep the *row* Fan they always had
-  // beside the marquee's — over the whole selection, column chosen in the panel. That is the one
-  // gesture this session did not fold into the marquee: a row selection there is made by dragging
-  // the name column or by ⌘A, and fanning a colour across eight whole heads without first drawing
-  // a rectangle over one of their columns is a real gesture those two views already offered.
+  // On the programmer a rows-only selection gets none of them: Spread reads the marquee there,
+  // which is what the selection is for. The two plain list routes keep the *row* Spread they
+  // always had beside the marquee's — over the whole selection, column chosen in the panel. That
+  // is the one gesture this session did not fold into the marquee: a row selection there is made
+  // by dragging the name column or by ⌘A, and spreading a colour across eight whole heads without
+  // first drawing a rectangle over one of their columns is a real gesture those two views already
+  // offered.
   const selectionActions =
     cellCount > 0 ? (
       <CellSelectionActions
@@ -1233,10 +1245,20 @@ export function FixturesListContainer({
         setRef={setButtonRef}
         onSet={toggleCellEditor}
         onClear={clearSelectedCells}
-        fan={<FanPopover columns={columnTargets} className={PHONE_FOLDED_CLASS} />}
+        spread={
+          <SpreadPopover
+            columns={columnTargets}
+            projectId={routeProjectId}
+            desk={selectionScope === 'programmer'}
+            scopeLabel={scopeLabel}
+            seed={spreadSeed}
+            onSeedConsumed={consumeSpreadSeed}
+            className={PHONE_FOLDED_CLASS}
+          />
+        }
       />
     ) : !showOwnership && selectedTargets.length > 0 ? (
-      <FanPopover columns={rowFanColumns} />
+      <SpreadPopover columns={rowSpreadColumns} projectId={routeProjectId} desk={selectionScope === 'programmer'} scopeLabel={scopeLabel} />
     ) : null
 
   // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row
@@ -1329,6 +1351,7 @@ export function FixturesListContainer({
           // two plain lists deliberately draw no template strip (§List shell) and Save records from
           // the programmer, so their colour cells get none of the three, like the strip.
           projectId={selectionScope === 'programmer' && projectId != null ? Number(projectId) : undefined}
+          onSpread={onSpreadFromColour}
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}

@@ -88,6 +88,11 @@ export interface FixturesTableProps {
    * disabled Save and no leaves rather than reaching for a store it has no project in.
    */
   projectId?: number
+  /**
+   * The colour editor's *Spread…*: hand its RGB to the selection bar's Spread panel as *From*
+   * (editor-kit plan session 3). Threaded to `ColourCell` alone; the container holds the one-shot.
+   */
+  onSpread?: (from: { r: number; g: number; b: number }) => void
   /** Open the detail sheet for a row (group → group sheet, fixture/element →
    *  fixture sheet). */
   onShowInfo: (row: InfoRow) => void
@@ -111,7 +116,7 @@ export interface FixturesTableProps {
   selectionEmpty?: boolean
   /**
    * Drag-select across cells — and with it the whole cell vocabulary: a single click selects one,
-   * a double click opens its editor, and the container's keyboard and Set · Clear · Fan act on
+   * a double click opens its editor, and the container's keyboard and Set · Clear · Spread act on
    * the rectangle.
    *
    * **Required.** It was optional while the two plain list routes had no marquee, which left this
@@ -196,6 +201,7 @@ export function FixturesTable({
   batchFor,
   scopeLabel,
   projectId,
+  onSpread,
   onShowInfo,
   scrollToRowId,
   onScrolledToRow,
@@ -456,6 +462,7 @@ export function FixturesTable({
                     batchFor={batchFor}
                     scopeLabel={scopeLabel}
                     projectId={projectId}
+                    onSpread={onSpread}
                     onShowInfo={onShowInfo}
                     showOwnership={showOwnership}
                     cellSelection={cellSelection}
@@ -562,6 +569,8 @@ interface RowViewProps {
    * disabled Save and no leaves rather than reaching for a store it has no project in.
    */
   projectId?: number
+  /** See `FixturesTableProps.onSpread`. */
+  onSpread?: (from: { r: number; g: number; b: number }) => void
   onShowInfo: (row: InfoRow) => void
   showOwnership: boolean
   /** Required, like the table's own — `RowView` has one caller and it always passes it. */
@@ -646,6 +655,7 @@ const RowView = React.memo(function RowView({
   batchFor,
   scopeLabel,
   projectId,
+  onSpread,
   onShowInfo,
   showOwnership,
   cellSelection,
@@ -994,6 +1004,7 @@ const RowView = React.memo(function RowView({
               batch={batchFor(row, col)}
               scopeLabel={scopeLabel}
               projectId={projectId}
+              onSpread={onSpread}
               // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
               // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
               // otherwise walk straight past the guard and open an editor whose commit is dropped.
@@ -1085,6 +1096,7 @@ function PropertyCell({
   batch,
   scopeLabel,
   projectId,
+  onSpread,
   disabled,
   autoOpen,
   autoClose,
@@ -1123,6 +1135,8 @@ function PropertyCell({
    * disabled Save and no leaves rather than reaching for a store it has no project in.
    */
   projectId?: number
+  /** The colour editor's *Spread…* — see `FixturesTableProps.onSpread`. */
+  onSpread?: (from: { r: number; g: number; b: number }) => void
   /** The desk is unreachable, so an edit here would go nowhere. */
   disabled: boolean
   /**
@@ -1189,6 +1203,7 @@ function PropertyCell({
           batch={batch}
           scopeLabel={scopeLabel}
           projectId={projectId}
+          onSpread={onSpread}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}

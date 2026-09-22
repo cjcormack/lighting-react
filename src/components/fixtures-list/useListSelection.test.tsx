@@ -224,7 +224,7 @@ describe('selectionSlice.publishTargets', () => {
   })
 
   it('order matters — reordering the same keys is a real change', () => {
-    // The expansion is in visible row order, which is the order fan and batch writes run in.
+    // The expansion is in visible row order, which is the order a raw spread and batch writes run in.
     const store = makeStore()
     store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-1', 'hex-2'] }))
     store.dispatch(publishTargets({ scope: 'programmer', targetKeys: ['hex-2', 'hex-1'] }))

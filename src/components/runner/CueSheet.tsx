@@ -20,7 +20,7 @@ import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { CueStatePip } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
-import { FanPopover, type FanPlan } from '@/components/sheet/FanPopover'
+import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 
@@ -104,7 +104,7 @@ export interface CueSheetProps {
  *
  * **The lock is this sheet's read-only scope**, the way Output scope is the programmer's. Locked,
  * every value cell is inert — `pointer-events-none` on the wrapper, `disabled` on the trigger,
- * the keyboard refused through the permission, Set · Clear · Fan disabled with the reason — the
+ * the keyboard refused through the permission, Set · Clear · Spread disabled with the reason — the
  * marquee still works, and a click on the Cue column arms the cue as next, exactly as a card
  * click does. Unlocked, cells edit under the amber wash the chrome above already wears. GO, BACK,
  * Space and ⌫ are untouched: `useTransportKeys` is the page's, enabled exactly while locked as it
@@ -116,8 +116,8 @@ export interface CueSheetProps {
  * nothing else — `CueSheet.test.tsx` pins it.
  *
  * Writes are one PATCH per cue carrying the field — the same auto-saving contract the cards'
- * inline fields keep. Fan on Fade spreads first→last with a Spread control (Linear, the one
- * spread there is).
+ * inline fields keep. Spread on Fade spreads first→last along a curve — the panel's curve row,
+ * where the one-option Spread select was (`FU-SPREAD-DURATION-CURVES`).
  *
  * No Hooks column: `CueStackCueEntry` carries no trigger count, and adding one is a backend field.
  *
@@ -224,7 +224,7 @@ export function CueSheet({
         clear: (batch) => {
           for (const row of batch) if (row.cue.fadeDurationMs != null) patch(row.cue.id, { fadeDurationMs: null })
         },
-        fan: (batch): FanPlan | null =>
+        spread: (batch): SpreadPlan | null =>
           batch.length === 0
             ? null
             : {
@@ -400,7 +400,7 @@ export function CueSheet({
   const cellDisabled = useCallback(() => locked, [locked])
 
   /**
-   * **A refused edit asks to unlock rather than doing nothing.** Locked, Set · Clear · Fan were
+   * **A refused edit asks to unlock rather than doing nothing.** Locked, Set · Clear · Spread were
    * greyed out and ⏎ was swallowed — which reads as a broken sheet rather than as a mode, since
    * the marquee that put the operator there still works. Now each of those opens this dialog, and
    * the way out is one press.
@@ -494,9 +494,10 @@ export function CueSheet({
             onSet={sheet.toggleCellEditor}
             onClear={sheet.clearSelectedCells}
             onRefused={refuseVerb}
-            fan={
-              <FanPopover
-                plans={sheet.fanPlans}
+            spread={
+              <SpreadPanel
+                host="popover"
+                plans={sheet.spreadPlans}
                 disabledReason={locked ? LOCKED_REASON : null}
                 onRefused={refuseVerb}
                 drivableHint="fade"

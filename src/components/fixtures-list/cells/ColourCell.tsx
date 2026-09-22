@@ -34,6 +34,12 @@ interface ColourCellOwnProps {
    * no Recent and no leaves — as does a read-only mount or a test, which pass none.
    */
   projectId?: number
+  /**
+   * The editor's *Spread…*: hand this colour's RGB to the selection bar's Spread panel as *From*
+   * (the busk `SpreadSeed` — RGB only, no emitter travels) and close this editor, since the panel
+   * opens at the bar. Absent, the button is drawn inert — a read-only mount, a test.
+   */
+  onSpread?: (from: { r: number; g: number; b: number }) => void
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
   /**
@@ -134,7 +140,7 @@ export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] 
  * `useCellWriters` folds an undeliverable white into RGB), the read-out counting them, Pick over the
  * batch's heads through the editor's own hidden leaves, *Save as template…* opening
  * `NewTemplateFromSelectionSheet` with Colour answered over the marquee's fixtures, and Recent in
- * the bottom sheet alone. *Spread…* is drawn inert until session 3 wires it to the row C panel.
+ * the bottom sheet alone, and *Spread…* handing the colour to row C's Spread panel as *From*.
  * The targets the editor gets are the batch's as a colour commit lands on them
  * (`colourTargetsOf`): one per RGB colour cell, and the label line counts that list rather than
  * `batch.count`, which also counts a colour-wheel head the commit refuses.
@@ -152,6 +158,7 @@ export const ColourCell = memo(function ColourCell({
   batch,
   scopeLabel = 'Local',
   projectId,
+  onSpread,
   placeholder,
   disabled = false,
   autoOpen,
@@ -230,6 +237,16 @@ export const ColourCell = memo(function ColourCell({
         // colour-wheel head the commit refuses; the read-out counts the same list.
         labelLine={<EditorLabelLine subject={headsLine(batch == null ? 1 : targets.length, scopeLabel)} column={label} />}
         onSave={onSave}
+        // *Spread…* opens the row C panel with this colour as From — the busk hand-over, RGB only —
+        // and closes this editor, because the panel opens at the bar and not here.
+        onSpread={
+          onSpread == null
+            ? undefined
+            : (channels) => {
+                setOpen(false)
+                onSpread({ r: channels.r, g: channels.g, b: channels.b })
+              }
+        }
         // The footer's verbs act on a batch. A cell mounted with none — the cue grid's read-only
         // colour, whose trigger is still tabbable — has nothing for Pick to read or Save to record,
         // so it draws no footer rather than an enabled Pick that toasts.

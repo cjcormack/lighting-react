@@ -26,7 +26,7 @@
 export const WORD_CLASS = 'hidden sm:inline group-data-[strip]/bar:@max-[1100px]:hidden'
 
 /**
- * Where Locate, Highlight and Fan go on a phone-width programmer bar, and Deselect does not.
+ * Where Locate, Highlight and Spread go on a phone-width programmer bar, and Deselect does not.
  * Set and Clear stay too — see `CellSelectionActions`.
  *
  * `PD-SELECTION-BAR-DENSITY` and `PD-CLEAR-SELECTION-TOUCH`, decided together because they pull
@@ -34,7 +34,7 @@ export const WORD_CLASS = 'hidden sm:inline group-data-[strip]/bar:@max-[1100px]
  * goes to them, and the one control the row keeps at every width is the one a phone has no other
  * way to do — Escape is a key, and "click off" needs empty grid space a full list has none of.
  * This is what the `Phone` artboard draws: glyph · count · chips · New · X. The three folded here
- * are not lost — Locate and Highlight are on the busk target band, and Fan comes back with the
+ * are not lost — Locate and Highlight are on the busk target band, and Spread comes back with the
  * width.
  *
  * Same container rule as `WORD_CLASS`: the bar's wrapper is the container on every list, the two
@@ -58,7 +58,7 @@ export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
  * They are the right two to lose first because neither is lost: both are on the busk view's target
  * band, and both are momentary aids rather than gestures the grid depends on — unlike Set, Clear
  * and Deselect, which stay at every width because Enter, Backspace and Escape are keys a phone has
- * not got. Fan keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
+ * not got. Spread keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
  * would break up a group of three.
  *
  * Same container rule as [PHONE_FOLDED_CLASS] — the bar's wrapper, on every list. The bare form

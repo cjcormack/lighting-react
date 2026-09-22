@@ -58,7 +58,7 @@ export interface SelectionBarProps {
    */
   strip?: ReactNode
   /**
-   * The verbs, right-aligned: the surface's `CellSelectionActions` (Set · Clear · Fan), its own
+   * The verbs, right-aligned: the surface's `CellSelectionActions` (Set · Clear · Spread), its own
    * verbs after them, and Deselect last and ghost. Null when nothing is selected.
    */
   verbs: ReactNode | null

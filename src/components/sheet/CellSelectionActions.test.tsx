@@ -10,8 +10,8 @@ afterEach(cleanup)
 /**
  * The bar's cell verbs are the marquee's two keys with a button on them. What is pinned is that
  * they take the surface's gate and words rather than deciding anything themselves — one
- * `permission` object for the button and the key, so the two cannot disagree — and that Fan is a
- * slot the surface fills rather than a fan drawn here.
+ * `permission` object for the button and the key, so the two cannot disagree — and that Spread is
+ * a slot the surface fills rather than a panel drawn here.
  */
 describe('CellSelectionActions', () => {
   it('runs Set and Clear from the surface, and carries its words', () => {
@@ -23,7 +23,7 @@ describe('CellSelectionActions', () => {
         permission={{ entry: true, clear: true }}
         onSet={onSet}
         onClear={onClear}
-        fan={<button type="button">Fan</button>}
+        spread={<button type="button">Spread</button>}
       />,
     )
     const set = screen.getByRole('button', { name: 'Set' })
@@ -32,7 +32,7 @@ describe('CellSelectionActions', () => {
     expect(onSet).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Clear cells' }))
     expect(onClear).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: 'Fan' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Spread' })).toBeInTheDocument()
   })
 
   it('is disabled where the gate refuses, with the reason on the button', () => {
@@ -48,8 +48,8 @@ describe('CellSelectionActions', () => {
     expect(set).toBeDisabled()
     expect(set).toHaveAttribute('title', expect.stringContaining('read of the cook'))
     expect(screen.getByRole('button', { name: 'Clear cells' })).toBeDisabled()
-    // No fan handed in, none drawn: a surface with nothing that fans draws no dead button.
-    expect(screen.queryByRole('button', { name: 'Fan' })).toBeNull()
+    // No spread handed in, none drawn: a surface with nothing that spreads draws no dead button.
+    expect(screen.queryByRole('button', { name: 'Spread' })).toBeNull()
   })
 
   it('refuses one verb without the other — Clear alone, on a column that cannot be empty', () => {

@@ -8,7 +8,7 @@ import type { FixturePatch } from '@/api/patchApi'
  *
  *  - **Set over N addresses lands them consecutively by footprint from the typed one**, in
  *    visible-row order — one PUT per head whose channel moved, never N heads on one address.
- *  - **Fan on Address is From + Step** (blank step = footprint), in visible-row order.
+ *  - **Spread on Address is From + Step** (blank step = footprint), in visible-row order.
  *  - **The overlap is on the cell**: a destructive ring, the other head on the title, a legend
  *    line under the sheet.
  *  - **Clear is refused on Address** — an address cannot be empty — and the refusal is the
@@ -186,7 +186,7 @@ function dragAddresses(from: number, to: number) {
   fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 320, clientY: to * 36 + 26 })
   fireEvent.pointerUp(cell, { button: 0, clientX: 320, clientY: to * 36 + 26 })
   // The click a real release generates, which the marquee swallows — without it the swallow would
-  // eat the next click this test makes, on Set or Fan.
+  // eat the next click this test makes, on Set or Spread.
   fireEvent.click(cell)
 }
 
@@ -230,12 +230,12 @@ describe('PatchSheet', () => {
     expect(screen.getByRole('button', { name: 'Set' })).not.toBeDisabled()
   })
 
-  it('fans addresses From + Step in visible-row order, blank step meaning each footprint', async () => {
+  it('spreads addresses From + Step in visible-row order, blank step meaning each footprint', async () => {
     // Drawn in this order: PAR 1 (6), Bar SL (18), PAR 2 (6).
     draw({ rows: [rows[0], rows[3], rows[1], rows[2]] })
     dragAddresses(0, 2)
     expect(screen.getByText('3 cells')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
     const from = await screen.findByLabelText('From')
     fireEvent.change(from, { target: { value: '300' } })
     // Visible order is PAR 1 (6), Bar SL (18), PAR 2 (6): 300, 306, 324.
@@ -279,7 +279,7 @@ describe('PatchSheet', () => {
     expect(addressCell('PAR 1').closest('[data-cell="address"]')!.className).not.toContain('ring-destructive')
   })
 
-  it('fans one typed key over the selection, continuing the scheme it already carries', async () => {
+  it('spreads one typed key over the selection, continuing the scheme it already carries', async () => {
     draw()
     // PAR 1 (`par-1`) and PAR 2 (`par-2`), re-keyed from `foh-3`.
     dragKeys(0, 1)

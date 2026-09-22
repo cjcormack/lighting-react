@@ -29,9 +29,9 @@ export interface CellOpenRequest<C extends string> {
  *
  * **Set has to close what it opened, because nothing else does.** The Set button is the open
  * popover's own anchor, and a press on it is not treated as the outside click that dismisses one —
- * so the second press asks the cell to close, which is what makes Set behave the way Fan's own
+ * so the second press asks the cell to close, which is what makes Set behave the way Spread's own
  * button always has. Which cell is read from the DOM (`openCellEditorTarget`), scoped to a cell's
- * own anchor so `FanPopover`'s panel does not answer.
+ * own anchor so `SpreadPanel`'s panel does not answer.
  */
 export function useCellEditorRequests<C extends string>({
   firstEditableCell,

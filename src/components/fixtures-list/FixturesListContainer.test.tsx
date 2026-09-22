@@ -105,9 +105,9 @@ vi.mock('./SelectionToolbar', () => ({
 vi.mock('../sheet/CellSelectionActions', () => ({
   CellSelectionActions: () => <span data-testid="cell-verbs" />,
 }))
-vi.mock('./FanPopover', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./FanPopover')>()),
-  FanPopover: () => <span data-testid="row-fan" />,
+vi.mock('./SpreadPopover', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./SpreadPopover')>()),
+  SpreadPopover: () => <span data-testid="row-spread" />,
 }))
 vi.mock('../groups/FixtureDetailModal', () => ({ FixtureDetailModal: () => null }))
 vi.mock('../fixtures/GroupDetailModal', () => ({ GroupDetailModal: () => null }))
@@ -196,24 +196,24 @@ describe('FixturesListContainer on the plain list routes', () => {
     expect(rowSelection.select).not.toHaveBeenCalled()
   })
 
-  it('swaps the row Fan for the cell verbs once a cell is selected', () => {
+  it('swaps the row Spread for the cell verbs once a cell is selected', () => {
     rowSelection.ids = new Set(['fixture:a'])
     render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
-    expect(screen.getByTestId('row-fan')).toBeInTheDocument()
+    expect(screen.getByTestId('row-spread')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('cell'))
     expect(screen.getByTestId('cell-verbs')).toBeInTheDocument()
   })
 
-  it('keeps the whole-selection row Fan these two routes have always had', () => {
+  it('keeps the whole-selection row Spread these two routes have always had', () => {
     // The one gesture not folded into the marquee. A row selection here is made by dragging the
     // name column or by ⌘A, and fanning across eight whole heads without first drawing a
     // rectangle over one of their columns is worth keeping; the programmer trades it away, because
     // there the marquee *is* what a selection is for.
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
     const { rerender } = render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
-    expect(screen.getByTestId('row-fan')).toBeInTheDocument()
+    expect(screen.getByTestId('row-spread')).toBeInTheDocument()
     rerender(<FixturesListContainer grouped={false} selectionScope="fixtures" showOwnership />)
-    expect(screen.queryByTestId('row-fan')).toBeNull()
+    expect(screen.queryByTestId('row-spread')).toBeNull()
   })
 
   it('clears a rows-only selection when a blank cell is clicked — the programmer\'s answer, now theirs', () => {

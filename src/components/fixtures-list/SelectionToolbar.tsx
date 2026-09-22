@@ -19,9 +19,9 @@ export interface SelectionToolbarProps {
   onClear: () => void
   /**
    * The selection's own verbs, drawn before Locate and Highlight. A cell selection's
-   * Set · Clear · Fan (`CellSelectionActions`) on every list; for a rows-only selection, nothing on
+   * Set · Clear · Spread (`CellSelectionActions`) on every list; for a rows-only selection, nothing on
    * the programmer — where the marquee is what a selection is for — and on the two plain list
-   * routes the whole-selection row Fan they have always had.
+   * routes the whole-selection row Spread they have always had.
    */
   actions?: ReactNode
 }
