@@ -50,6 +50,7 @@ vi.mock('../../lib/programmerFade', () => ({ getProgrammerFadeMs: () => 0 }))
 import { SpreadPopover, isIntentString, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
 import { buildRows, expandSelectionToTargets, spreadTargetsFor, type Row } from './rowModel'
 import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '@/test/fixtureFactories'
+import { resetSpreadOverStore } from '@/lib/spreadOver'
 
 const rgb = (n: number) => colourProp('rgbColour', chan(n), chan(n + 1), chan(n + 2))
 const rgbw = (n: number) => colourProp('rgbColour', chan(n), chan(n + 1), chan(n + 2), { whiteChannel: chan(n + 3) })
@@ -111,6 +112,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetSpreadOverStore()
+  window.sessionStorage.clear()
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -193,11 +196,13 @@ describe('the targets (D4)', () => {
     expect(lastRequest()).toMatchObject({ property: 'rgbColour', families: ['POSITION'] })
   })
 
-  it('Over defaults to Heads, and offers Cells with the count only where a selected fixture has cells', () => {
+  it('Over defaults to Heads, and offers Cells with the count where a selected fixture has cells', () => {
     const { unmount } = draw([column('dimmer', ['group:Front wash'])])
     open()
     expect(radio('Over', 'Heads')).toHaveAttribute('aria-checked', 'true')
-    expect(radio('Over', /^Cells/)).toBeDisabled()
+    // Pressable with nothing to split: the desk spreads it as Heads.
+    expect(radio('Over', /^Cells/)).toBeEnabled()
+    expect(radio('Over', /^Cells/)).toHaveTextContent(/^Cells$/)
     unmount()
     draw([column('dimmer', ['group:Front wash', 'fixture:bar'])])
     open()

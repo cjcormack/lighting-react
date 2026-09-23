@@ -12,6 +12,7 @@ import {
   type SpreadRequestBody,
 } from './SpreadPanel'
 import type { SpreadResponse } from '@/store/programmerOps'
+import { getSpreadOver, resetSpreadOverStore } from '@/lib/spreadOver'
 
 /**
  * The Spread panel (editor-kit plan D2–D7): one component in a popover host and a docked host. What
@@ -85,6 +86,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetSpreadOverStore()
+  window.sessionStorage.clear()
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -270,15 +273,64 @@ describe('the request', () => {
     expect(lastBody()).toMatchObject({ order: 'RANDOM', seed: 1 })
   })
 
-  it('offers Over: Cells with the count only where a plan has cells', () => {
+  it('offers Over: Cells everywhere, with the count only where a plan has cells', () => {
     const { unmount } = render(<SpreadPanel host="docked" plans={[intentPlan()]} />)
-    expect(radio('Over', /^Cells/)).toBeDisabled()
+    expect(radio('Over', /^Cells/)).toBeEnabled()
+    expect(radio('Over', /^Cells/)).toHaveTextContent(/^Cells$/)
     expect(radio('Over', 'Heads')).toHaveAttribute('aria-checked', 'true')
     unmount()
     render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
     const cells = radio('Over', /^Cells/)
     expect(cells).toBeEnabled()
     expect(cells).toHaveTextContent('Cells12')
+  })
+
+  it('keeps Over: Cells through a selection with no cells, and sends Heads there', () => {
+    const { rerender } = render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
+    fireEvent.click(radio('Over', /^Cells/))
+    apply()
+    expect(lastBody()).toMatchObject({ over: 'CELLS' })
+    rerender(<SpreadPanel host="docked" plans={[intentPlan()]} />)
+    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    apply()
+    expect(lastBody()).toMatchObject({ over: 'HEADS' })
+    rerender(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4 })]} />)
+    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    apply()
+    expect(lastBody()).toMatchObject({ over: 'CELLS' })
+  })
+
+  it('a second mounted panel follows Over without a Live write of its own', () => {
+    render(
+      <>
+        <div data-testid="a">
+          <SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />
+        </div>
+        <div data-testid="b">
+          <SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />
+        </div>
+      </>,
+    )
+    const inB = within(screen.getByTestId('b'))
+    fireEvent.click(inB.getByRole('switch', { name: 'Live — apply as I adjust' }))
+    send.mockClear()
+    const inA = within(screen.getByTestId('a'))
+    fireEvent.click(within(inA.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Cells/ }))
+    expect(within(inB.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Cells/ })).toHaveAttribute('aria-checked', 'true')
+    // A, which moved it, has Live off; B, which only followed, must not write over its selection.
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('keeps Over through the panel unmounting — an empty selection — and mounts again on it', () => {
+    const { unmount } = render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
+    fireEvent.click(radio('Over', /^Cells/))
+    unmount()
+    render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4 })]} />)
+    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    apply()
+    expect(lastBody()).toMatchObject({ over: 'CELLS' })
+    fireEvent.click(radio('Over', 'Heads'))
+    expect(getSpreadOver()).toBe('HEADS')
   })
 })
 
@@ -408,6 +460,11 @@ describe('the four kinds', () => {
     expect(apply).toHaveBeenCalledWith([0, 50, 100], 'HEADS')
     // Reverse is an order, not a checkbox.
     expect(screen.queryByRole('checkbox', { name: 'Reverse' })).toBeNull()
+    // Cells with no cells to split steps over the heads, and the plan is told so.
+    open()
+    fireEvent.click(radio('Over', /^Cells/))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(apply).toHaveBeenLastCalledWith([0, 50, 100], 'HEADS')
   })
 
   it('address: From · Step in visible order with the landing line, and the collision named before Apply', () => {

@@ -1227,7 +1227,11 @@ is Rig again), offering it as something it is not would be worse than withholdin
 disabled item in the row wrapped at 288px and read as a control that was merely off. A position
 spread's defaults are **absolute degrees about the desk's centre** (270 / 135, `TemplateEditor`'s
 convention): `deg:` is each head's own `0…degMax`, so a signed value about the centre clamps to the
-hard stop. *Over: Cells* is enabled only where a selected fixture has elements, with the cell count.
+hard stop. *Over: Cells* carries the cell count where a selected fixture has elements, and stays pressable
+where none does — the choice survives a change of selection, an empty one included (it is the
+window's, `lib/spreadOver.ts`), and over heads with no cells the request says Heads
+(`effectiveSpreadOver` — the desk would make the same substitution, each fixture without elements
+being its own unit).
 **Live** sends every adjustment through `useLivePush` with an equality over the whole request, the
 release read from the window as the Colour tab's is; off, only *Apply* writes. An explicit Apply
 always sends — and stays pressable while Live is on, reading *Send again*, because it is the one
@@ -2151,7 +2155,15 @@ a Colour marquee over RGBW heads offers Colour · White, a Dimmer marquee over h
 Level · Strobe. **Over: Heads is the default on both sides** (D5) — Fan expanded a bar into its
 cells always; Spread treats a fixture row as one head unless the switch says Cells, offered with
 the count where a selected fixture has cells (`spreadCellCount`, the busk `selectedCells` reading)
-and disabled with the reason otherwise. The popover host applies the **chosen** plan only where it
+and **pressable without it**: the operator's Over survives a marquee moving onto heads with no
+cells, which spread as Heads (`effectiveSpreadOver`, one rule for both kinds: the desk request and
+the raw arm both say `HEADS` where the plan counts no cells), so moving from a pixel bar to a par
+and back keeps Cells. It survives an **empty**
+selection too, which unmounts the popover and blanks the rail tab: Over is not the form's but a
+per-tab store, `lib/spreadOver.ts`, one fact for every host of the panel (`sidePanelMode.ts`'s
+reasoning) that `commit` writes through and a mounting panel reads. A panel mounted *beside* the
+one that moved it follows the store into its form and **never pushes**, since its own Live may be
+on over a selection nobody is touching. The popover host applies the **chosen** plan only where it
 has two points (one point is a set), where the docked tab keeps the busk rule and applies one head
 at *from*; a template endpoint is drawn and nudged from the template's swatch colour, on both
 hosts. **Live** comes to the programmer too (D7), off by default,

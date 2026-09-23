@@ -7,6 +7,7 @@ import type { BuskingTarget } from './buskingTypes'
 import type { Fixture } from '@/store/fixtures'
 import type { SpreadRequest, SpreadResponse } from '@/store/programmerOps'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
+import { resetSpreadOverStore } from '@/lib/spreadOver'
 
 /**
  * The Spread tab as the **docked host** of `SpreadPanel` (busk-further plan D9, D10; editor-kit
@@ -120,6 +121,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resetSpreadOverStore()
+  window.sessionStorage.clear()
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -256,14 +259,19 @@ describe('the desk’s answer', () => {
 })
 
 describe('Over', () => {
-  it('is Heads only where no selected fixture has cells, and offers Cells with the count where one does', () => {
-    const { unmount } = draw([group])
-    expect(radio('Over', /^Cells/)).toBeDisabled()
-    unmount()
-    draw([group, barTarget])
+  it('offers Cells with the count where a selected fixture has cells, and keeps it chosen where none does', () => {
+    const { rerender } = draw([group, barTarget])
     const cells = radio('Over', /^Cells/)
     expect(cells).toBeEnabled()
     expect(cells).toHaveTextContent('Cells2')
+    fireEvent.click(cells)
+    // A selection with no cells keeps the choice (the desk spreads it as Heads), and it is still
+    // there when the bar comes back.
+    rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group)} families={null} />)
+    expect(radio('Over', /^Cells/)).toBeEnabled()
+    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group, barTarget)} families={null} />)
+    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
     // The count is the Cells chip's own expansion (`lib/cellsSubSelection.ts`), so Over: Cells and
     // the chip count cells one way; this is the same three answers the tab's own counter gave.
     const count = (...targets: BuskingTarget[]) =>

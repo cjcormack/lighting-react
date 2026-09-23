@@ -13,6 +13,7 @@ import { WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { skippedRowsMessage } from '@/lib/selectionMask'
+import { getSpreadOver, setSpreadOver, useSpreadOver } from '@/lib/spreadOver'
 import {
   SPREAD_CURVES,
   SPREAD_ORDERS,
@@ -64,7 +65,9 @@ import { useLivePush } from './useLivePush'
  * component, and a row that appears only in some hosts is how two hosts drift. The host says which
  * families the heads can take and which of those the gesture offers — the busk tab offers every
  * one, the programmer the marquee's — and the Property row appears wherever the family holds more
- * than one property the heads can take. Over defaults to Heads on both sides (D5).
+ * than one property the heads can take. Over defaults to Heads on both sides (D5), and once chosen it
+ * survives a change of selection, an empty one included (`lib/spreadOver.ts`): Cells over heads with
+ * no cells is drawn chosen and spreads as Heads.
  *
  * **Live** applies every adjustment as it is made, through {@link useLivePush} with an equality
  * over the whole request — the tempo fader's discipline, because a spread is judged by eye against
@@ -122,7 +125,7 @@ export interface IntentSpreadPlan extends SpreadPlanBase {
   kind: 'intent'
   /** The heads, as the request names them — a group as a group, a cell by its element key. */
   targets: readonly CueTarget[]
-  /** Steps over Cells; 0 disables the switch with its reason. */
+  /** Steps over Cells; 0 leaves the switch pressable, and the desk spreads it as Heads. */
   cellCount: number
   /** The families the segment draws, in `ATTRIBUTE_FAMILIES` order — what the heads can take. Empty draws all four. */
   families: readonly AttributeFamily[]
@@ -157,7 +160,7 @@ export interface IntentSpreadPlan extends SpreadPlanBase {
 /** A client-walked byte spread on a column the desk has no intent for (D15). */
 export interface RawSpreadPlan extends SpreadPlanBase {
   kind: 'raw'
-  /** Steps over Cells; 0 disables the switch. */
+  /** Steps over Cells; 0 leaves the switch pressable, and [apply] is handed Heads. */
   cellCount: number
   /** Values in step order: one per head over Heads, one per cell over Cells. */
   apply: (values: number[], over: SpreadOver) => void
@@ -281,6 +284,17 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
   }
 }
 
+/**
+ * The Over a spread is actually made over. Cells with no cells to split is Heads — the operator's
+ * choice is kept (`lib/spreadOver.ts`) and drawn, but a request never says Cells for a selection
+ * where the plan counts none. One rule for both kinds: the raw arm steps by it, and the desk is sent
+ * it rather than trusted to make the same substitution (it would: `programmerSpread.kt` makes each
+ * fixture without elements its own unit, and a plan counts 0 only when no target has elements).
+ */
+export function effectiveSpreadOver(over: SpreadOver, cellCount: number): SpreadOver {
+  return over === 'CELLS' && cellCount > 0 ? 'CELLS' : 'HEADS'
+}
+
 /** The request two forms would send, compared as strings: the live push's dedupe. */
 const sameSend = (a: Send, b: Send) => JSON.stringify(a) === JSON.stringify(b)
 
@@ -301,7 +315,7 @@ export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): Sprea
     curve: form.curve,
     order: form.order,
     parts: form.parts,
-    over: form.over,
+    over: effectiveSpreadOver(form.over, plan.cellCount),
     seed: form.seed,
   }
   if (plan.write === false) body.write = false
@@ -363,7 +377,9 @@ export function SpreadPanel({
   const [form, setForm] = useState<SpreadForm>(() => {
     const initial = intentPlan?.initial
     const family = initial?.family ?? initialFamily(headFamilies, intentPlan?.mask ?? null)
-    return formFor(initial?.property ?? propertiesFor(family)[0])
+    // Over is the window's, not this mount's (`lib/spreadOver.ts`): a panel mounted again after an
+    // empty selection opens on the operator's last choice.
+    return { ...formFor(initial?.property ?? propertiesFor(family)[0]), over: getSpreadOver() }
   })
   // Written by the handlers that move `form`, never at render time — the Colour tab's
   // `channelsRef` rule: a fast drag can dispatch its last move and its release inside one task.
@@ -432,9 +448,11 @@ export function SpreadPanel({
   const sendFor = useCallback((next: SpreadForm, ends: { from: number; to: number }, say: boolean): Send | null => {
     const plan = activePlanRef.current
     if (plan?.kind === 'raw') {
-      const steps = next.over === 'CELLS' && plan.cellCount > 0 ? plan.cellCount : plan.count
+      // The plan is handed the over its values were built for.
+      const over = effectiveSpreadOver(next.over, plan.cellCount)
+      const steps = over === 'CELLS' ? plan.cellCount : plan.count
       const values = rawValues(ends.from, ends.to, spreadFractions(steps, next.curve, next.order, next.parts, next.seed))
-      return { kind: 'raw', values, over: next.over }
+      return { kind: 'raw', values, over }
     }
     if (plan?.kind !== 'intent') return null
     if (plan.targets.length === 0) {
@@ -448,6 +466,9 @@ export function SpreadPanel({
   /** Move the form; while Live, every move is a write. */
   const commit = useCallback(
     (patch: Partial<SpreadForm>) => {
+      // Over is the window's (`lib/spreadOver.ts`): written through, so a panel mounted later — or
+      // one mounted beside this one — opens on it.
+      if (patch.over != null) setSpreadOver(patch.over)
       const next = { ...formRef.current, ...patch }
       formRef.current = next
       setForm(next)
@@ -552,11 +573,21 @@ export function SpreadPanel({
   }, [intentPlan, initialKey, headFamilies, form.family, chooseProperty])
 
   const cellCount = activePlan != null && 'cellCount' in activePlan ? activePlan.cellCount : 0
-  // Over: Cells with nothing to split falls back to Heads, and says nothing — the control is
-  // disabled with the count on it.
+  // Over is the operator's choice and survives a change of selection, an empty one included — it
+  // is kept in `lib/spreadOver.ts`, which `commit` writes through. Cells over heads with no cells is
+  // not refused or reset, it spreads as Heads (`effectiveSpreadOver`), so a marquee moved from a
+  // pixel bar to a par and back keeps Cells.
+  //
+  // A panel mounted beside the one that moved it (row C's popover and the rail's Spread tab are
+  // both mounted on the programmer) follows the store here — the form only, **never a push**: that
+  // panel's Live may still be on over a selection the operator is not touching.
+  const storedOver = useSpreadOver()
   useEffect(() => {
-    if (cellCount === 0 && formRef.current.over === 'CELLS') commit({ over: 'HEADS' })
-  }, [cellCount, commit])
+    if (formRef.current.over === storedOver) return
+    const next = { ...formRef.current, over: storedOver }
+    formRef.current = next
+    setForm(next)
+  }, [storedOver])
 
   // The colour editor's hand-over: Colour, From set to its colour, the knob seeded to it, applied
   // once per seed and then dropped by the host. In the popover host it opens the panel.
@@ -826,8 +857,7 @@ export function SpreadPanel({
             <ToggleGroupItem
               value="CELLS"
               className="text-xs"
-              disabled={cellCount === 0}
-              title={cellCount === 0 ? 'No selected fixture has cells' : `Each cell is one step — ${cellCount} cells`}
+              title={cellCount === 0 ? 'Each cell is one step — no selected fixture has cells, so each fixture is one' : `Each cell is one step — ${cellCount} cells`}
             >
               Cells{cellCount > 0 && <span className="ml-1 text-muted-foreground tabular-nums">{cellCount}</span>}
             </ToggleGroupItem>
