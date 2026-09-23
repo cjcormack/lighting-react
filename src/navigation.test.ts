@@ -366,6 +366,27 @@ describe("window commands", () => {
     expect(commands.at(-1)!.id).toBe("window-follow")
   })
 
+  it("gives every other busk window the page arm that changes its flag, as a viewOptions frame under its view (desk-follow D6)", () => {
+    const withOptions = (r: ReturnType<typeof row>, over: Partial<WindowCommandInputs["windows"][number]>) => ({ ...r, ...over })
+    const inputs = base({
+      windows: [
+        withOptions(row("s-1", "Screen 1", "/projects/1/busk"), { viewOptions: { pageFollows: "true" } }),
+        withOptions(row("s-2", "Screen 2", "/projects/1/busk"), { viewOptions: { focus: "rig", pageFollows: "true" } }),
+        withOptions(row("s-3", "Screen 3", "/projects/1/busk"), { viewOptions: { pageFollows: "false", page: "3" } }),
+        // Not announced yet: paged with, as its own tab reads it.
+        withOptions(row("s-4", "Screen 4", "/projects/1/busk"), { viewOptions: { focus: "split" } }),
+        row("s-5", "iPad"),
+      ],
+    })
+    const arms = buildWindowCommands(inputs).filter((c) => c.id.startsWith("window-page-"))
+    expect(arms.map((c) => c.label)).toEqual(["Screen 2 · own page", "Screen 3 · page with the desk", "Screen 4 · own page"])
+    arms[0]!.run()
+    arms[1]!.run()
+    expect(inputs.actions.setViewOptions).toHaveBeenNthCalledWith(1, "s-2", "/projects/1/busk", { pageFollows: "false" })
+    expect(inputs.actions.setViewOptions).toHaveBeenNthCalledWith(2, "s-3", "/projects/1/busk", { pageFollows: "true" })
+    expect(arms.map((c) => c.detail)).toEqual(["paged with the desk", "own page", "paged with the desk"])
+  })
+
   it("offers Split · Focus pads · Focus rig for this window only while it is on the busk view", () => {
     expect(buildWindowCommands(base()).some((c) => c.id.startsWith("window-focus-"))).toBe(false)
     const inputs = base({ buskFocus: "pads" })

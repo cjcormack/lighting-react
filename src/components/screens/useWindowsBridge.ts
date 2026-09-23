@@ -61,7 +61,10 @@ import { isEditableTarget } from '@/lib/domUtils'
  * to. Applying is `lib/buskWindow.ts`'s for the busk keys and `lib/immersive.ts`'s for
  * `immersive`, which any of the four live views takes; the announce effect re-announces whatever
  * moved. Immersive is a window's fact rather than a view's, and the per-view gate still applies
- * to it on purpose: the frame is a statement about the view the sender was looking at.
+ * to it on purpose: the frame is a statement about the view the sender was looking at. The busk
+ * keys include the page's two (desk-follow plan D6): `page` unlinks this window onto that page, and
+ * `pageFollows` pages it with the desk again (`'true'`) or keeps the page it is showing as its own
+ * (`'false'`) — the Screens row's Page segment, and ⌘K's page pair.
  *
  * A `windows.rename` is **not applied server-side**: the target renames itself here and the
  * effect above re-announces, which is what makes the new name survive that tab's reload.

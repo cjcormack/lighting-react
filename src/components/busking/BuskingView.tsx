@@ -25,6 +25,7 @@ import { handPickUp, heldName, useHandPlace } from '@/store/hand'
 import {
   isBuskPageDecided,
   keepFollowingBuskPage,
+  reportShowingBuskPage,
   setLocalBuskPage,
   unlinkBuskPage,
   useBuskPageDecided,
@@ -220,7 +221,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   // Two mechanisms meaning "this tab's page" is one too many, so a click that never left the
   // browser now **unlinks the window** onto the page clicked. That is the honest reading of what
   // just happened (`sendGesture` has already toasted that it did not reach the rig), and unlike the
-  // old override it *says so*: the page chip flips to *This window*.
+  // old override it *says so*: the page badge gives way to *Page: Own*.
   const requestedPageId = Number(searchParams.get('page'))
   const { data: deskPageId } = useBuskShowingPageQuery()
   const followingPage = useBuskPageFollow()
@@ -234,6 +235,17 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       pages[0]
     )
   }, [pages, followingPage, deskPageId, localPageId, requestedPageId])
+
+  // What this window is showing, for a `pageFollows: 'false'` from another window's Screens row
+  // to keep as this window's own (desk-follow plan D6, `reportShowingBuskPage`). Cleared on the
+  // way out: the frame is applied only while this view is showing, but a stale id must not
+  // outlive it. The cleanup's null between two ids is never seen: a commit runs cleanups and
+  // effects in one synchronous pass, and the reader is a socket frame's handler, a later task.
+  const showingPageId = activePage?.id ?? null
+  useEffect(() => {
+    reportShowingBuskPage(showingPageId)
+    return () => reportShowingBuskPage(null)
+  }, [showingPageId])
 
   const onPageSelect = useCallback(
     (pageId: number) => {

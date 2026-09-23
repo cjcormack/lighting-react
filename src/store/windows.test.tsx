@@ -48,11 +48,11 @@ import { getLocalSelection, isFollowingDesk, resetDeskFollowStores, unlinkFromDe
 import { getFullscreenState, resetFullscreenState } from '@/lib/fullscreen'
 import { resetUnsavedSheets, setSheetUnsaved } from '@/lib/unsavedSheets'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
-import { resetBuskPageFollowStores } from '@/lib/buskPageFollow'
+import { getLocalBuskPage, isFollowingBuskPage, reportShowingBuskPage, resetBuskPageFollowStores, unlinkBuskPage } from '@/lib/buskPageFollow'
 import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { store } from './index'
 import { restApi } from './restApi'
-import { thisWindowRow, useDeskWindows, useThisWindow } from './windows'
+import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
 import { handleWindowCommand, useWindowsBridge } from '@/components/screens/useWindowsBridge'
 import type { DeskWindow } from '@/api/windowsApi'
 
@@ -116,6 +116,44 @@ describe('the cache entry', () => {
     windowsWs.last = [row('s-9', 'w-1', 'Screen 1')]
     const { result } = renderHook(() => useThisWindow(), { wrapper })
     await waitFor(() => expect(result.current?.id).toBe('s-9'))
+  })
+})
+
+describe('the co-paged windows (desk-follow plan D7)', () => {
+  const busk = (id: string, windowId: string, name: string, pageFollows?: string): DeskWindow => ({
+    ...row(id, windowId, name, '/projects/1/busk'),
+    viewOptions: pageFollows == null ? { focus: 'split' } : { focus: 'split', pageFollows },
+  })
+
+  it('names the other busk windows paged with the desk — never this one, an own-page one or another view', () => {
+    const windows = [
+      busk('s-1', 'w-1', 'Screen 1', 'true'),
+      busk('s-2', 'w-2', 'Screen 2', 'true'),
+      busk('s-3', 'w-3', 'Screen 3', 'false'),
+      row('s-4', 'w-4', 'iPad'),
+      // Not announced yet: paged with, as its own tab reads an undecided flag.
+      busk('s-5', 'w-5', 'Screen 4'),
+      // Rig focus still pages with the group.
+      { ...busk('s-6', 'w-6', 'Rig screen', 'true'), viewOptions: { focus: 'rig', pageFollows: 'true' } },
+    ]
+    expect(coPagedWindowNames(windows, 'w-1')).toEqual(['Screen 2', 'Screen 4', 'Rig screen'])
+    // Before this window's own row has landed, every paged-with busk row is someone else's.
+    expect(coPagedWindowNames(windows, 'w-9')).toEqual(['Screen 1', 'Screen 2', 'Screen 4', 'Rig screen'])
+  })
+
+  it('answers live, and keeps its identity across a frame that changes nothing it names', async () => {
+    windowsWs.last = [busk('s-1', 'w-1', 'Screen 1', 'true'), busk('s-2', 'w-2', 'Screen 2', 'true')]
+    const { result } = renderHook(() => useCoPagedWindowNames(), { wrapper })
+    await waitFor(() => expect(result.current).toContain('Screen 2'))
+    const before = result.current
+    act(() => {
+      windowsWs.fire([{ ...busk('s-1', 'w-1', 'Screen 1', 'true'), fullscreen: true }, busk('s-2', 'w-2', 'Screen 2', 'true')])
+    })
+    expect(result.current).toBe(before)
+    act(() => {
+      windowsWs.fire([busk('s-1', 'w-1', 'Screen 1', 'true'), busk('s-2', 'w-2', 'Screen 2', 'false')])
+    })
+    await waitFor(() => expect(result.current).not.toContain('Screen 2'))
   })
 })
 
@@ -290,6 +328,20 @@ describe('handleWindowCommand', () => {
     expect(getBuskFocus()).toBe('rig')
     // A view that contributes nothing applies nothing, even addressed correctly.
     expect(handleWindowCommand({ ...busk, view: '/projects/1/looks' }, ctx('/projects/1/looks'))).toBe('ignored')
+  })
+
+  it('applies pageFollows on the busk view: false keeps the page it shows as its own, true pages with the desk again (desk-follow D6)', () => {
+    const frame = (options: Record<string, string>) => ({ type: 'viewOptions' as const, targetId: 's-1', view: '/projects/1/busk', options })
+    reportShowingBuskPage(7)
+    expect(handleWindowCommand(frame({ pageFollows: 'false' }), ctx('/projects/1/busk'))).toBe('applied')
+    expect(isFollowingBuskPage()).toBe(false)
+    expect(getLocalBuskPage()).toBe(7)
+    expect(handleWindowCommand(frame({ pageFollows: 'true' }), ctx('/projects/1/busk'))).toBe('applied')
+    expect(isFollowingBuskPage()).toBe(true)
+    // Aimed at the busk view while this window shows another, it is not applied.
+    unlinkBuskPage(3)
+    expect(handleWindowCommand(frame({ pageFollows: 'true' }), ctx('/projects/1/programmer'))).toBe('ignored')
+    expect(isFollowingBuskPage()).toBe(false)
   })
 
   it('applies immersive on any of the four live views, and a busk key on none but busk (busk-chrome D9)', () => {

@@ -39,7 +39,7 @@ import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import type { DeskWindow } from "./api/windowsApi"
 import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath } from "./lib/windowViews"
-import { BUSK_FOCUSES, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
+import { BUSK_FOCUSES, VIEW_OPTION_PAGE_FOLLOWS, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from "./lib/fullscreen"
 import { VIEW_OPTION_IMMERSIVE, setImmersive, useImmersive } from "./lib/immersive"
 import { toggleTheme, useTheme, type Theme } from "./lib/theme"
@@ -537,6 +537,9 @@ const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus p
  *   (desk-follow plan D1, D4) — flipping with that row's announced flag, mirroring *Show <view> on
  *   <window>*; the *own selection* arm is withheld for a busk row in Rig or Pads focus
  *   (`followIsForced`), where the target would refuse it;
+ * - *<Window> · page with the desk* / *<Window> · own page* for every **other** busk window
+ *   (desk-follow plan D6), flipping with that row's announced `pageFollows` the same way, written
+ *   as a `windows.viewOptions` frame under the row's view;
  * - *Follow the desk selection in this window*, with its state as the detail — and *Stop
  *   following…* withheld in Rig and Pads focus, for the same reason (D4).
  */
@@ -682,6 +685,35 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
         run: () => actions.setFollow(row.id, true),
       })
     }
+  }
+
+  // Another busk window's page (desk-follow plan D6) — the pair as the Screens row's Page segment
+  // offers it, by the flag the row announced, so the arm offered is the one that changes
+  // something. Written as a `viewOptions` frame under the row's own view, which the target applies
+  // only while it is still on the busk view. A row that has not announced the flag counts as
+  // paged with, as its own tab reads it.
+  for (const row of inputs.windows) {
+    if (row.id === inputs.thisRowId || windowViewOf(row.view)?.id !== "busk") continue
+    const paged = row.viewOptions?.[VIEW_OPTION_PAGE_FOLLOWS] !== "false"
+    commands.push(
+      paged
+        ? {
+            id: `window-page-${row.id}-own`,
+            label: `${row.name} · own page`,
+            icon: Unlink2,
+            keywords: ["page", "busk", "own", "local", "unlink", "paging", "screen", "window", row.name],
+            detail: "paged with the desk",
+            run: () => actions.setViewOptions(row.id, row.view, { [VIEW_OPTION_PAGE_FOLLOWS]: "false" }),
+          }
+        : {
+            id: `window-page-${row.id}-desk`,
+            label: `${row.name} · page with the desk`,
+            icon: Link2,
+            keywords: ["page", "busk", "desk", "link", "paging", "group", "screen", "window", row.name],
+            detail: "own page",
+            run: () => actions.setViewOptions(row.id, row.view, { [VIEW_OPTION_PAGE_FOLLOWS]: "true" }),
+          },
+    )
   }
 
   // The label flips with the state, like the full-screen pair above: an item that read *Follow…*

@@ -15,10 +15,11 @@ import { cn } from '@/lib/utils'
  * the type system rather than by two developers remembering to edit both files; the two flags stay
  * as independent as they were.
  *
- * **A chip is drawn only while its window is unlinked** (busk-chrome plan D18) — *Desk* is the
+ * **A pill is drawn only while its window is unlinked** (busk-chrome plan D18) — *Desk* is the
  * resting state and a pill saying so all night is noise — so what this draws today is the dashed
- * form. The solid form and the suffix are kept on the primitive: a chip that comes back to say
- * *Desk* would draw them, and the parts' folds below are written for both.
+ * form; while linked each chip draws `LinkBadge` instead (desk-follow plan D7, D8), a glyph rather
+ * than a pill. The solid form and the suffix are kept on the primitive: a chip that comes back to
+ * say *Desk* would draw them, and the parts' folds below are written for both.
  *
  * `subject` is a word like *Targets* or *Page*, drawn muted before the value, where the pair is on
  * screen together and omitted where a chip is alone (the programmer's row C). `from` is the mover's
@@ -26,7 +27,7 @@ import { cn } from '@/lib/utils'
  * suffix first, then its subject, then the value truncates — each at a rung the *host* measures
  * for the row the chip sits on, which is why the classes come in rather than being chosen here.
  * The width may hide a part; the accessible name may not change with it, so the button carries the
- * whole reading as `aria-label` — `Targets: This window`, `Page: Desk · from Screen 2` — and a
+ * whole reading as `aria-label` — `Targets: This window`, `Page: Own` — and a
  * test or a screen reader gets the same name at every width. The pill's base is `shrink-0`; a host
  * that wants the value to truncate hands `min-w-0 shrink`, both words, since `twMerge` keeps
  * `shrink-0` beside a bare `min-w-0`.
@@ -49,7 +50,7 @@ export function FollowPill({
   from?: string
   /** The suffix's fold — the host's rung, and the first part to go. Drawn always when absent. */
   fromClass?: string
-  /** The value: *Desk* or *This window*. */
+  /** The value: *This window* for the selection, *Own* for the page. */
   label: string
   title: string
   onClick: () => void

@@ -13,13 +13,20 @@ import {
   PAD_EDIT_WORD_CLASS,
   PAD_FOCUS_WORD_CLASS,
   PAD_LABEL_CLASS,
+  PAD_PAGE_NAMES_CLASS,
+  PAD_PAGE_SUBJECT_CLASS,
   PAD_ROW_FLOOR_PX,
   PAD_SECOND_ROW_CLASS,
   PAD_TWO_ROWS_CLASS,
   PAD_VERB_WORD_CLASS,
+  FOLDED_PAGE_NAMES_CLASS,
+  MERGED_PAGE_NAMES_CLASS,
+  SPLIT_PAGE_NAMES_CLASS,
+  SPLIT_PAGE_SUBJECT_CLASS,
   type BuskPageStripProps,
   type PadRowSelection,
 } from './BuskPageStrip'
+import { pagedWithDeskTitle } from './BuskPageChip'
 import type { BuskingTarget } from './buskingTypes'
 import type { SelectionVerbs } from './selectionVerbs'
 import type { Fixture } from '@/store/fixtures'
@@ -27,12 +34,20 @@ import type { Fixture } from '@/store/fixtures'
 const programmer = { blind: false }
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => programmer.blind }))
 
+/** The other windows paged with the desk, as the registry would answer them. */
+const coPaged = { names: [] as string[] }
+vi.mock('@/store/windows', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/windows')>()),
+  useCoPagedWindowNames: () => coPaged.names,
+}))
+
 /**
  * The pad row (busk-chrome plan session A.5, D17–D20): in Pads on the desk board the body's top
  * row, carrying the `PADS` label, the tabs at the rig row's control size, the three selection verbs
- * pressing the host's handlers, the summary in the gap, the family pill and the page chip only
- * while unlinked, then the host's controls; in Split the tabs and the page chip only. Its folds
- * are its own ladder of the rig row's shape.
+ * pressing the host's handlers, the summary in the gap, the family pill, then the host's controls;
+ * in Split the tabs and the page mark only. The page mark (desk-follow D7) sits beside the tabs in
+ * every shape: the link badge while paged with the desk, *Page: Own* while not. Its folds are its
+ * own ladder of the rig row's shape.
  */
 const pages: BuskPage[] = [
   { id: 4, uuid: 'p4', name: 'Ballads', sortOrder: 0, rows: [] },
@@ -88,13 +103,14 @@ function draw(props: Partial<BuskPageStripProps> = {}) {
 
 afterEach(() => {
   cleanup()
+  coPaged.names = []
   window.sessionStorage.clear()
   resetBuskPageFollowStores()
   resetDeskFollowStores()
 })
 
 describe('the pad row', () => {
-  it('in Pads is the label, the tabs, the three verbs, the summary, the pill, both chips, then the host’s controls (D17)', () => {
+  it('in Pads is the label, the tabs and the page mark, the three verbs, the summary, the pill, the desk chip, then the host’s controls (D17)', () => {
     unlinkBuskPage(4)
     unlinkFromDesk({ targets: [], families: null })
     draw({ pads: padsOf(verbs().v, ['COLOUR']), controls: <button type="button">Focus here</button> })
@@ -104,9 +120,9 @@ describe('the pad row', () => {
       (el) => el.getAttribute('aria-label') ?? el.textContent,
     )
     expect(order).toEqual([
-      'Ballads', 'Dance',
+      'Ballads', 'Dance', 'Page: Own',
       'Spread…', 'Locate', 'Highlight',
-      'PAR 1 · 1 head', 'Colour', 'Targets: This window', 'Page: This window', 'Focus here',
+      'PAR 1 · 1 head', 'Colour', 'Targets: This window', 'Focus here',
     ])
     // The label is the row's first thing, and folds by its rung.
     const label = screen.getByText('Pads', { selector: 'div' })
@@ -143,9 +159,9 @@ describe('the pad row', () => {
         (el) => el.getAttribute('aria-label') ?? el.textContent,
       )
       expect(order).toEqual([
-        'Ballads', 'Dance',
+        'Ballads', 'Dance', 'Page: Own',
         'Spread…', 'Locate', 'Highlight',
-        'PAR 1 · 1 head', 'Colour', 'Blind', 'Targets: This window', 'Page: This window', 'Focus here',
+        'PAR 1 · 1 head', 'Colour', 'Blind', 'Targets: This window', 'Focus here',
       ])
       cleanup()
       // In Split and Rig the rig row carries it; the pad row does not repeat it.
@@ -157,7 +173,7 @@ describe('the pad row', () => {
     }
   })
 
-  it('in Split is the tabs and the page chip only — no label, no verbs, no summary, no desk chip, and the host’s controls still at the end', () => {
+  it('in Split is the tabs and the page mark only — no label, no verbs, no summary, no desk chip, and the host’s controls still at the end', () => {
     unlinkBuskPage(4)
     unlinkFromDesk({ targets: [], families: null })
     draw({ controls: <button type="button">Sheet</button> })
@@ -166,7 +182,7 @@ describe('the pad row', () => {
     const order = [...row.querySelectorAll('button, [data-pad-summary], [data-pad-family]')].map(
       (el) => el.getAttribute('aria-label') ?? el.textContent,
     )
-    expect(order).toEqual(['Ballads', 'Dance', 'Page: This window', 'Sheet'])
+    expect(order).toEqual(['Ballads', 'Dance', 'Page: Own', 'Sheet'])
     expect(row.querySelector('[data-pad-summary]')).toBeNull()
     // The label is Pads' — a `div`, which the order above cannot see, so it is asked for by name.
     expect(screen.queryByText('Pads', { selector: 'div' })).toBeNull()
@@ -224,28 +240,60 @@ describe('the pad row', () => {
     expect(document.querySelector('[data-pad-family]')).toBeNull()
   })
 
-  it('draws the page chip only while this window’s page is unlinked, in every shape (D18)', () => {
+  it('marks the page in every shape — the link badge while paged with the desk, *Page: Own* while not — beside the tabs (desk-follow D7, D9)', () => {
+    // Paged with the desk: the badge, a mark and never a control, in the tabs' group.
     draw({ pads: padsOf(verbs().v) })
     expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+    const badge = screen.getByRole('img', { name: 'Paged with the desk' })
+    expect(badge).toHaveAttribute('data-link-badge')
+    expect(badge.closest('[data-pad-row-tabs]')).not.toBeNull()
+    // With nobody else paged with it, the glyph alone.
+    expect(badge.querySelector('[data-link-badge-names]')).toBeNull()
     cleanup()
     draw()
-    expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+    expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeInTheDocument()
     cleanup()
+    // Own page: the dashed chip, whose subject folds at the row's rung (D9's *Own*).
     unlinkBuskPage(4)
     draw({ pads: padsOf(verbs().v) })
-    const chip = screen.getByRole('button', { name: 'Page: This window' })
+    expect(screen.queryByRole('img', { name: /^Paged with the desk/ })).toBeNull()
+    const chip = screen.getByRole('button', { name: 'Page: Own' })
     expect(chip.className).toContain('border-dashed')
-    // It may give: `min-w-0 shrink`, both words, and its subject folds at the row's rung (D19).
+    expect(chip.closest('[data-pad-row-tabs]')).not.toBeNull()
     expect(chip.className).toMatch(/(^| )shrink( |$)/)
     expect(chip.className).toContain('min-w-0')
-    expect(chip.querySelector('[data-pill-subject]')!.className).toContain(PAD_CHIP_SUBJECT_CLASS)
+    expect(chip.querySelector('[data-pill-subject]')!.className).toContain(PAD_PAGE_SUBJECT_CLASS)
     cleanup()
     draw()
-    expect(screen.getByRole('button', { name: 'Page: This window' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Page: Own' }).querySelector('[data-pill-subject]')!.className).toContain(
+      SPLIT_PAGE_SUBJECT_CLASS,
+    )
     // Not with no pages: a click there would spend the arrival decision on nothing.
     cleanup()
     draw({ pages: [], activePageId: null })
     expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+    expect(screen.queryByRole('img', { name: /^Paged with the desk/ })).toBeNull()
+  })
+
+  it('names the other windows paged with the desk on the badge, folding them on each row’s own rung (D7)', () => {
+    coPaged.names = ['Screen 2', 'Screen 3']
+    const title = 'Paged with the desk, with Screen 2 and Screen 3 — a tab click here pages them too'
+    const namesOf = () => screen.getByRole('img', { name: title }).querySelector('[data-link-badge-names]') as HTMLElement
+    draw({ pads: padsOf(verbs().v) })
+    expect(namesOf()).toHaveTextContent('Screen 2 +1')
+    expect(namesOf().className).toBe(PAD_PAGE_NAMES_CLASS)
+    cleanup()
+    draw()
+    expect(namesOf().className).toBe(SPLIT_PAGE_NAMES_CLASS)
+    cleanup()
+    draw({ dense: true })
+    expect(namesOf().className).toBe(MERGED_PAGE_NAMES_CLASS)
+    cleanup()
+    draw({ folded: true })
+    expect(namesOf().className).toBe(FOLDED_PAGE_NAMES_CLASS)
+    // One name reads *it*, and nobody else reads the bare sentence.
+    expect(pagedWithDeskTitle(['Screen 2'])).toBe('Paged with the desk, with Screen 2 — a tab click here pages it too')
+    expect(pagedWithDeskTitle([])).toBe('Paged with the desk')
   })
 
   it('sizes the tabs to the rig row’s controls: a 28px group of 24px text-xs items', () => {
@@ -281,19 +329,33 @@ describe('the pad row', () => {
       expect(m, cls).not.toBeNull()
       return { from: Number(m![1]), to: Number(m![2]), utility: m![3] }
     }
+    // The page badge's names go first (desk-follow D7), and the page chip's *Page:* with them.
+    expect(rung(PAD_PAGE_NAMES_CLASS)).toBeGreaterThan(rung(PAD_VERB_WORD_CLASS))
+    expect(rung(PAD_PAGE_SUBJECT_CLASS)).toBe(rung(PAD_PAGE_NAMES_CLASS))
     expect(rung(PAD_VERB_WORD_CLASS)).toBeGreaterThan(rung(PAD_FOCUS_WORD_CLASS))
     expect(rung(PAD_EDIT_WORD_CLASS)).toBe(rung(PAD_VERB_WORD_CLASS))
     expect(rung(PAD_CHIP_SUBJECT_CLASS)).toBe(rung(PAD_FOCUS_WORD_CLASS))
     expect(rung(PAD_FOCUS_WORD_CLASS)).toBeGreaterThan(rung(PAD_LABEL_CLASS))
     expect(rung(PAD_LABEL_CLASS)).toBeGreaterThan(PAD_ROW_FLOOR_PX)
     expect(PAD_LABEL_CLASS).toMatch(/^hidden @\[\d+px\]:block$/)
-    for (const cls of [PAD_VERB_WORD_CLASS, PAD_EDIT_WORD_CLASS, PAD_FOCUS_WORD_CLASS, PAD_CHIP_SUBJECT_CLASS]) {
+    for (const cls of [
+      PAD_PAGE_NAMES_CLASS,
+      PAD_PAGE_SUBJECT_CLASS,
+      PAD_VERB_WORD_CLASS,
+      PAD_EDIT_WORD_CLASS,
+      PAD_FOCUS_WORD_CLASS,
+      PAD_CHIP_SUBJECT_CLASS,
+    ]) {
       const { from, to, utility } = range(cls)
       expect(to).toBe(PAD_ROW_FLOOR_PX)
       expect(from).toBeLessThan(to)
       expect(utility).toBe('inline')
       expect(cls).toMatch(/^hidden @\[\d+px\]:inline @min-/)
     }
+    // Under the floor the first line holds the tabs, the mark and the verbs: the verbs' words come
+    // back before the chip's subject, and that before the badge's names.
+    expect(range(PAD_PAGE_NAMES_CLASS).from).toBeGreaterThan(range(PAD_PAGE_SUBJECT_CLASS).from)
+    expect(range(PAD_PAGE_SUBJECT_CLASS).from).toBeGreaterThan(range(PAD_VERB_WORD_CLASS).from)
     // The floor, on the row: two groups, the second taking its whole line under it.
     draw({ pads: padsOf(verbs().v), controls: <button type="button">Focus here</button> })
     const row = document.querySelector('[data-pad-row="pads"]') as HTMLElement
@@ -321,7 +383,7 @@ describe('the pad row', () => {
     expect(state.querySelector('[data-pad-summary]')).not.toBeNull()
   })
 
-  it('keeps the merged row and the folded strip as they were: no label, no verbs, no summary', () => {
+  it('keeps the merged row and the folded strip as they were — no label, no verbs, no summary — beside the page mark', () => {
     draw({ dense: true, leading: <span>leading</span>, controls: <span>ctl</span> })
     const merged = document.querySelector('[data-pad-row="merged"]') as HTMLElement
     expect(merged.className).toContain('h-full')
@@ -334,6 +396,8 @@ describe('the pad row', () => {
     const folded = document.querySelector('[data-busk-page-strip="folded"]') as HTMLElement
     expect(folded.className).toContain('h-10')
     expect(folded).toHaveTextContent('Ballads')
+    // Rig focus still pages with the group, so the fold carries the page mark (D7).
+    expect(within(folded).getByRole('img', { name: 'Paged with the desk' })).toBeInTheDocument()
     expect(within(folded).queryByRole('button', { name: 'Ballads' })).toBeNull()
   })
 

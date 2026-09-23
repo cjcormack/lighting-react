@@ -1,5 +1,5 @@
 import { pathHasSegment } from './navMatch'
-import { BUSK_FOCUSES, LIVE_SHEET_TABS } from './buskWindow'
+import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskWindow'
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
 
 /**
@@ -47,8 +47,33 @@ export type WindowViewOption =
       values: readonly string[]
       /** A label per value, for an enum whose wire spelling is not what the row should say. */
       valueLabels?: Readonly<Record<string, string>>
+      /**
+       * A shorter label per value, drawn instead of [valueLabels] on a narrow row (the Screens
+       * sheet's rung). The accessible name stays the long one at every width.
+       */
+      shortValueLabels?: Readonly<Record<string, string>>
+      /** The segment's accessible name where [label] would collide with another control's. */
+      name?: string
     }
   | { key: string; label: string; kind: 'page' }
+
+/**
+ * *Page · Paged with the desk | Own page* (desk-follow plan D6, D9): whether that window pages with
+ * the desk's paging group — the MIDI Next · Prev · Set and every window in the group — or shows a
+ * page of its own. The wire is the announce's own `'true'` | `'false'`, which the target applies
+ * (`applyBuskViewOptions`); the row says what the window does, *With desk* · *Own* where it is
+ * narrow. It sits immediately before the page picker, whose own label it stands in for on the row,
+ * so its accessible name is *Paging* — two controls called *Page on Screen 2* would be one too many.
+ */
+export const PAGE_FOLLOWS_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_PAGE_FOLLOWS,
+  label: 'Page',
+  name: 'Paging',
+  kind: 'enum',
+  values: ['true', 'false'],
+  valueLabels: { true: 'Paged with the desk', false: 'Own page' },
+  shortValueLabels: { true: 'With desk', false: 'Own' },
+}
 
 /** Sheet as one enum with `none` (D7), offering only the tabs that have landed. */
 const BUSK_SHEET_VALUES: readonly string[] = ['none', ...LIVE_SHEET_TABS]
@@ -77,6 +102,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     options: [
       { key: 'focus', label: 'Focus', kind: 'enum', values: BUSK_FOCUSES },
       { key: 'sheet', label: 'Sheet', kind: 'enum', values: BUSK_SHEET_VALUES },
+      PAGE_FOLLOWS_OPTION,
       { key: 'page', label: 'Page', kind: 'page' },
       IMMERSIVE_OPTION,
     ],

@@ -1,7 +1,10 @@
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import type { DeskWindow, WindowAnnounce } from '../api/windowsApi'
+import { useMemo } from 'react'
 import { windowId } from '../lib/windowIdentity'
+import { windowViewOf } from '../lib/windowViews'
+import { VIEW_OPTION_PAGE_FOLLOWS } from '../lib/buskWindow'
 
 /**
  * The desk's windows registry — see `api/windowsApi.ts` for the wire and its rules.
@@ -67,6 +70,39 @@ export function useThisWindow(): DeskWindow | null {
 /** The row id this tab answers to, read at command time rather than through a hook. */
 export function thisWindowRowId(): string | null {
   return thisWindowRow(lightingApi.windows.getState() ?? NO_WINDOWS)?.id ?? null
+}
+
+/**
+ * The other open windows **paged with the desk**, by name, in announce order (desk-follow plan D7):
+ * rows on the busk view whose `pageFollows` is not `'false'`, other than this window's own. It is
+ * who a tab click on this window pages too, when this window is paged with the desk — what the
+ * page badge names. A row that has not announced the key yet counts as paged with, the reading
+ * `buskPageFollow.ts` gives its own undecided tab. A row in Rig focus is included: its page is
+ * folded away, but it still pages with the group.
+ */
+export function coPagedWindowNames(windows: readonly DeskWindow[], id: string = windowId()): string[] {
+  const me = thisWindowRow(windows, id)
+  return windows
+    .filter(
+      (w) =>
+        w !== me &&
+        windowViewOf(w.view)?.id === 'busk' &&
+        w.viewOptions?.[VIEW_OPTION_PAGE_FOLLOWS] !== 'false',
+    )
+    .map((w) => w.name)
+}
+
+/**
+ * [coPagedWindowNames], live — narrowed to its answer, so a `windows.state` frame about anything
+ * else (a rename elsewhere, a focus change, a full-screen flip) does not re-render the row. The
+ * answer crosses `selectFromResult` as one joined string, because a fresh array would compare
+ * unequal on every frame.
+ */
+export function useCoPagedWindowNames(): string[] {
+  const { key } = useDeskWindowsQuery(undefined, {
+    selectFromResult: ({ data }) => ({ key: coPagedWindowNames(data ?? NO_WINDOWS).join('\u0000') }),
+  })
+  return useMemo(() => (key === '' ? [] : key.split('\u0000')), [key])
 }
 
 /** Say what this window is. `windowId` is always this tab's; the caller supplies the rest. */

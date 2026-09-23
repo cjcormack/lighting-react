@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { DeskWindow } from '@/api/windowsApi'
 
@@ -24,6 +24,10 @@ const busk = { pages: [{ id: 1, name: 'Colour' }, { id: 3, name: 'Position' }], 
 vi.mock('@/store/busk', () => ({
   useBuskPagesQuery: (_id: number, opts?: { skip?: boolean }) => ({ data: opts?.skip ? undefined : busk.pages }),
   useBuskShowingPageQuery: () => ({ data: busk.deskPageId }),
+  setShowingBuskPage: (pageId: number) => {
+    sent.push({ type: 'setPage', pageId })
+    return true
+  },
 }))
 vi.mock('@/lib/windowIdentity', () => ({ windowId: () => 'w-1', launchImmersive: () => null }))
 vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => ({ id: 1, name: 'Show', isCurrent: true }) }))
@@ -279,7 +283,10 @@ describe('ScreensSheet', () => {
       expect(within(sheet).getByRole('radio', { name: 'none' })).toHaveAttribute('aria-checked', 'true')
       // The page it holds, named through the project's page list, and whose it is.
       expect(within(busk2).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('3')
-      expect(busk2).toHaveTextContent('own page')
+      // …and the Page segment says whose it is (desk-follow D6); the caption it replaced is gone.
+      const paging = within(busk2).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      expect(within(paging).getByRole('radio', { name: 'Own page' })).toHaveAttribute('aria-checked', 'true')
+      expect(busk2).not.toHaveTextContent('own page')
 
       // The busk facts are the busk view's: a Prompt Book row and a programmer row draw neither
       // segment nor the picker (their one segment is Chrome — the next block).
@@ -295,11 +302,66 @@ describe('ScreensSheet', () => {
       expect(within(rowFor('Chris’s iPad')).queryByRole('button', { name: /Copy link for/ })).toBeNull()
     })
 
-    it('shows a following row on the desk’s page, and says it follows', () => {
+    it('shows a paged-with row on the desk’s page, and says it pages with the desk (desk-follow D6)', () => {
       registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'true' } })
       render(<ScreensSheet />)
       expect(within(rowFor('Screen 2')).getByRole('combobox', { name: 'Page on Screen 2' })).toHaveValue('1')
-      expect(rowFor('Screen 2')).toHaveTextContent('follows the desk')
+      const paging = within(rowFor('Screen 2')).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      expect(within(paging).getByRole('radio', { name: 'Paged with the desk' })).toHaveAttribute('aria-checked', 'true')
+      expect(rowFor('Screen 2')).not.toHaveTextContent('follows the desk')
+      // A row that has not announced the key yet reads as paged with, as its own tab does.
+      cleanup()
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed' } })
+      render(<ScreensSheet />)
+      const unsaid = within(rowFor('Screen 2')).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      expect(within(unsaid).getByRole('radio', { name: 'Paged with the desk' })).toHaveAttribute('aria-checked', 'true')
+    })
+
+    it('draws the Page segment with the picker, the words both long and short, the picker’s own label for a screen reader alone (D9)', () => {
+      render(<ScreensSheet />)
+      const group = rowFor('Screen 2').querySelector('[data-page-group]') as HTMLElement
+      const paging = within(group).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      expect(within(group).getByRole('combobox', { name: 'Page on Screen 2' })).toBeInTheDocument()
+      const own = within(paging).getByRole('radio', { name: 'Own page' })
+      const [long, short] = [...own.querySelectorAll('span')]
+      expect(long).toHaveTextContent('Own page')
+      expect(short).toHaveTextContent('Own')
+      expect(long.className).toMatch(/^hidden @\[\d+px\]:inline$/)
+      expect(short.className).toMatch(/^@\[\d+px\]:hidden$/)
+      expect(long.className.match(/\d+/)![0]).toBe(short.className.match(/\d+/)![0])
+      expect(within(paging).getByRole('radio', { name: 'Paged with the desk' })).toHaveTextContent('Paged with the deskWith desk')
+      // One visible *Page* for the pair: the picker's is `sr-only`.
+      expect([...group.querySelectorAll('span')].filter((el) => el.textContent === 'Page').map((el) => el.className.includes('sr-only'))).toEqual([false, true])
+      // Drawn once, not again as a segment of its own after Sheet.
+      expect(within(rowFor('Screen 2')).getAllByRole('radiogroup', { name: 'Paging on Screen 2' })).toHaveLength(1)
+    })
+
+    it('sets the Page segment both ways by a viewOptions frame (D6)', () => {
+      render(<ScreensSheet />)
+      const paging = within(rowFor('Screen 2')).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      fireEvent.click(within(paging).getByRole('radio', { name: 'Paged with the desk' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { pageFollows: 'true' } }])
+      cleanup()
+      sent.length = 0
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'true' } })
+      render(<ScreensSheet />)
+      const again = within(rowFor('Screen 2')).getByRole('radiogroup', { name: 'Paging on Screen 2' })
+      fireEvent.click(within(again).getByRole('radio', { name: 'Own page' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { pageFollows: 'false' } }])
+    })
+
+    it('pages the group from a paged-with row’s picker, and only that window from an own-page row’s (D6)', () => {
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'true' } })
+      render(<ScreensSheet />)
+      fireEvent.change(within(rowFor('Screen 2')).getByRole('combobox', { name: 'Page on Screen 2' }), { target: { value: '3' } })
+      // The desk's showing page — every window paged with it moves — and no frame to the window.
+      expect(sent).toEqual([{ type: 'setPage', pageId: 3 }])
+      cleanup()
+      sent.length = 0
+      registry.windows[1] = row('s-2', 'w-2', 'Screen 2', { view: '/projects/1/busk', viewOptions: { focus: 'split', sheet: 'speed', pageFollows: 'false', page: '3' } })
+      render(<ScreensSheet />)
+      fireEvent.change(within(rowFor('Screen 2')).getByRole('combobox', { name: 'Page on Screen 2' }), { target: { value: '1' } })
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { page: '1' } }])
     })
 
     it('sets focus, sheet and page by one keyed command carrying the row’s view — a page set unlinks the target', () => {
@@ -391,7 +453,7 @@ describe('ScreensSheet', () => {
       expect(within(show).getByRole('radio', { name: 'Immersive' })).toHaveAttribute('aria-checked', 'true')
       // And on the busk row too, last, after Focus · Sheet · Page.
       const busk2 = rowFor('Screen 2')
-      expect(within(busk2).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Focus on Screen 2', 'Sheet on Screen 2', 'Chrome on Screen 2', 'Selection on Screen 2'])
+      expect(within(busk2).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Focus on Screen 2', 'Sheet on Screen 2', 'Paging on Screen 2', 'Chrome on Screen 2', 'Selection on Screen 2'])
     })
 
     it('sets it by the one keyed command carrying the row’s view, on the wire’s spelling', () => {

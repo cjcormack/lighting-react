@@ -83,6 +83,7 @@ import {
   keepFollowingBuskPage,
   relinkBuskPage,
   resetBuskPageFollowStores,
+  showingBuskPage,
   unlinkBuskPage,
 } from '@/lib/buskPageFollow'
 import { toast } from 'sonner'
@@ -346,7 +347,7 @@ describe('the busk view', () => {
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
       // Unlinked, the page chip is drawn — it is drawn only then (D18).
-      expect(await screen.findByRole('button', { name: 'Page: This window' })).toBeTruthy()
+      expect(await screen.findByRole('button', { name: 'Page: Own' })).toBeTruthy()
     })
 
     it('records that it follows when it arrives with no usable `?page=`, so a reload is not an arrival', async () => {
@@ -416,12 +417,15 @@ describe('the busk view', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
-      // No chip to press while following (D18): the unlink is ⌘K's, the Screens sheet's or a
-      // `?page=` arrival's, and it snapshots the page this window is showing.
+      // While paged with the desk the mark is the badge, not a chip (desk-follow D7): the unlink is
+      // ⌘K's, the Screens sheet's or a `?page=` arrival's, and it snapshots the page this window is
+      // showing — which the view reports for a Screens row's `pageFollows: 'false'` to keep (D6).
       expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+      expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeTruthy()
+      expect(showingBuskPage()).toBe(second.id)
       act(() => unlinkBuskPage(second.id))
       // Unlinked, still on Dance — and the desk moving no longer reaches this window.
-      expect(screen.getByRole('button', { name: 'Page: This window' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Page: Own' })).toBeTruthy()
       act(() => buskPageWs.fire(emptyPage.id))
       await new Promise((resolve) => setTimeout(resolve, 20))
       expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page')
@@ -432,12 +436,13 @@ describe('the busk view', () => {
       buskPageWs.last = second.id
       draw([emptyPage, second])
       await screen.findByRole('button', { name: 'Ballads' })
-      fireEvent.click(screen.getByRole('button', { name: 'Page: This window' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Page: Own' }))
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Dance' }).getAttribute('aria-current')).toBe('page'),
       )
       expect(buskPageWs.sent).toEqual([])
       expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
+      expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeTruthy()
     })
 
     it('writes the desk on a tab click while following, and only this window once unlinked', async () => {
@@ -470,7 +475,7 @@ describe('the busk view', () => {
         'page',
       ),
     )
-    expect(screen.getByRole('button', { name: 'Page: This window' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Page: Own' })).toBeTruthy()
     expect(isFollowingBuskPage()).toBe(false)
   })
 

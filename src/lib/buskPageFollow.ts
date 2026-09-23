@@ -133,6 +133,28 @@ export function relinkBuskPage(): void {
 }
 
 /**
+ * The page the busk view is **showing** in this window right now — whichever of the desk's page,
+ * this window's own, `?page=` or the first page won (`BuskingView` resolves that and reports it
+ * here). A plain module value, never stored: it is a reading of what is on screen, and a reload
+ * resolves it again.
+ *
+ * It exists for one reader, a `windows.viewOptions {pageFollows: 'false'}` from another window's
+ * Screens row (desk-follow plan D6), which asks this window to *keep what it has* as its own. The
+ * handler runs in `Layout`, far from the view that knows what it has, and [unlinkBuskPage] is
+ * "keep what I have" only if it is handed what that is — handed nothing, a window on the desk's
+ * page would drop to its `?page=` or the first page at the moment it unlinked.
+ */
+let showing: number | null = null
+
+export function reportShowingBuskPage(pageId: number | null): void {
+  showing = pageId
+}
+
+export function showingBuskPage(): number | null {
+  return showing
+}
+
+/**
  * Record that this window follows, without changing what it shows.
  *
  * Only the arrival effect calls it, and only to move the flag off *undecided* — see
@@ -146,4 +168,5 @@ export function keepFollowingBuskPage(): void {
 export function resetBuskPageFollowStores(): void {
   followStore.reset()
   localStore.reset()
+  showing = null
 }

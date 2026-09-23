@@ -37,6 +37,7 @@ import {
   type DisplayChoice,
 } from '@/lib/screens'
 import {
+  PAGE_FOLLOWS_OPTION,
   WINDOW_VIEWS,
   projectIdOfPath,
   windowViewOf,
@@ -46,7 +47,8 @@ import {
 } from '@/lib/windowViews'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
-import { useBuskPagesQuery, useBuskShowingPageQuery } from '@/store/busk'
+import { setShowingBuskPage, useBuskPagesQuery, useBuskShowingPageQuery } from '@/store/busk'
+import { VIEW_OPTION_PAGE } from '@/lib/buskWindow'
 import { useViewedProject } from '@/ProjectSwitcher'
 import {
   renameWindowRow,
@@ -78,9 +80,13 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * the values the window announced (`row.viewOptions`), so the sheet never learns the word busk or
  * the word immersive. The write is one command, `windows.viewOptions {targetId, view, options}`,
  * and the target applies it to its own tab facts and re-announces, so the row is drawn from the
- * registry and never from a guess. **Page is settable**, and a remote set unlinks that window
- * onto the page exactly as arriving with `?page=` does; a following row shows the desk's page and
- * says *follows the desk*, an unlinked one its own and *own page*. What is *not* on the row is
+ * registry and never from a guess. **Page is settable both ways** (desk-follow plan D6): a *Page ·
+ * Paged with the desk | Own page* segment (`PAGE_FOLLOWS_OPTION`, *With desk · Own* on a narrow
+ * row) sets whether that window pages with the desk's paging group, and the picker beside it
+ * follows the row's state — on a paged-with row it pages **the group** (`busk.setPage`, as a tab
+ * click there does), on an own-page row it pages that window alone (`{page}`, which unlinks it onto
+ * that page exactly as arriving with `?page=` does). The *follows the desk / own page* caption the
+ * picker carried went with it: the segment says it. What is *not* on the row is
  * anything a remote set could lose for the operator at that window — the split's height, the
  * documents themselves. *Copy link for <name>* mints the row's whole setup,
  * `?window=…&page=…&focus=…&sheet=…&immersive=on` (the last only while it is on —
@@ -298,20 +304,50 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
     }
   }
 
+  // The picker follows the row's state (desk-follow plan D6): on a paged-with row it pages the
+  // **group** — the desk's showing page, as a tab click on that window does, so every window paged
+  // with the desk moves and the MIDI page LEDs with them — and on an own-page row it pages that
+  // window alone, the `{page}` frame that has always unlinked it onto the page picked.
+  const pick = (value: string) => {
+    if (pageFollows) setShowingBuskPage(Number(value))
+    else set(VIEW_OPTION_PAGE, value)
+  }
+  // The Page segment is drawn **with** the picker, as one group that wraps as a unit: it is the
+  // picker's label on the row (the board's *Page · With the desk | Own · Colour ▾*), and a segment
+  // left at the end of one line with its picker on the next reads as two controls.
+  const pageFollowsOption = view.options!.find((option) => option.key === PAGE_FOLLOWS_OPTION.key)
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2" data-view-options={view.id}>
-      {view.options!.map((option) =>
+    // `@container`: the row's segments fold their words on it (`SHORT_LABEL_CLASS`). The row's own
+    // padding is the `li`'s, so this box is the row's content box and the rung is a number on it.
+    <div className="@container mt-2 flex flex-wrap items-center gap-x-3 gap-y-2" data-view-options={view.id}>
+      {/* The Page segment is drawn inside the page group below, so it is skipped here. */}
+      {view.options!.filter((option) => option.key !== PAGE_FOLLOWS_OPTION.key).map((option) =>
         option.kind === 'enum' ? (
           <EnumOption key={option.key} option={option} rowName={row.name} value={options[option.key] ?? ''} onSet={(v) => set(option.key, v)} />
         ) : (
-          <label key={option.key} className="flex items-center gap-1.5 text-xs">
-            <span className="text-muted-foreground">{option.label}</span>
+          <div key={option.key} className="flex items-center gap-1.5 text-xs" data-page-group>
+            {pageFollowsOption?.kind === 'enum' && (
+              <EnumOption
+                option={pageFollowsOption}
+                rowName={row.name}
+                value={pageFollows ? 'true' : 'false'}
+                onSet={(v) => set(pageFollowsOption.key, v)}
+              />
+            )}
+            {/* The segment before it says *Page*, so the picker's label is for a screen reader
+                alone; a descriptor with no segment beside it still draws it. */}
+            <span className={cn('text-muted-foreground', pageFollowsOption != null && 'sr-only')}>{option.label}</span>
             <Select
               value={shownPage == null ? '' : String(shownPage.id)}
-              onValueChange={(v) => set(option.key, v)}
+              onValueChange={pick}
               disabled={pages == null || pages.length === 0}
             >
-              <SelectTrigger className="h-7 min-w-[8rem]" aria-label={`${option.label} on ${row.name}`}>
+              <SelectTrigger
+                className="h-7 min-w-[8rem]"
+                aria-label={`${option.label} on ${row.name}`}
+                title={pageFollows ? 'Pages every window paged with the desk' : `Pages ${row.name} alone`}
+              >
                 <SelectValue placeholder={shownPage == null ? '—' : undefined} />
               </SelectTrigger>
               <SelectContent>
@@ -322,8 +358,7 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
                 ))}
               </SelectContent>
             </Select>
-            <span className="text-muted-foreground">{pageFollows ? 'follows the desk' : 'own page'}</span>
-          </label>
+          </div>
         ),
       )}
       {viewHasOwnSelection(view.id) && <SelectionFollowOption row={row} viewId={view.id} />}
@@ -400,15 +435,17 @@ function EnumOption({
         value={value}
         onValueChange={(next) => next !== '' && onSet(next)}
         disabled={disabledReason != null}
-        aria-label={`${option.label} on ${rowName}`}
+        aria-label={`${option.name ?? option.label} on ${rowName}`}
         className="h-7 gap-0.5 p-0.5"
       >
         {option.values.map((v) => {
           // The wire's spelling unless the descriptor says otherwise — the Chrome segment says
-          // *App · Immersive* over `off` | `on` (busk-chrome plan D9).
-          // A wire spelling is capitalised for the row; a descriptor's own label is drawn as
-          // written, so *This window* does not become *This Window*.
+          // *App · Immersive* over `off` | `on` (busk-chrome plan D9). A wire spelling is
+          // capitalised for the row; a descriptor's own label is drawn as written, so *This
+          // window* does not become *This Window*. A short label, where the descriptor has one,
+          // takes the long one's place on a narrow row; the accessible name is the long one.
           const label = option.valueLabels?.[v]
+          const short = option.shortValueLabels?.[v]
           return (
             <ToggleGroupItem
               key={v}
@@ -416,7 +453,14 @@ function EnumOption({
               aria-label={label ?? v}
               className={cn('h-6 px-2 text-xs', label == null && 'capitalize')}
             >
-              {label ?? v}
+              {short == null ? (
+                (label ?? v)
+              ) : (
+                <>
+                  <span className={LONG_LABEL_CLASS}>{label ?? v}</span>
+                  <span className={SHORT_LABEL_CLASS}>{short}</span>
+                </>
+              )}
             </ToggleGroupItem>
           )
         })}
@@ -425,6 +469,16 @@ function EnumOption({
     </div>
   )
 }
+
+/**
+ * A segment's words on a narrow row: the long label from **390px** of the row's content box, the
+ * short one below it (desk-follow plan D9). The page group — *Page · Paged with the desk | Own
+ * page* and the picker's 8rem — is 381px worded and 290 short, measured in the app on 2026-09-23;
+ * a phone's row is 316, the sheet's widest 454. Below the rung the group takes the short forms, and
+ * the group never wraps within itself, so the picker stays beside the segment that labels it.
+ */
+const LONG_LABEL_CLASS = 'hidden @[390px]:inline'
+const SHORT_LABEL_CLASS = '@[390px]:hidden'
 
 /** The name, edited in place: committed on ⏎ or blur, reverted on Escape, a blank reverted too. */
 function NameField({ row }: { row: DeskWindow }) {

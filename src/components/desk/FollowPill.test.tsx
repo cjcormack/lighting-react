@@ -46,7 +46,7 @@ describe('FollowPill', () => {
   })
 
   it('names the subject and value without a suffix', () => {
-    render(<FollowPill following={false} subject="Page" label="This window" title="t" onClick={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Page: This window' })).toBeInTheDocument()
+    render(<FollowPill following={false} subject="Page" label="Own" title="t" onClick={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Page: Own' })).toBeInTheDocument()
   })
 })

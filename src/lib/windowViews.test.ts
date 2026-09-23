@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IMMERSIVE_OPTION, WINDOW_VIEWS, projectIdOfPath, windowViewLabel, windowViewOf, windowViewPath } from './windowViews'
+import { IMMERSIVE_OPTION, PAGE_FOLLOWS_OPTION, WINDOW_VIEWS, projectIdOfPath, windowViewLabel, windowViewOf, windowViewPath } from './windowViews'
 
 /**
  * The six views one window can put on another: the four live views in `ViewSwitcher` order, then
@@ -21,8 +21,8 @@ describe('WINDOW_VIEWS', () => {
       expect(chrome, view.id).toBe(IMMERSIVE_OPTION)
     }
     expect(IMMERSIVE_OPTION).toMatchObject({ label: 'Chrome', kind: 'enum', values: ['off', 'on'], valueLabels: { off: 'App', on: 'Immersive' } })
-    // Busk keeps its three and takes the fourth last, so the segment sits at the row's end everywhere.
-    expect(WINDOW_VIEWS[3]!.options!.map((o) => o.key)).toEqual(['focus', 'sheet', 'page', 'immersive'])
+    // Busk keeps its own and takes Chrome last, so the segment sits at the row's end everywhere.
+    expect(WINDOW_VIEWS[3]!.options!.map((o) => o.key)).toEqual(['focus', 'sheet', 'pageFollows', 'page', 'immersive'])
     expect(WINDOW_VIEWS[4]!.options).toBeUndefined()
     expect(WINDOW_VIEWS[5]!.options).toBeUndefined()
   })
@@ -54,5 +54,21 @@ describe('projectIdOfPath', () => {
     expect(projectIdOfPath('/projects/12')).toBe(12)
     expect(projectIdOfPath('/install/users')).toBeNull()
     expect(projectIdOfPath('/projects/abc/busk')).toBeNull()
+  })
+})
+
+describe('PAGE_FOLLOWS_OPTION (desk-follow plan D6, D9)', () => {
+  it('is the announce’s own true | false, said as the job and shortened for a narrow row, just before the picker', () => {
+    expect(PAGE_FOLLOWS_OPTION).toMatchObject({
+      key: 'pageFollows',
+      label: 'Page',
+      name: 'Paging',
+      kind: 'enum',
+      values: ['true', 'false'],
+      valueLabels: { true: 'Paged with the desk', false: 'Own page' },
+      shortValueLabels: { true: 'With desk', false: 'Own' },
+    })
+    const busk = WINDOW_VIEWS.find((v) => v.id === 'busk')!.options!
+    expect(busk.indexOf(PAGE_FOLLOWS_OPTION) + 1).toBe(busk.findIndex((o) => o.kind === 'page'))
   })
 })

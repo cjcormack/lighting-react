@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
-import { unlinkBuskPage, useBuskPageFollow, useLocalBuskPage } from './buskPageFollow'
+import { relinkBuskPage, showingBuskPage, unlinkBuskPage, useBuskPageFollow, useLocalBuskPage } from './buskPageFollow'
 
 /**
  * **The busk view's per-window facts** — the shape one window gives the view (busk-further plan
@@ -419,18 +419,42 @@ export interface AppliedBuskViewOptions {
   focus?: BuskFocus
   sheet?: BuskSheet
   page?: number
+  /** Whether the frame left this window paged with the desk (`true`) or on its own page. */
+  pageFollows?: boolean
+}
+
+/** The page seams, for the tests; production reads `buskPageFollow.ts`. */
+export interface BuskPageSeams {
+  /** Unlink onto [pageId] — `?page=`'s gesture. Null keeps whatever this window shows. */
+  unlinkPage?: (pageId: number | null) => void
+  /** Page with the desk again — the page chip's own press. */
+  relinkPage?: () => void
+  /** The page this window is showing now, or null before the view has resolved one. */
+  showingPage?: () => number | null
 }
 
 /**
  * Apply a `windows.viewOptions` frame's `options` to this window's busk facts (D13). Focus and
- * sheet are the tab's own stores; a **page** set unlinks this window onto that page exactly as
- * arriving with `?page=` does, through `buskPageFollow.ts`, so the page chip says *This window*
- * afterwards. Keys this view does not contribute are ignored, and so is a value outside the
- * vocabulary. Returns what changed, for the caller and the tests.
+ * sheet are the tab's own stores. The page is `buskPageFollow.ts`'s, two keys and one fact
+ * (desk-follow plan D6):
+ *
+ * - **`page`** unlinks this window onto that page exactly as arriving with `?page=` does, so the
+ *   page chip says *Page: Own* afterwards.
+ * - **`pageFollows: 'true'`** pages the window with the desk again — the chip's own press,
+ *   `relinkBuskPage` — and **`'false'`** keeps the page it is showing as its own, which is why it
+ *   needs [BuskPageSeams.showingPage]: the window may be showing the desk's page, its `?page=` or
+ *   the first page, and only the view knows which (`BuskingView` reports it).
+ *
+ * **A frame carrying both resolves on `pageFollows`.** `false` with a page is the unlink onto that
+ * page, one gesture, not two. `true` with a page relinks and ignores the page: the two contradict
+ * each other, and following is the statement — a paged-with window's page is the desk's, which a
+ * frame aimed at one window must not move (the Screens row pages the group with `busk.setPage`,
+ * never through here). Keys this view does not contribute are ignored, and so is a value outside
+ * the vocabulary. Returns what changed, for the caller and the tests.
  */
 export function applyBuskViewOptions(
   options: Readonly<Record<string, string>>,
-  seams: { unlinkPage?: (pageId: number) => void } = {},
+  seams: BuskPageSeams = {},
 ): AppliedBuskViewOptions {
   const applied: AppliedBuskViewOptions = {}
   const focus = options[VIEW_OPTION_FOCUS]
@@ -446,15 +470,28 @@ export function applyBuskViewOptions(
     setBuskSheet(sheet)
     applied.sheet = sheet
   }
-  const page = options[VIEW_OPTION_PAGE]
-  if (page != null && /^\d+$/.test(page)) {
-    const pageId = Number(page)
-    if (Number.isSafeInteger(pageId) && pageId > 0) {
-      ;(seams.unlinkPage ?? unlinkBuskPage)(pageId)
-      applied.page = pageId
-    }
+  const unlink = seams.unlinkPage ?? unlinkBuskPage
+  const follows = options[VIEW_OPTION_PAGE_FOLLOWS]
+  const page = parsePageId(options[VIEW_OPTION_PAGE])
+  if (follows === 'true') {
+    ;(seams.relinkPage ?? relinkBuskPage)()
+    applied.pageFollows = true
+  } else if (page != null) {
+    unlink(page)
+    applied.page = page
+    applied.pageFollows = false
+  } else if (follows === 'false') {
+    unlink((seams.showingPage ?? showingBuskPage)())
+    applied.pageFollows = false
   }
   return applied
+}
+
+/** A page id off the wire: a positive safe integer, or null for anything else. */
+function parsePageId(value: string | undefined): number | null {
+  if (value == null || !/^\d+$/.test(value)) return null
+  const pageId = Number(value)
+  return Number.isSafeInteger(pageId) && pageId > 0 ? pageId : null
 }
 
 /** Test seam: every store back to its fallback, and the cached media answers dropped. */

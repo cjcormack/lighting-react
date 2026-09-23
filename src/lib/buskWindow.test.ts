@@ -28,7 +28,13 @@ import {
   useBuskSheet,
   useBuskWindowDecided,
 } from './buskWindow'
-import { getLocalBuskPage, isFollowingBuskPage, resetBuskPageFollowStores } from './buskPageFollow'
+import {
+  getLocalBuskPage,
+  isFollowingBuskPage,
+  reportShowingBuskPage,
+  resetBuskPageFollowStores,
+  unlinkBuskPage,
+} from './buskPageFollow'
 
 /**
  * The busk view's per-window facts (busk-further plan §3.4, D5–D7): defaults from the surface until
@@ -302,9 +308,56 @@ describe('applyBuskViewOptions', () => {
   })
 
   it('unlinks this window onto a page, exactly as arriving with ?page= does (D13)', () => {
-    expect(applyBuskViewOptions({ page: '3' })).toEqual({ page: 3 })
+    expect(applyBuskViewOptions({ page: '3' })).toEqual({ page: 3, pageFollows: false })
     expect(isFollowingBuskPage()).toBe(false)
     expect(getLocalBuskPage()).toBe(3)
+  })
+
+  describe('pageFollows (desk-follow plan D6)', () => {
+    it("pages the window with the desk again on 'true' — the chip's own press", () => {
+      unlinkBuskPage(3)
+      expect(applyBuskViewOptions({ pageFollows: 'true' })).toEqual({ pageFollows: true })
+      expect(isFollowingBuskPage()).toBe(true)
+      expect(getLocalBuskPage()).toBeNull()
+    })
+
+    it("keeps the page the window is showing as its own on 'false'", () => {
+      reportShowingBuskPage(5)
+      expect(applyBuskViewOptions({ pageFollows: 'false' })).toEqual({ pageFollows: false })
+      expect(isFollowingBuskPage()).toBe(false)
+      expect(getLocalBuskPage()).toBe(5)
+    })
+
+    it("still unlinks on 'false' before the view has resolved a page, keeping nothing rather than inventing one", () => {
+      const unlinkPage = vi.fn()
+      expect(applyBuskViewOptions({ pageFollows: 'false' }, { unlinkPage, showingPage: () => null })).toEqual({ pageFollows: false })
+      expect(unlinkPage).toHaveBeenCalledWith(null)
+    })
+
+    it("resolves a frame carrying both keys on pageFollows: 'false' with a page unlinks onto that page, once", () => {
+      reportShowingBuskPage(5)
+      const unlinkPage = vi.fn()
+      expect(applyBuskViewOptions({ pageFollows: 'false', page: '3' }, { unlinkPage })).toEqual({ page: 3, pageFollows: false })
+      expect(unlinkPage).toHaveBeenCalledTimes(1)
+      expect(unlinkPage).toHaveBeenCalledWith(3)
+    })
+
+    it("and 'true' with a page relinks and ignores the page — a paged-with window's page is the desk's", () => {
+      const unlinkPage = vi.fn()
+      const relinkPage = vi.fn()
+      expect(applyBuskViewOptions({ pageFollows: 'true', page: '3' }, { unlinkPage, relinkPage })).toEqual({ pageFollows: true })
+      expect(relinkPage).toHaveBeenCalledTimes(1)
+      expect(unlinkPage).not.toHaveBeenCalled()
+    })
+
+    it('ignores a value outside the vocabulary, and a page that is not a positive integer', () => {
+      const unlinkPage = vi.fn()
+      const relinkPage = vi.fn()
+      expect(applyBuskViewOptions({ pageFollows: 'yes', page: '0' }, { unlinkPage, relinkPage })).toEqual({})
+      expect(applyBuskViewOptions({ page: '-2' }, { unlinkPage, relinkPage })).toEqual({})
+      expect(unlinkPage).not.toHaveBeenCalled()
+      expect(relinkPage).not.toHaveBeenCalled()
+    })
   })
 
   it('ignores keys it does not contribute, and values outside the vocabulary', () => {

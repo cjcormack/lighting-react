@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
  * **One component for both uses so they cannot drift**: `DeskChip` draws it beside the family pill
  * for the selection, glyph only at every width, and the page's (D7) beside the tabs, naming
  * any other window paged with this one. [names] is that list — the first is drawn after the glyph,
- * the rest counted as `+N`, every one listed by the host in [title] — and [namesClass] is the row's
+ * capped at 96px, the rest counted as `+N`, every one listed by the host in [title] — and [namesClass] is the row's
  * rung for folding them to the glyph alone (D19's convention: the host measures, the part takes a
  * class). With no names it is the glyph and nothing else.
  *
@@ -52,7 +52,9 @@ export function LinkBadge({
       <Link2 className="size-[11px] shrink-0" aria-hidden />
       {shown != null && (
         <span data-link-badge-names className={namesClass}>
-          {shown[0]}
+          {/* Capped, so a long window name has a ceiling a row's ladder can be measured against;
+              the whole list is on the hover. The count is outside the cap and never truncates. */}
+          <span className="inline-block max-w-24 truncate align-bottom">{shown[0]}</span>
           {shown.length > 1 && ` +${shown.length - 1}`}
         </span>
       )}
