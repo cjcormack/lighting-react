@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, EyeOff, Flashlight, Info, Pencil, Trash2, X } from 'lucide-react'
+import { Crosshair, EyeOff, Flashlight, Info, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -543,12 +543,15 @@ export function PatchSheet({
     }),
     [],
   )
+  const openRow = useCallback((row: PatchSheetRow) => onEditPatch(row.patch.id), [onEditPatch])
   const sheet = useSheet<PatchSheetRow, PatchColumnKey>({
     rows,
     columns,
     permission: { entry: true, clear: true },
     copy,
     noun: 'fixture',
+    rowName: patchRowName,
+    onOpenRow: openRow,
   })
   const { selectedRows, cellCount, cellSelection } = sheet
   const selectedCount = selectedRows.length
@@ -678,8 +681,8 @@ export function PatchSheet({
                   row marquee, so the rename is the second gesture, the split the value cells make
                   (CLAUDE.md §The cell editor's three forms); the trigger's click bubbles to the
                   sticky cell's `onRowClick`, and the marquee arms on `pointerdown` regardless of
-                  what it lands on. The pencil beside it still opens the full patch editor, which
-                  is also the keyboard route to a rename. */}
+                  what it lands on. The pencil beside it — the kit's, `firstColumn.onOpen` — still
+                  opens the full patch editor, and so does ⏎ with this one row selected. */}
               <span className="relative min-w-0 flex-1">
                 <TextCell
                   {...firstColumnCellProps<string>({
@@ -703,27 +706,10 @@ export function PatchSheet({
               {row.patch.stageHidden && (
                 <EyeOff className="relative size-3 shrink-0 text-muted-foreground" role="img" aria-label="Hidden from Stage view" />
               )}
-              <span
-                className="relative hidden shrink-0 items-center gap-0.5 group-hover/row:inline-flex group-focus-within/row:inline-flex"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-8"
-                      onClick={() => onEditPatch(row.patch.id)}
-                      aria-label={`Edit ${row.patch.displayName}`}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit {row.patch.displayName}</TooltipContent>
-                </Tooltip>
-              </span>
             </>
           ),
+          onOpen: openRow,
+          openLabel: (row) => `Edit ${row.patch.displayName}`,
         }}
       />
       {overlaps.size > 0 && (
@@ -737,6 +723,11 @@ export function PatchSheet({
       <span className="sr-only">{cellSelection.count} cells selected</span>
     </div>
   )
+}
+
+/** A head's name in a skip read-out — an Angle over a head with no beam angle, say. */
+function patchRowName(row: PatchSheetRow): string {
+  return row.patch.displayName
 }
 
 function isCellAddress(value: unknown): value is CellAddress {

@@ -22,6 +22,7 @@ import { CueStatePip } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
+import { ReadOutButton } from '@/components/sheet/ReadOutButton'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 
 /**
@@ -36,7 +37,7 @@ import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
 export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'notes'
@@ -251,7 +252,9 @@ export function CueSheet({
           <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={CURVE_OPTIONS} />
         ),
         // Nothing to set on a snap cue, so nothing drawn — see the docblock's blank-vs-em-dash rule.
+        // A marquee that sweeps one up skips it (the kit drops it before `write`) and says why.
         display: () => null,
+        skipNote: (skipped) => `${listNames(skipped.map(cueRowName), 'cue')} ${skipped.length === 1 ? 'snaps' : 'snap'} · skipped`,
         write: (batch, value) => {
           if (typeof value !== 'string' || !CURVE_OPTIONS.some((o) => o.value === value)) return false
           for (const row of batch) if (value !== row.cue.fadeCurve) patch(row.cue.id, { fadeCurve: value })
@@ -319,13 +322,13 @@ export function CueSheet({
           // that names a place in another document, and sending it to the card was answering a
           // different question from the one the column asks.
           return location ? (
-            <ReadOut
+            <ReadOutButton
               onClick={() => onOpenBook?.(row.cue.id)}
               disabled={onOpenBook == null}
               title={`${location} — open the Prompt Book here`}
             >
               <span className="truncate text-[11px]">{location}</span>
-            </ReadOut>
+            </ReadOutButton>
           ) : null
         },
       },
@@ -336,10 +339,10 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           row.cue.layerCount > 0 ? (
-            <ReadOut onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card">
+            <ReadOutButton onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card">
               <CountBadge n={row.cue.layerCount} />
               <Layers className="size-3" />
-            </ReadOut>
+            </ReadOutButton>
           ) : null,
       },
       {
@@ -349,10 +352,10 @@ export function CueSheet({
         value: () => undefined,
         display: (row) =>
           row.cue.adHocEffectCount > 0 ? (
-            <ReadOut onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card" className="text-violet-400">
+            <ReadOutButton onClick={() => onOpenCue(row.cue.id)} title="Open the cue's card" className="text-violet-400">
               <CountBadge n={row.cue.adHocEffectCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
-            </ReadOut>
+            </ReadOutButton>
           ) : null,
       },
       {
@@ -442,6 +445,7 @@ export function CueSheet({
     cellDisabled,
     onRefused: refuseKey,
     noun: 'cue',
+    rowName: cueRowName,
   })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
 
@@ -689,37 +693,9 @@ export function CueSheet({
   )
 }
 
-function ReadOut({
-  onClick,
-  title,
-  className,
-  disabled,
-  children,
-}: {
-  onClick: () => void
-  title: string
-  className?: string
-  /** The host gave this read-out nowhere to go — it stays legible but inert. */
-  disabled?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={cn(
-        // `min-w-0` + `whitespace-nowrap`: the cell is a fixed grid track and the row a fixed
-        // height, so a read-out that wraps grows the row and paints over its neighbour.
-        'mx-1 inline-flex h-7 min-w-0 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-xs text-muted-foreground',
-        'enabled:hover:bg-accent enabled:hover:text-foreground disabled:cursor-default',
-        className,
-      )}
-    >
-      {children}
-    </button>
-  )
+/** A cue in a skip read-out — `Q14`, the number the operator reads the sheet by. */
+function cueRowName(row: CueSheetRow): string {
+  return row.cue.cueNumber ? `Q${row.cue.cueNumber}` : row.cue.name
 }
 
 function CountBadge({ n, className }: { n: number; className?: string }) {

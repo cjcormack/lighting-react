@@ -34,6 +34,7 @@ export const LevelCell = memo(function LevelCell({
   value,
   label,
   batchLabel,
+  skipped,
   disabled,
   autoOpen,
   autoClose,
@@ -112,6 +113,7 @@ export const LevelCell = memo(function LevelCell({
           <span>
             {min}–{max} · {Math.round(((value - min) / Math.max(1, max - min)) * 100)}%
           </span>
+          {skipped && <span data-editor-skipped>{skipped}</span>}
         </EditorReadout>
       </div>
     </EditorSurface>

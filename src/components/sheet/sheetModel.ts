@@ -30,6 +30,14 @@ export interface SheetCellProps<V> {
   batchLabel: string
   /** The rows that commit lands on, in visible order — for an editor that previews its landing. */
   batchRows: () => readonly SheetRow[]
+  /**
+   * The rows the marquee covers in this column that the commit will **not** reach, named — a
+   * follower's BPM, master 1's Follows, a snap cue's Curve (library-sheets plan D12). A marquee is
+   * geometric, so it sweeps up cells with nothing to set; the kit drops them before `write` and
+   * leaves them out of [batchCount], and this is where the editor says so, on its `EditorReadout`
+   * (*M2 and M4 follow M1 · skipped*). Null or absent when every row takes the value.
+   */
+  skipped?: string | null
   /** The surface has made this cell inert: a locked show, an offline desk. */
   disabled: boolean
   autoOpen: boolean
@@ -127,8 +135,22 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   cell?: (row: Row, props: SheetCellProps<V>) => ReactNode
   /** A read-out, drawn where there is no `cell`. */
   display?: (row: Row) => ReactNode
-  /** Commit a value to these rows. False when the column refuses it, having written nothing. */
+  /**
+   * Commit a value to these rows. False when the column refuses it, having written nothing.
+   *
+   * **It never receives a row whose [value] is undefined** — the kit drops those first
+   * (`takesValue`), in the commit, Clear and Spread alike, and names them on the editor's read-out
+   * through [skipNote]. So a column states "nothing to set here" once, in `value`, rather than again
+   * as a guard in every writer.
+   */
   write?: (rows: readonly Row[], value: unknown) => boolean
+  /**
+   * The read-out sentence for the rows the kit dropped from a commit in this column —
+   * *M2 and M4 follow M1 · skipped*. Absent, the kit names them through the sheet's `rowName`
+   * (`skippedNote`). A column overrides it where *why* is worth saying: the rows it drops all fail
+   * for one reason, and the reason is the column's to know.
+   */
+  skipNote?: (rows: readonly Row[]) => string
   /** Clear these rows' cells. Absent means Clear is refused here, with [clearRefusal] as the reason. */
   clear?: (rows: readonly Row[]) => void
   clearRefusal?: string
@@ -175,11 +197,51 @@ export function selectedRowsByColumn<Row extends SheetRow, C extends string>(
 }
 
 /**
+ * Does this row have anything to set in this column? A row whose `value` is undefined is blank
+ * there (or a read-out), and a commit, a Clear or a Spread that reaches it through a geometric
+ * marquee **skips** it — the column's `write` never sees it (library-sheets plan D12).
+ */
+export function takesValue<Row extends SheetRow, C extends string>(column: SheetColumn<Row, C>, row: Row): boolean {
+  return row.divider == null && column.value(row) !== undefined
+}
+
+/** A batch split into the rows a column writes and the rows it skips, both in visible order. */
+export function splitBatch<Row extends SheetRow, C extends string>(
+  column: SheetColumn<Row, C>,
+  rows: readonly Row[],
+): { taken: Row[]; skipped: Row[] } {
+  const taken: Row[] = []
+  const skipped: Row[] = []
+  for (const row of rows) (takesValue(column, row) ? taken : skipped).push(row)
+  return { taken, skipped }
+}
+
+/**
+ * Names as prose for a one-line read-out — `M2`, `M2 and M4`, `M2, M3 and M4` — and past four a
+ * count (`6 masters`), since a popover's read-out is one line. [noun] is the count's word.
+ */
+export function listNames(names: readonly string[], noun = 'row'): string {
+  if (names.length > 4) return `${names.length} ${noun}s`
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/** The default skip read-out: the rows by name, then *skipped* — `M2 and M4 · skipped`. */
+export function skippedNote(names: readonly string[]): string {
+  if (names.length === 0) return ''
+  return `${listNames(names)} · skipped`
+}
+
+/**
  * One commit, every selected cell **of the origin's kind**. Grouped by column so each column
  * writes its batch once: the column the editor opened on always takes it, a sibling takes it
  * only when it declares the same `kind`, and a value the column cannot take is dropped inside
  * `write` besides — so the selection's cell count is an upper bound on what any one commit
  * writes. Returns how many columns took it.
+ *
+ * **Rows with nothing to set in a column are dropped before its `write`** (`takesValue`): a
+ * follower's BPM, master 1's Follows, a snap cue's Curve. A column left with no rows is not
+ * written at all.
  */
 export function commitToSelectedCells<Row extends SheetRow, C extends string>(
   groups: readonly { col: C; rows: readonly Row[] }[],
@@ -191,9 +253,11 @@ export function commitToSelectedCells<Row extends SheetRow, C extends string>(
   let written = 0
   for (const { col, rows } of groups) {
     const column = columns.find((c) => c.key === col)
-    if (!column?.write || rows.length === 0) continue
+    if (!column?.write) continue
     if (col !== origin && (originKind == null || column.kind !== originKind)) continue
-    if (column.write(rows, value)) written += 1
+    const taken = rows.filter((row) => takesValue(column, row))
+    if (taken.length === 0) continue
+    if (column.write(taken, value)) written += 1
   }
   return written
 }

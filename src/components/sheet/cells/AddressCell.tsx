@@ -66,6 +66,7 @@ export const AddressCell = memo(function AddressCell({
   label,
   batchCount,
   batchLabel,
+  skipped,
   batchRows,
   disabled,
   autoOpen,
@@ -163,6 +164,7 @@ export const AddressCell = memo(function AddressCell({
             Channels {validStart ? `${start}–${Math.min(512, start + value.footprint - 1)}` : '…'} on universe{' '}
             {value.universe}
           </span>
+          {skipped && <span data-editor-skipped>{skipped}</span>}
         </EditorReadout>
         <EditorFooter
           note={batchCount > 1 ? 'Consecutive by footprint across the selection' : undefined}

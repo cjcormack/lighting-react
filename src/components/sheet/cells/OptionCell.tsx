@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { EditorSurface, useEditorForm } from '../../editor/EditorSurface'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
+import { EditorReadout } from '../../editor/EditorReadout'
 import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
 import type { SheetCellProps } from '../sheetModel'
@@ -34,14 +35,17 @@ const FILTER_FROM_OPTIONS = 3
  * Enter takes the highlighted option — the top match by default. An Enter that matches nothing is
  * swallowed rather than closing.
  *
- * The label line above the list is the editor kit's (D8); there is no skip read-out here, because
- * a kit sheet's cell that cannot take the value is blank and never in the selection. The popover
+ * The label line above the list is the editor kit's (D8). Under the list, the **skip read-out**
+ * names the rows the marquee covers that the choice will not reach — master 1's Follows, a snap
+ * cue's Curve (library-sheets plan D12): the kit drops them before `write`, and this is where the
+ * editor says so. The popover
  * is 256px (D17). `w-64`, measured in the app at 256px on 2026-09-22 (the popover's `getBoundingClientRect`).
  */
 export const OptionCell = memo(function OptionCell({
   value,
   label,
   batchLabel,
+  skipped,
   disabled,
   autoOpen,
   autoClose,
@@ -213,6 +217,11 @@ export const OptionCell = memo(function OptionCell({
             )
           })}
         </div>
+        {skipped && (
+          <EditorReadout className="px-2 pt-1.5 pb-1">
+            <span data-editor-skipped>{skipped}</span>
+          </EditorReadout>
+        )}
       </div>
     </EditorSurface>
   )

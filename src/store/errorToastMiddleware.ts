@@ -56,11 +56,15 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Silent too: its sheet stays open on failure and renders the error inline (the strip's chip is
   // what opens it), so a toast beside that alert would say the same thing twice.
   'createTemplateFromProgrammer', // src/components/programmer/NewTemplateFromSelectionSheet.tsx
-  // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the
-  // "delete anyway" confirmation, and SPEED_MASTER_PROTECTED can only be reached by a stale
-  // client (the UI disables master 1's delete button).
-  'deleteSpeedMaster', // src/components/speedMasters/SpeedMasterDetailSheet.tsx
-  'saveSpeedMaster', // ...same sheet: a duplicate name is a 409 rendered inline
+  // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the batch
+  // delete's "delete anyway" dialog, and SPEED_MASTER_PROTECTED can only be reached by a stale
+  // client (master 1 is skipped by name before anything is sent). Every other delete failure is
+  // toasted by `useBatchDelete` itself, which both callers go through (library-sheets plan D13).
+  'deleteSpeedMaster', // src/components/speedMasters/useSpeedMasterDelete.tsx — the sheet and SpeedMasterDetailSheet
+  // Two call sites, both reporting their own refusals: the detail sheet renders a duplicate name
+  // (409) inline, and the Speed Masters sheet's cells toast every refused write by code, keyed per
+  // column (`reportSheetWriteFailure`, library-sheets plan D14). A third caller must do one or the other.
+  'saveSpeedMaster', // src/components/speedMasters/SpeedMasterDetailSheet.tsx, SpeedMasterSheet.tsx
   // These three take a password or a name the user typed and render failures inline in
   // their own sheet/page, not as a toast.
   'createUser', // src/components/users/CreateUserSheet.tsx

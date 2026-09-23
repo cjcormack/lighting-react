@@ -2221,7 +2221,8 @@ Three surface rules, each pinned by its test:
   `firstColumnCellProps`** (`sheetModel.ts`), so the first column edits in the same popover, in the
   same three forms, as every value cell; the single click underneath still selects the row and a
   press still starts the row marquee. It was an `InlineEditField`, the one editor on a sheet that was
-  not a popover. The pencil beside it still opens the full editor, and is the keyboard route.
+  not a popover. The pencil beside it — the kit's `firstColumn.onOpen` since the library sheets —
+  still opens the full editor, and so does ⏎ with that one row selected (§Library sheets).
   **Set over N *keys* fans one typed key over them**, `lib/fixtureKey.ts`: one head takes it as it
   is, several count up from it, continuing the number, the separator and the zero padding the typed
   key already carries — the vocabulary `AddFixtureSheet` mints keys in, read back off what was typed
@@ -2372,6 +2373,113 @@ row: a size query measures the content box, and a container on the row would fir
 route again**, `/projects/:id/patches`, with the chips as a 40px chrome row of 28px chips above row
 B: it left Project Settings because a tab body under a settings heading was the one list that could
 not have the header row and the gutter. `/settings/patches` redirects there, `?action=new` intact.
+
+### Library sheets
+
+**The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — move onto the sheet
+kit, each on its existing route** (`lighting7/docs/plans/library-sheets-plan.md`; the boards are
+`library-sheets-design/`, the plan wins on behaviour and the boards on layout and copy). Session 1
+built the kit's library half and put **Speed Masters** on it; Looks and Templates (session 2),
+template values in the cell (3) and Scripts and the FX Library (4) follow. The rules, which every one
+of the five keeps:
+
+- **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
+  view key: a second view has to earn one. The record editors stay — they are what a row *opens*.
+- **The whole list shell** (D2): the 48px header with the breadcrumbs, the **library row**, the
+  `SelectionBar`, the sheet, the footer. The library row is row B for a library — filter ·
+  partition chips · spacer · the create verb, which leaves the page header for it.
+- **Chips filter, dividers group** (D3). Where a library partitions exactly (script type, effect
+  category, template family) the partition is a chip set with counts, and under *All* the sheet is
+  grouped by divider rows in the partition's declared order. Looks and Speed Masters partition
+  nothing and draw no chips. The partition is a **view, never a route**: a `?param=` plus a
+  remembered value, both the route's.
+- **The name column is the sheet's `firstColumn`, never a `SheetColumn`** (D4), so it is never in
+  the marquee. A double click renames it in `TextCell`'s popover — one row at a time by
+  construction — and the pencil opens the record, as does **⏎ with exactly one row selected and no
+  cells**. That ⏎ is the kit's, so the patch list has it too.
+- **What a cell edits** (D5): name and notes everywhere, plus the few values a library holds — a
+  template's Value, Fade and effect Master; a master's live BPM, Start, Follows, Ratio and Usage.
+  What a Look holds stays recorded and changed by Include. Every other column is a read-out.
+- **Row verbs on the bar** (D11): after Set · Clear · Spread come Include, Pick up, Duplicate,
+  Copy to…, Fork, Compile, Run, Delete, then Deselect. A verb over one record is disabled over
+  several with the reason. The per-row `…` menus go.
+- **Read-only by row and by scope** (D12). A row with nothing to set in a column has
+  `value: undefined` there; the marquee is geometric and still covers the cell, so **the kit drops
+  it before `write`** and names it on the editor's read-out. Such a cell is **blank**, as the
+  programmer draws a column a row resolves nothing for — no `display`, so a click there clears the
+  selection — unless what it reads out is worth reading (a follower's derived BPM). The boards drew a
+  `·` there and were corrected to match. **Another project's library** is the
+  sheet's read-only scope, the cue lock's shape: selection works, every value verb is disabled with
+  the reason, *Copy to…* is the one live verb (`libraryPermission`). **Speed Masters is half
+  exempt**: its REST routes are `withProject`, so its stored fields stay editable from any project,
+  but **BPM and TAP are read-only off the current project** — they write the running show's
+  clocks, and master 1 is written as a null uuid, so before the sheet a TAP on another project's
+  master 1 tapped the live one.
+- **One delete for a batch** (D13). Each record is sent plain, the in-use refusals are gathered and
+  asked about **once**; *Delete anyway* forces only those, *Keep them* leaves them selected.
+  Records that may never be deleted (master 1, built-in effects) are skipped by name before
+  anything is sent.
+- **The sheets report their own failures** (D14). Their write endpoints stay in
+  `SILENT_ENDPOINTS` (the dialogs they replaced rendered refusals inline), so a refused cell write is
+  toasted by the sheet **by code, keyed per column** — a batch replaces rather than stacks — and
+  the middleware does not say it a second time, generically.
+
+**What the kit gained**, each generic:
+
+- **`SheetTable`'s `firstColumn.onOpen(row)`** draws the pencil — on hover, focus and **while the
+  row is selected**, so a touch screen reaches it by tapping the row — and `useSheet`'s
+  `onOpenRow` is the same callback on ⏎. Pass both. The patch list's hand-rolled pencil went.
+- **`useSheetKeyboard`'s ⏎-opens-row arm**, fed a row count and the callback by `useSheet`. It
+  exempts **the selected row's own first-column trigger** from the focused-control guard
+  (`firstColumnOwnsKeyTarget`, reading `data-first-column` and the row's `data-state`): clicking a
+  name focuses its `TextCell` `<button>`, and without the exemption ⏎ would press that instead. The
+  pencil (`data-row-open`) is not exempt — ⏎ on it is its own press. The count is the *visible*
+  selected rows, so a selected id whose row has gone does not make one row read as two.
+- **Skipped rows in `useSheet`**: `takesValue` / `splitBatch` in `sheetModel.ts`, applied in the
+  commit, the row-selection path, Clear and Spread; `batchCount` counts only the rows that take the
+  value, and `SheetCellProps.skipped` carries the sentence every kit cell draws on its
+  `EditorReadout` — the column's `skipNote` where it knows *why* (*M2 and M4 follow M1*), else the
+  rows by the sheet's `rowName`. It changed what `write` receives on the existing sheets too: a snap
+  cue's Curve and a head without a beam angle or gel no longer reach their writers.
+- **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
+  generalised and still controlled, folding to a select below 600px of its **own** `@container` —
+  so it works inside `TemplatePicker`'s portalled popover, which has no row. Nothing mounts the
+  chips yet; 600 is re-measured when session 2 does.
+- **`groupRows.ts`** interleaves the dividers; the caller mints the divider row, and a row in an
+  undeclared partition is never dropped.
+- **`cells/NumberCell.tsx`** — `TextCell`'s shape with `EditorField` inside: a unit, a range that is
+  **refused rather than clamped**, commit on Enter and Apply rather than per keystroke (a BPM typed
+  live would retune a clock through `1`, `12`, `128`).
+- **`ReadOutButton.tsx`** — `CueSheet`'s private `ReadOut`, lifted: a read-out whose display is a
+  press. TAP is one.
+- **`LibraryNameColumn.tsx`** — `libraryNameColumn()`, the `firstColumn` every library spreads in:
+  the rename `TextCell`, a prefix (`M2`), badges, the pencil. A render helper, not a column.
+- **`useBatchDelete.ts` + `BatchDeleteDialog.tsx`** — D13, answering per entity
+  `ok | inUse(summary) | refused(reason)`. The plain pass is sequential, since every delete
+  invalidates the list.
+- **`libraryScope.ts`** — `libraryPermission(isCurrentProject, projectName)`: the permission, the
+  bar's words and the reason.
+- **`reportSheetWriteFailure.ts`** — D14's toast, `rigWriteFailureMessage`'s pattern.
+
+**The Speed Masters sheet** (`components/speedMasters/SpeedMasterSheet.tsx`, on
+`routes/SpeedMasters.tsx`) is beat · BPM · Tap · Start · Follows · Ratio · Usage · Used by · Notes.
+Four things about it are easy to get wrong:
+
+- **BPM is the live tempo** (`speedMasters.setBpm`, the null uuid for master 1), **Start the stored
+  row** (`PUT {bpm}`). They are two columns because they are two routes, but **on the running
+  project the desk couples them both ways**: a live change is written back to the row after 750 ms
+  (`Show.kt`'s debounce), and a PUT of a stored tempo retunes the running clock. So a Set on BPM
+  moves Start a moment later, and a Set on Start on the current project is a live tempo write.
+- **Follows carries the origin's leader to every selected row**, so its `write` also drops a row
+  that may not follow it — itself or one of its own followers, which the desk would refuse as
+  `SPEED_MASTER_FOLLOW_CYCLE` — and says so in a toast. A new link starts at
+  `DEFAULT_FOLLOW_RATIO`, a re-pointed one keeps its ratio, and master 1's two spellings (its uuid,
+  and the null that means it) are normalised before comparing, as the detail sheet's
+  `canonicalTarget` does.
+- **Usage over more than one row is refused before anything is sent** (unless None): a usage is
+  one master's per project, and the desk would accept the first and 409 the rest.
+- **Off the current project the live bank is not read at all** — no beat, the stored tempo shown —
+  because a cloned project's masters can share uuids with the running ones.
 
 ### The editor kit
 
@@ -3189,8 +3297,11 @@ be deleted.
 Two different BPMs live on a master and the UI must not conflate them. The **stored**
 bpm (`useSpeedMasterListQuery`) is what it boots at; the **live** bpm
 (`useSpeedMasterLiveQuery`, streamed over `speedMasters.*`) is what it is running at
-now. Rows show the live one and edit it with tap / click-to-type; the stored default is
-editable only in the detail sheet, where it can be labelled as such.
+now. The sheet's BPM column shows the live one and edits it with TAP / click-to-type; the stored
+default is its **Start** column (labelled as the boot tempo) and the detail sheet's Starting BPM
+(library-sheets plan D7). On the running project the desk couples the two — a live change is
+written back to the row after 750 ms, and a stored tempo PUT retunes the running clock — so they are
+two columns because they are two routes, not two independent numbers (§Library sheets).
 
 `/projects/:id/speed-masters` manages the bank — one nav entry, one route, no sibling
 switcher. `components/SpeedMasters.tsx` is the desk's performance surface, with **two hosts**
@@ -3237,7 +3348,8 @@ module-level cache outlives `localStorage.clear()`.
 four relocated, never a fifth.
 
 **A master can also declare a `usage` and follow another master.** Both landed with the busking
-view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
+view's speed-master work, and both are edited in `SpeedMasterDetailSheet` and in the Speed Masters
+sheet's Usage, Follows and Ratio columns (§Library sheets):
 
 - **Usage** (`dimmer` / `colour` / `position`) is the **apply-time routing default**. An effect
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
@@ -3280,10 +3392,15 @@ view's speed-master work, and both are edited only in `SpeedMasterDetailSheet`:
     is the desk doing".
 
 **A follower's tempo cannot be typed or tapped, and exactly four surfaces offer those:**
-`MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, `SpeedMasterRow` in
-`routes/SpeedMasters.tsx`, and `MasterCard` in `components/busking/BuskSpeedRail.tsx`. All four swap
-TAP for the ratio and stop opening the draft. Those four are now all of them: the fifth, an
-unarmed master-1-only TAP in `EffectsOverviewPanel`, went when that panel did.
+`MasterTile` and `MasterRow` in `components/SpeedMasters.tsx`, the Speed Masters sheet's BPM cell
+and TAP read-out in `components/speedMasters/SpeedMasterSheet.tsx`, and `MasterCard` in
+`components/busking/BuskSpeedRail.tsx`. The sheet's pair replaced `SpeedMasterRow` in that count
+(library-sheets session 1) and keeps its refusals: a follower's BPM is a read-out (`value:
+undefined`, so a marquee over it skips it) and its TAP is disabled with the reason. It adds one
+refusal of its own — **off the current project both are read-only** — because they write the running
+show's clocks. The other three still swap TAP for the ratio and stop opening the draft. Those four
+are all of them: the fifth, an unarmed master-1-only TAP in `EffectsOverviewPanel`, went when that
+panel did.
 
 **The busk rail is the second surface that can *write* a follow ratio**, after
 `SpeedMasterDetailSheet`; its five chips retune a link that already exists. Both write it the same
@@ -3292,8 +3409,10 @@ is a 400), and **never `bpm` beside them** — the server refuses that combinati
 whose tempo comes from its leader rather than from a stored default. The chips deliberately send
 **no `followTargetUuid`**: they retune an existing link, and a ratio-only patch carries the stored
 leader forward server-side, so sending one would let a chip press re-point the link. Linking and
-*unlinking* stay in the sheet, where the choice can be labelled; retuning a link mid-show is the
-half that belongs on a performance surface.
+*unlinking* are the detail sheet's **and the Speed Masters sheet's Follows column's** (Manual, or
+Clear, unlinks; a leader links or re-points), under the same rules — both halves or neither, never
+`bpm` beside them — and its Ratio column retunes as the chips do; the busk rail still only retunes,
+since retuning a link mid-show is the half that belongs on a performance surface.
 `speedMasters.error` is the backstop for writers with no affordance to remove (a MIDI surface, a
 script, a stale tab); `store/speedMasters.ts` toasts it, keyed per master so a burst of hardware
 taps replaces rather than stacks.

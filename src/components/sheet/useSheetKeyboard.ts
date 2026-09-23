@@ -37,6 +37,14 @@ export interface SheetKeyRefusal {
  * cell trigger the marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall
  * through to that button's own activation. Backspace is the destructive arm, so it is the one that
  * most needs to know a chip or a menu item had the focus.
+ *
+ * **⏎ over one row opens it** (library-sheets plan D4), where the surface passes [onOpenRow]: with
+ * exactly one row selected and no cells, Enter is the pencil's key. The focused-control guard has
+ * one exemption on this arm, the row arm's own `marqueeOwnsKeyTarget`: **the selected row's
+ * first-column trigger** (`firstColumnOwnsKeyTarget`). Clicking a name focuses its `TextCell`
+ * `<button>` — the rename's double-click trigger — so without the exemption the Enter the operator
+ * presses next would activate that button rather than open the row. The pencil is *not* exempt:
+ * Enter on it is its own press, and opens the same record anyway.
  */
 export function useSheetKeyboard<C extends string>({
   cellCount,
@@ -46,6 +54,8 @@ export function useSheetKeyboard<C extends string>({
   onOpen,
   onClear,
   onRefused,
+  rowCount = 0,
+  onOpenRow,
 }: {
   /** How many cells are selected — zero means the cell arms are inert and only Escape is heard. */
   cellCount: number
@@ -71,6 +81,10 @@ export function useSheetKeyboard<C extends string>({
    * That reasoning lives in `CueSheet`, beside the hook it is about.
    */
   onRefused?: (refusal: SheetKeyRefusal) => boolean | void
+  /** How many rows are selected — the ⏎-opens-row arm needs exactly one. */
+  rowCount?: number
+  /** ⏎ with one row and no cells selected: open that row's record. Absent, the arm does nothing. */
+  onOpenRow?: () => void
 }): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -85,11 +99,27 @@ export function useSheetKeyboard<C extends string>({
         onEscape()
         return
       }
-      if (cellCount === 0) return
+      if (cellCount === 0) {
+        if (
+          e.key === 'Enter' &&
+          onOpenRow != null &&
+          rowCount === 1 &&
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          !e.shiftKey &&
+          !editorIsOpen() &&
+          (firstColumnOwnsKeyTarget(e.target) || !isOnControl(e.target))
+        ) {
+          e.preventDefault()
+          onOpenRow()
+        }
+        return
+      }
       const onControl =
         !marqueeOwnsKeyTarget(e.target, isCellSelected) &&
         e.target instanceof HTMLElement &&
-        e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
+        isOnControl(e.target)
       if (e.metaKey || e.ctrlKey || e.altKey || onControl) return
       if (e.key === 'Enter') {
         if (!permission.entry) {
@@ -123,5 +153,36 @@ export function useSheetKeyboard<C extends string>({
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [cellCount, permission.entry, permission.clear, isCellSelected, onEscape, onOpen, onClear, onRefused])
+  }, [
+    cellCount,
+    permission.entry,
+    permission.clear,
+    isCellSelected,
+    onEscape,
+    onOpen,
+    onClear,
+    onRefused,
+    rowCount,
+    onOpenRow,
+  ])
+}
+
+/** A focused button, link or menu item — a control whose own Enter the grid must not take. */
+function isOnControl(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.closest('button, a, [role="menuitem"], [role="menu"]') != null
+}
+
+/**
+ * The target is the **selected** row's first-column trigger — the name's rename button, which a
+ * click on the name focuses — and not its pencil. `SheetTable` marks the sticky cell
+ * `data-first-column` and the pencil `data-row-open`; the row's `data-state="selected"` is the
+ * selection's own mark, so a name button focused on some *other* row by Tab is not exempt (Enter
+ * there activates it, and the row it would open is not the selected one).
+ */
+export function firstColumnOwnsKeyTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.closest('[data-row-open]') != null) return false
+  const cell = target.closest('[data-first-column]')
+  if (cell == null) return false
+  return cell.closest('[data-row-id]')?.getAttribute('data-state') === 'selected'
 }

@@ -127,26 +127,32 @@ describe('SpeedMasterDetailSheet', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
-  it('surfaces the in-use breakdown and retries with force', async () => {
+  it('asks about an in-use master in the batch-delete dialog, naming its followers, and forces on request', async () => {
     deleteMaster.mockRejectedValueOnce({
       data: {
         error: 'in use',
         code: 'SPEED_MASTER_IN_USE',
-        referenceCount: 3,
+        referenceCount: 4,
         lookEffectCount: 1,
         cueAdHocEffectCount: 2,
         cueLayerCount: 0,
         cueIds: [84, 91],
+        followerNames: ['Chase'],
       },
     })
-    renderSheet(master({ referenceCount: 3 }))
+    const onOpenChange = vi.fn()
+    render(<SpeedMasterDetailSheet open onOpenChange={onOpenChange} projectId={1} master={master({ referenceCount: 4 })} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
-    await waitFor(() => expect(screen.getByText(/still point at this master/)).toBeInTheDocument())
-    expect(screen.getByText(/1 look effect/)).toBeInTheDocument()
-    expect(screen.getByText(/2 cue effect/)).toBeInTheDocument()
-    expect(screen.getByText(/cues 84, 91/)).toBeInTheDocument()
+    // One dialog — the sheet's batch delete over one master (library-sheets plan D13).
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Delete 1 master?')
+    expect(dialog).toHaveTextContent('M5 · Slow Wash')
+    expect(dialog).toHaveTextContent('1 look effect')
+    expect(dialog).toHaveTextContent('2 cue effects')
+    expect(dialog).toHaveTextContent('cues 84, 91')
+    expect(dialog).toHaveTextContent('followed by Chase')
 
     deleteMaster.mockResolvedValueOnce(undefined)
     fireEvent.click(screen.getByRole('button', { name: 'Delete anyway' }))
@@ -154,6 +160,7 @@ describe('SpeedMasterDetailSheet', () => {
     await waitFor(() => expect(deleteMaster).toHaveBeenCalledTimes(2))
     expect(deleteMaster.mock.calls[0][0]).toMatchObject({ masterId: 5, force: false })
     expect(deleteMaster.mock.calls[1][0]).toMatchObject({ masterId: 5, force: true })
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
   it('omits bpm from a name-only save so a live tempo is not clobbered', async () => {

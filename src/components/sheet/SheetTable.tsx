@@ -11,7 +11,9 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { GripVertical } from 'lucide-react'
+import { GripVertical, Pencil } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStableCallback } from '@/hooks/useStableCallback'
@@ -59,6 +61,15 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
     width: string
     render: (row: Row, selected: boolean) => React.ReactNode
     selectsRows: boolean
+    /**
+     * Open the row's record — the patch editor, a library record's sheet. Given, the column draws a
+     * **pencil** after [render] (shown on hover, focus and selection) and a sheet mounting
+     * `useSheet` with the same callback as `onOpenRow` opens it from **⏎ over one row** too
+     * (library-sheets plan D4). The patch list hand-rolled this pencil until the library sheets.
+     */
+    onOpen?: (row: Row) => void
+    /** The pencil's accessible name and tooltip — `Edit Front PAR`. Defaults to `Open`. */
+    openLabel?: (row: Row) => string
   }
   /** The height of every row, dividers included. 36 everywhere but the DMX sheet's 44. */
   rowHeight?: number
@@ -75,6 +86,8 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   batchCountFor: (row: Row, col: C) => number
   /** Those rows, in visible order — for an editor that previews its landing. */
   batchRowsFor: (row: Row, col: C) => readonly Row[]
+  /** The batch's skipped rows as a read-out sentence, or null — `SheetCellProps.skipped`. */
+  skippedFor?: (row: Row, col: C) => string | null
   /**
    * What a row is called on this sheet — `cue`, `fixture`, `channel` — for the editors' label
    * line (`SheetCellProps.batchLabel`). Defaults to `row`.
@@ -132,6 +145,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   onCellCommit,
   batchCountFor,
   batchRowsFor,
+  skippedFor,
   batchNoun = 'row',
   cellDisabled,
   rowClass,
@@ -325,6 +339,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   batchCountFor={batchCountFor}
                   batchNoun={batchNoun}
                   batchRowsFor={batchRowsFor}
+                  skippedFor={skippedFor}
                   cellDisabled={cellDisabled}
                   cellSelection={cellSelection}
                   autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
@@ -523,6 +538,37 @@ function RowGrip({ handle }: { handle: SheetDragHandle }) {
   )
 }
 
+/**
+ * The first column's pencil: opens the row's record (`firstColumn.onOpen`). Drawn on hover and
+ * focus, as the patch list's hand-rolled one was, **and while the row is selected**, so a touch
+ * screen — which has no hover — reaches it by tapping the row first.
+ *
+ * `data-row-open` is what keeps it out of the ⏎-opens-row arm's exemption (Enter on the pencil is
+ * its own press), and the click stops at it so the press does not also select the row. The label is a
+ * Radix tooltip, as the patch list's hand-rolled pencil had — themed, and shown on keyboard focus as
+ * well as hover, which a native `title` is not.
+ */
+function RowOpenButton({ label, selected, onOpen }: { label: string; selected: boolean; onOpen: () => void }) {
+  return (
+    <span
+      className={cn(
+        'relative shrink-0 items-center',
+        selected ? 'inline-flex' : 'hidden group-hover/row:inline-flex group-focus-within/row:inline-flex',
+      )}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button data-row-open variant="outline" size="icon" className="size-7" onClick={onOpen} aria-label={label}>
+            <Pencil className="size-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </span>
+  )
+}
+
 interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   row: Row
   columns: readonly SheetColumn<Row, C>[]
@@ -535,6 +581,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   onCellCommit: (row: Row, col: C, value: unknown) => void
   batchCountFor: (row: Row, col: C) => number
   batchRowsFor: (row: Row, col: C) => readonly Row[]
+  skippedFor?: (row: Row, col: C) => string | null
   batchNoun: string
   cellDisabled?: (row: Row, col: C) => boolean
   cellSelection: CellSelection<C>
@@ -560,6 +607,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   onCellCommit,
   batchCountFor,
   batchRowsFor,
+  skippedFor,
   batchNoun,
   cellDisabled,
   cellSelection,
@@ -607,6 +655,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
       data-row-id={row.id}
     >
       <div
+        // The ⏎-opens-row arm's exemption reads this mark — see `firstColumnOwnsKeyTarget`.
+        data-first-column
         className={cn(
           SHEET_STICKY_CELL_CLASS,
           'flex h-full items-center gap-1.5 px-2',
@@ -624,6 +674,13 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         />
         {dragHandle && <RowGrip handle={dragHandle} />}
         {firstColumn.render(row, selected)}
+        {firstColumn.onOpen && (
+          <RowOpenButton
+            label={firstColumn.openLabel?.(row) ?? 'Open'}
+            selected={selected}
+            onOpen={() => firstColumn.onOpen?.(row)}
+          />
+        )}
       </div>
 
       {columns.map((column) => {
@@ -651,12 +708,15 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         const selectedCell = cellSelection.isSelected(row.id, column.key)
         const disabled = cellDisabled?.(row, column.key) ?? false
         const batchCount = batchCountFor(row, column.key)
+        // Only a selected cell has a batch to skip from; the rest are a batch of themselves.
+        const skipped = selectedCell || selected ? (skippedFor?.(row, column.key) ?? null) : null
         const props: SheetCellProps<unknown> = {
           value,
           label: column.label,
           batchCount,
           batchLabel: batchLabelOf(batchCount, batchNoun),
           batchRows: () => batchRowsFor(row, column.key),
+          skipped,
           disabled,
           autoOpen: autoOpenCol === column.key,
           autoClose: autoCloseCol === column.key,

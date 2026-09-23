@@ -21,13 +21,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import type { SpeedMaster } from '../../api/speedMastersApi'
+import { MASTER_1_DELETE_REFUSAL, useSpeedMasterDelete } from './useSpeedMasterDelete'
 import {
-  CODE_SPEED_MASTER_IN_USE,
-  type SpeedMaster,
-  type SpeedMasterInUseResponse,
-} from '../../api/speedMastersApi'
-import {
-  useDeleteSpeedMasterMutation,
   useSaveSpeedMasterMutation,
   useSpeedMasterListQuery,
   useSpeedMasterLiveQuery,
@@ -82,7 +78,13 @@ export function SpeedMasterDetailSheet({
   master: SpeedMaster | null
 }) {
   const [saveMaster, { isLoading: isSaving, error: saveError }] = useSaveSpeedMasterMutation()
-  const [deleteMaster, { isLoading: isDeleting }] = useDeleteSpeedMasterMutation()
+  // The delete is the sheet's batch delete over one master (library-sheets plan D13): one dialog,
+  // naming what uses it — its followers included — instead of an inline alert of its own.
+  const {
+    run: runDelete,
+    busy: isDeleting,
+    dialog: deleteDialog,
+  } = useSpeedMasterDelete({ projectId, onDeleted: () => onOpenChange(false) })
 
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -95,7 +97,6 @@ export function SpeedMasterDetailSheet({
   // follow targets existed carries. Kept beside the ratio rather than inside it because the two
   // are edited by different controls and only the pair together is a link.
   const [followTarget, setFollowTarget] = useState<string | null>(null)
-  const [inUse, setInUse] = useState<SpeedMasterInUseResponse | null>(null)
 
   // The bank, for the leader picker: which masters this one may point at, and what they are
   // called. Already fetched by every surface that opens this sheet, so this is a cache read —
@@ -140,7 +141,6 @@ export function SpeedMasterDetailSheet({
     setUsage(master.usage ?? USAGE_NONE)
     setFollow(followRatioOf(master))
     setFollowTarget(followTargetOf(master))
-    setInUse(null)
   }, [master])
 
   if (!master) return null
@@ -216,18 +216,6 @@ export function SpeedMasterDetailSheet({
         // Rendered inline below — a duplicate name, or a usage another master already claims,
         // is a 409 and nothing moved.
       })
-  }
-
-  const remove = async (force: boolean) => {
-    try {
-      await deleteMaster({ projectId, masterId: master.id, force }).unwrap()
-      onOpenChange(false)
-    } catch (err) {
-      // 409: rows still reference it. Forcing is allowed — those effects fall back to
-      // master 1 rather than stopping — but the operator gets the breakdown first.
-      const body = (err as { data?: SpeedMasterInUseResponse })?.data
-      if (body?.code === CODE_SPEED_MASTER_IN_USE) setInUse(body)
-    }
   }
 
   return (
@@ -433,40 +421,14 @@ export function SpeedMasterDetailSheet({
             </Alert>
           )}
 
-          {inUse != null && (
-            <Alert variant="destructive">
-              <AlertDescription className="space-y-2">
-                <p>
-                  {inUse.referenceCount} saved{' '}
-                  {inUse.referenceCount === 1 ? 'reference still points' : 'references still point'}{' '}
-                  at this master
-                  {inUse.lookEffectCount > 0 && ` · ${inUse.lookEffectCount} look effect(s)`}
-                  {inUse.cueAdHocEffectCount > 0 && ` · ${inUse.cueAdHocEffectCount} cue effect(s)`}
-                  {inUse.cueLayerCount > 0 && ` · ${inUse.cueLayerCount} cue layer(s)`}
-                  {inUse.cueIds.length > 0 && ` (cues ${inUse.cueIds.join(', ')})`}.
-                </p>
-                <p>
-                  Deleting anyway leaves them pointing at nothing, which resolves to master 1 —
-                  those looks keep running, at the global tempo instead of this one.
-                </p>
-                <Button size="sm" variant="destructive" onClick={() => remove(true)}>
-                  Delete anyway
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
         </SheetBody>
 
         <SheetFooter className="flex-row justify-between">
           <Button
             variant="destructive"
-            onClick={() => remove(false)}
+            onClick={() => void runDelete([master])}
             disabled={isDeleting || isProtected}
-            title={
-              isProtected
-                ? 'Master 1 is the global tempo — every unassigned effect resolves to it'
-                : undefined
-            }
+            title={isProtected ? MASTER_1_DELETE_REFUSAL : undefined}
           >
             {isDeleting && <Loader2 className="size-4 animate-spin" />}
             Delete
@@ -482,6 +444,7 @@ export function SpeedMasterDetailSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+      {deleteDialog}
     </Sheet>
   )
 }

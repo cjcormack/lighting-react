@@ -49,8 +49,8 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * busking-view plan's session 2 the WS state carries `usage` and the follow pair alongside the
  * running tempo, so nothing here needs the REST row to render. The list query supplies the REST row
  * itself, which live state is not: a ratio-chip PUT needs its numeric `id`, and the detail sheet
- * needs the whole thing. They are joined by uuid, the same join `routes/SpeedMasters.tsx` makes for
- * the same reason.
+ * needs the whole thing. They are joined by uuid, the same join the Speed Masters page's
+ * `SpeedMasterSheet` makes for the same reason.
  *
  * **A card is also the way into `SpeedMasterDetailSheet`**, through the sliders glyph in its title
  * row. Renaming a master, retagging its usage, setting the tempo it boots at and linking or
@@ -59,9 +59,10 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * One sheet for the whole rail rather than one per card: only one can be open.
  *
  * **This is the fourth surface offering TAP and click-to-type**, after `MasterTile`, `MasterRow`
- * and `SpeedMasterRow`, so it carries the same follower arm they do: a master deriving its tempo
- * from master 1 is offered neither, because the server refuses both (`SPEED_MASTER_FOLLOWER`) and
- * nothing on a desk should be a button that cannot work.
+ * and the Speed Masters sheet's BPM cell and TAP read-out (`SpeedMasterSheet`, which replaced
+ * `SpeedMasterRow` in that count), so it carries the same follower arm they do: a master deriving
+ * its tempo from another is offered neither, because the server refuses both
+ * (`SPEED_MASTER_FOLLOWER`) and nothing on a desk should be a button that cannot work.
  *
  * Mounted only on the desk board, by `SideSheet` — the overlay form off it carries no Speed tab. The
  * ShowBar above it already carries `SpeedMastersChip`, which reaches

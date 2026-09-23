@@ -1,34 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Loader2, Plus } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { BeatIndicator } from '../components/BeatIndicator'
+import { SheetPage } from '../components/sheet/SheetPage'
+import { LibraryRow } from '../components/sheet/LibraryRow'
 import { SpeedMasterDetailSheet } from '../components/speedMasters/SpeedMasterDetailSheet'
-import { formatBpm, useBpmDraft } from '../hooks/useBpmDraft'
+import { SpeedMasterSheet } from '../components/speedMasters/SpeedMasterSheet'
 import { useProjectQuery } from '../store/projects'
-import {
-  setSpeedMasterBpm,
-  tapSpeedMaster,
-  useCreateSpeedMasterMutation,
-  useSpeedMasterListQuery,
-  useSpeedMasterLiveQuery,
-} from '../store/speedMasters'
-import {
-  describeFollow,
-  followRatioOf,
-  followTargetOf,
-  leaderLabelOf,
-  leaderNameOf,
-  formatFollowRatio,
-  followerTempoLockedReason,
-  usageLabel,
-} from '../lib/speedMasterModel'
+import { useCreateSpeedMasterMutation, useSpeedMasterListQuery } from '../store/speedMasters'
+import { followRatioOf } from '../lib/speedMasterModel'
 import type { SpeedMaster } from '../api/speedMastersApi'
-import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 // Redirect /speed-masters → /projects/:projectId/speed-masters
@@ -37,211 +19,120 @@ export function SpeedMastersRedirect() {
 }
 
 /**
- * The speed-master bank: what tempo buses this show has, what they are running at, and what
- * follows them.
+ * The speed-master bank as a **sheet** (library-sheets plan §3.2, session 1): the list shell's
+ * header, the library row (filter · *New master*), the selection bar, `SpeedMasterSheet` and the
+ * footer. It replaced a `Card` of row cards (`SpeedMasterRow`); the detail sheet stays, as what a
+ * row's pencil — or ⏎ over one row — opens (D1).
  *
- * Two sources, deliberately kept apart. The **list** query is the persisted row — identity,
- * name, notes, reference count, and the *starting* BPM. The **live** query is the running
- * bank — current tempo, whether the clock is going, and how the tempo was last set. A row
- * joins them by uuid and shows the live tempo, because that is the number an operator is
- * reading during a show; the stored default is only editable in the sheet, where it can be
- * labelled as such.
+ * Two sources, deliberately kept apart, joined in the sheet by uuid: the **list** query is the
+ * persisted row — identity, name, notes, reference count, routing, the link and the *starting*
+ * BPM — and the **live** query is the running bank. Off the current project there is no running
+ * bank of this project's, so the live tempo is read-only there (D12): BPM and TAP write the
+ * running show's clocks, and before the sheet a TAP on another project's master 1 tapped the live
+ * one, since master 1 is written as a null uuid.
  *
- * The ShowBar's `SpeedMasters` surface lists every master too, master 1 included — the 2..N
- * split it used to draw is gone. What is still only here: renaming a master, annotating it,
- * creating and deleting one, and editing the *stored* default rather than the live tempo.
+ * The ShowBar's `SpeedMasters` surface lists every master too, master 1 included. What is only
+ * here: renaming a master, annotating it, creating and deleting one, and editing the stored boot
+ * tempo — now in the Start column as well as the sheet.
  */
 export function ProjectSpeedMasters() {
   const { projectId } = useParams<{ projectId: string }>()
   const projectIdNum = Number(projectId)
-  const { data: project } = useProjectQuery(projectIdNum)
+  const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: masters, isLoading } = useSpeedMasterListQuery({ projectId: projectIdNum })
-  const { data: live } = useSpeedMasterLiveQuery()
   const [createMaster, { isLoading: isCreating }] = useCreateSpeedMasterMutation()
-  const [openMaster, setOpenMaster] = useState<SpeedMaster | null>(null)
+  const [openMasterId, setOpenMasterId] = useState<number | null>(null)
+  const [filter, setFilter] = useState('')
 
-  // Keep the open sheet pointed at the freshest row: the list refetches whenever a master is
-  // created, renamed or deleted, and a stale snapshot would show the pre-edit name.
-  const openMasterId = openMaster?.id
-  const currentOpenMaster = openMasterId == null
-    ? null
-    : (masters?.find((m) => m.id === openMasterId) ?? null)
+  // The open sheet follows the freshest row: the list refetches whenever a master is created,
+  // renamed or deleted, and a stale snapshot would show the pre-edit name.
+  const openMaster = openMasterId == null ? null : (masters?.find((m) => m.id === openMasterId) ?? null)
 
-  const liveByUuid = new Map((live ?? []).map((m) => [m.uuid, m]))
+  const bank = useMemo(() => masters ?? [], [masters])
+  const shown = useMemo(() => filterMasters(bank, filter), [bank, filter])
+  const followerCount = bank.filter((m) => followRatioOf(m) != null).length
+
+  if (projectLoading) {
+    return (
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
+    )
+  }
+  if (!project) {
+    return (
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
+    )
+  }
 
   return (
-    <Card className="m-4 p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Breadcrumbs projectName={project?.name ?? ''} currentPage="Speed Masters" />
-        <Button size="sm" onClick={() => createMaster({ projectId: projectIdNum })} disabled={isCreating}>
-          {isCreating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-          New master
-        </Button>
-      </div>
-
+    <SheetPage>
+      <SheetPage.Header>
+        <Breadcrumbs projectName={project.name} currentPage="Speed Masters" />
+      </SheetPage.Header>
+      <LibraryRow
+        filter={filter}
+        onFilterChange={setFilter}
+        filterLabel="Filter by name, number or notes"
+        create={
+          <Button
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => createMaster({ projectId: projectIdNum })}
+            disabled={isCreating}
+          >
+            {isCreating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+            <span className="hidden sm:inline">New master</span>
+          </Button>
+        }
+      />
       {isLoading ? (
-        <div className="flex justify-center p-8">
-          <Loader2 className="size-6 animate-spin" />
-        </div>
+        <SheetPage.Empty loading />
+      ) : shown.length === 0 ? (
+        <SheetPage.Empty>No masters match your filter.</SheetPage.Empty>
       ) : (
-        <div className="flex flex-col gap-2">
-          {(masters ?? []).map((master) => (
-            <SpeedMasterRow
-              key={master.id}
-              master={master}
-              bank={masters ?? []}
-              live={liveByUuid.get(master.uuid) ?? null}
-              onOpen={() => setOpenMaster(master)}
-            />
-          ))}
-        </div>
+        <SpeedMasterSheet
+          projectId={projectIdNum}
+          masters={shown}
+          bank={bank}
+          isCurrentProject={project.isCurrent}
+          onOpenMaster={(master) => setOpenMasterId(master.id)}
+        />
       )}
+      <SheetPage.Footer>
+        <span className="tabular-nums">
+          {bank.length} master{bank.length === 1 ? '' : 's'}
+          {followerCount > 0 ? ` · ${followerCount} follow` : ''}
+        </span>
+        <span className="ml-auto">
+          {project.isCurrent
+            ? 'M1 is the global tempo · BPM is live, Start is stored'
+            : 'Not the running project · BPM and TAP are read-only here'}
+        </span>
+      </SheetPage.Footer>
 
       <SpeedMasterDetailSheet
-        open={currentOpenMaster != null}
-        onOpenChange={(next) => !next && setOpenMaster(null)}
+        open={openMaster != null}
+        onOpenChange={(next) => !next && setOpenMasterId(null)}
         projectId={projectIdNum}
-        master={currentOpenMaster}
+        master={openMaster}
       />
-    </Card>
+    </SheetPage>
   )
 }
 
-/**
- * One master. Runnable as well as editable — tap and click-to-type work here exactly as they
- * do on the ShowBar (same `useBpmDraft`), so the page is usable during a show rather
- * than only between them.
- */
-function SpeedMasterRow({
-  master,
-  bank,
-  live,
-  onOpen,
-}: {
-  master: SpeedMaster
-  /** The whole bank, so a follower's badge can name the master it actually follows. */
-  bank: readonly SpeedMaster[]
-  live: SpeedMasterLiveState | null
-  onOpen: () => void
-}) {
-  // Fall back to the stored tempo only until the first live frame arrives; after that the
-  // live value is the truth, and showing the stored one would be a stale readout.
-  const bpm = live?.bpm ?? master.bpm
-  const uuidForWrites = master.masterIndex === 1 ? null : master.uuid
-  const { editing, draft, start, change, commit, onKeyDown } = useBpmDraft(
-    master.uuid,
-    (next) => setSpeedMasterBpm(uuidForWrites, next),
-  )
-  // Read the ratio off the persisted row rather than the live frame: this page joins the two by
-  // uuid and the row is the one that exists before the first frame arrives. A follower's tempo
-  // is master 1's business, so both writes go — same rule as the ShowBar tiles.
-  const follow = followRatioOf(master)
-  const leaderTarget = followTargetOf(master)
-  // One lookup for the tooltip *and* the badge's accessible name — a screen reader told
-  // "follows Master 1" about a follower of M2 is the bug the leader label exists to fix.
-  const leaderName = leaderNameOf(bank, leaderTarget)
-  const lockedReason = follow
-    ? followerTempoLockedReason(master.name, follow.num, follow.den, leaderName)
-    : null
-  const usage = usageLabel(master.usage)
-
-  return (
-    <div className="flex items-center gap-3 rounded-md border bg-card p-3">
-      <BeatIndicator
-        master={{ uuid: uuidForWrites, index: master.masterIndex }}
-        className="shrink-0"
-      />
-
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex min-w-0 flex-1 flex-col items-start text-left"
-      >
-        <span className="flex items-center gap-2">
-          <span className="font-mono text-xs font-bold text-muted-foreground">
-            M{master.masterIndex}
-          </span>
-          <span className="truncate font-medium">{master.name}</span>
-          {master.masterIndex === 1 && (
-            <Badge variant="secondary" className="text-[10px]">
-              Global
-            </Badge>
-          )}
-          {usage != null && (
-            <Badge
-              variant="outline"
-              className="text-[10px]"
-              title={`Busked ${usage.toLowerCase()} effects with no explicit master run on this one`}
-            >
-              {usage}
-            </Badge>
-          )}
-          {/* A follower's provenance reads MANUAL (its tempo is written through, not tapped),
-              so these two badges never collide. */}
-          {follow != null && (
-            <Badge variant="outline" className="text-[10px]" title={lockedReason ?? undefined}>
-              {describeFollow(follow.num, follow.den, leaderLabelOf(bank, leaderTarget))}
-            </Badge>
-          )}
-          {live?.source === 'TAP' && (
-            <Badge variant="outline" className="text-[10px]">
-              tapped
-            </Badge>
-          )}
-        </span>
-        <span className="truncate text-xs text-muted-foreground">
-          {master.notes?.trim() ||
-            (master.referenceCount > 0
-              ? `${master.referenceCount} reference${master.referenceCount === 1 ? '' : 's'}`
-              : 'Nothing follows this master yet')}
-        </span>
-      </button>
-
-      {editing ? (
-        <input
-          autoFocus
-          inputMode="decimal"
-          value={draft}
-          onChange={(e) => change(e.target.value)}
-          onBlur={commit}
-          onKeyDown={onKeyDown}
-          aria-label={`Master ${master.masterIndex} BPM`}
-          className="w-[6ch] shrink-0 border-b border-primary bg-transparent text-right font-mono text-lg font-bold tabular-nums outline-none"
-        />
-      ) : (
-        <button
-          type="button"
-          disabled={lockedReason != null}
-          onClick={() => start(bpm)}
-          title={lockedReason ?? `Master ${master.masterIndex} — click to type a tempo`}
-          className={cn(
-            'w-[6ch] shrink-0 text-right font-mono text-lg font-bold tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground',
-            live == null && 'text-muted-foreground',
-          )}
-        >
-          {formatBpm(bpm)}
-        </button>
-      )}
-
-      {follow ? (
-        <span
-          title={lockedReason ?? undefined}
-          aria-label={`Master ${master.masterIndex} follows ${leaderName} at ${follow.num}/${follow.den}`}
-          className="flex h-8 shrink-0 items-center rounded-md border px-3 text-sm font-bold tabular-nums text-muted-foreground"
-        >
-          {formatFollowRatio(follow.num, follow.den)}
-        </span>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => tapSpeedMaster(uuidForWrites)}
-          aria-label={`Tap tempo for master ${master.masterIndex}`}
-          className="shrink-0 font-bold tracking-[0.08em]"
-        >
-          TAP
-        </Button>
-      )}
-    </div>
+/** The library row's filter: a master's name, its `M<n>`, or its notes. */
+export function filterMasters(masters: readonly SpeedMaster[], filter: string): SpeedMaster[] {
+  const needle = filter.trim().toLowerCase()
+  if (needle === '') return [...masters]
+  return masters.filter(
+    (m) =>
+      m.name.toLowerCase().includes(needle) ||
+      `m${m.masterIndex}` === needle ||
+      (m.notes ?? '').toLowerCase().includes(needle),
   )
 }

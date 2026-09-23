@@ -318,6 +318,26 @@ describe('CueSheet', () => {
     }
   })
 
+  it("skips a snap cue's Curve: the marquee covers it, the write never sees it, and the editor says so", async () => {
+    // A snap cue has no curve to set (`value: undefined`), but a marquee is geometric and sweeps
+    // its Curve cell up anyway. The kit drops it before `write` (library-sheets plan D12) and the
+    // editor's read-out names it — before this, the column's `write` received it and patched a
+    // curve onto a cue with no fade.
+    const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 2 ? { ...c, fadeDurationMs: null } : c)) }
+    render(<CueSheet stack={stack} projectId={1} activeCueId={null} onOpenCue={() => {}} />)
+    const cell = within(row(1)).getAllByRole('button').find((b) => b.closest('[data-cell="curve"]'))!
+    fireEvent.pointerDown(cell, { button: 0, clientX: 440, clientY: 10 })
+    fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 450, clientY: 62 })
+    fireEvent.pointerUp(cell, { button: 0, clientX: 450, clientY: 62 })
+    fireEvent.click(cell)
+    expect(screen.getByText('2 cells')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Q2 snaps · skipped')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: 'Ease In' }))
+    expect(patchCue).toHaveBeenCalledTimes(1)
+    expect(patchCue).toHaveBeenCalledWith({ projectId: 1, cueId: 1, fadeCurve: 'EASE_IN' })
+  })
+
   it('selects and scrolls to the cue the URL names — the ?cue= contract holds on the sheet', () => {
     draw({ openedCueId: 4 })
     expect(row(4)).toHaveAttribute('data-state', 'selected')

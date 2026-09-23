@@ -98,6 +98,13 @@ export interface SpeedMasterInUseResponse {
   /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
   cueLayerCount: number
   cueIds: number[]
+  /**
+   * The masters that follow this one, by name — a reference like any other (they are counted in
+   * `referenceCount`), and the one an operator can act on directly: "unlink Movement, then delete".
+   * A forced delete unlinks them, so they run manually from then on. Optional because a desk that
+   * predates the field sends none.
+   */
+  followerNames?: string[]
 }
 
 export const CODE_SPEED_MASTER_IN_USE = 'SPEED_MASTER_IN_USE'

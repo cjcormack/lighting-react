@@ -59,6 +59,7 @@ export const TextCell = memo(function TextCell({
   label,
   batchLabel,
   batchRows,
+  skipped,
   disabled,
   autoOpen,
   autoClose,
@@ -159,7 +160,9 @@ export const TextCell = memo(function TextCell({
             onChange={(e) => setDraft(e.target.value)}
           />
         </div>
-        <EditorReadout lines={landing?.lines} error={error} />
+        <EditorReadout lines={landing?.lines} error={error}>
+          {skipped ? <span data-editor-skipped>{skipped}</span> : undefined}
+        </EditorReadout>
         <EditorFooter>
           <Button
             size="sm"

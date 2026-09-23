@@ -11,6 +11,9 @@ import {
   commitToSelectedCells,
   firstEditableCell,
   selectedRowsByColumn,
+  skippedNote,
+  splitBatch,
+  takesValue,
   type SheetColumn,
   type SheetRow,
 } from './sheetModel'
@@ -77,6 +80,18 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * line (`SheetCellProps.batchLabel`). Defaults to `row`.
    */
   noun?: string
+  /**
+   * What a row is called in a skip read-out — `M2`, `Q14`, `Front PAR` (library-sheets plan D12).
+   * A column with its own `skipNote` does not need it. Defaults to the row id, which is honest but
+   * rarely what an operator calls anything, so a sheet whose columns can skip should pass one.
+   */
+  rowName?: (row: Row) => string
+  /**
+   * Open one row's record — the sheet's `firstColumn.onOpen`, the pencil's target. Given, **⏎ with
+   * exactly one row selected and no cells** calls it (library-sheets plan D4); absent, that key
+   * does nothing with a row selection, as before.
+   */
+  onOpenRow?: (row: Row) => void
 }
 
 /**
@@ -98,6 +113,8 @@ export function useSheet<Row extends SheetRow, C extends string>({
   cellDisabled,
   onRefused,
   noun = 'row',
+  rowName,
+  onOpenRow,
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -191,8 +208,11 @@ export function useSheet<Row extends SheetRow, C extends string>({
         return
       }
       const column = columnByKey.get(col)
-      const targets = rowSelection.isSelected(row.id) ? selectedRows : [row]
-      column?.write?.(targets, value)
+      if (!column?.write) return
+      // The row-selection path skips as the marquee's does: a row with nothing to set in this
+      // column never reaches its `write` (library-sheets plan D12).
+      const targets = (rowSelection.isSelected(row.id) ? selectedRows : [row]).filter((r) => takesValue(column, r))
+      if (targets.length > 0) column.write(targets, value)
     },
     [cellSelection, columnByKey, commitToCells, rowSelection, selectedRows],
   )
@@ -242,16 +262,43 @@ export function useSheet<Row extends SheetRow, C extends string>({
     [liveFlush, livePush],
   )
 
-  const batchRowsFor = useCallback(
-    (row: Row, col: C): readonly Row[] => {
+  /**
+   * Each selected column's batch split into the rows it writes and the rows it skips — once per
+   * selection rather than once per visible cell, since every cell in the marquee reads its own
+   * column's answer on every render.
+   */
+  const splitByColumn = useMemo(() => {
+    const out = new Map<C, { taken: Row[]; skipped: Row[] }>()
+    for (const { col, rows: group } of columnGroups) {
+      const column = columnByKey.get(col)
+      if (column) out.set(col, splitBatch(column, group))
+    }
+    return out
+  }, [columnByKey, columnGroups])
+  const splitFor = useCallback(
+    (row: Row, col: C): { taken: readonly Row[]; skipped: readonly Row[] } => {
       if (cellSelection.isSelected(row.id, col)) {
-        return columnGroups.find((group) => group.col === col)?.rows ?? [row]
+        return splitByColumn.get(col) ?? { taken: [row], skipped: [] }
       }
-      return rowSelection.isSelected(row.id) ? selectedRows : [row]
+      if (!rowSelection.isSelected(row.id)) return { taken: [row], skipped: [] }
+      const column = columnByKey.get(col)
+      return column ? splitBatch(column, selectedRows) : { taken: selectedRows, skipped: [] }
     },
-    [cellSelection, columnGroups, rowSelection, selectedRows],
+    [cellSelection, columnByKey, rowSelection, selectedRows, splitByColumn],
   )
+  /** The rows a commit from this cell lands on — the batch **less the rows it skips**. */
+  const batchRowsFor = useCallback((row: Row, col: C): readonly Row[] => splitFor(row, col).taken, [splitFor])
   const batchCountFor = useCallback((row: Row, col: C) => batchRowsFor(row, col).length, [batchRowsFor])
+  /** The skip read-out for this cell's batch, or null when every row takes the value. */
+  const skippedFor = useCallback(
+    (row: Row, col: C): string | null => {
+      const { skipped } = splitFor(row, col)
+      if (skipped.length === 0) return null
+      const column = columnByKey.get(col)
+      return column?.skipNote?.(skipped) ?? skippedNote(skipped.map((r) => rowName?.(r) ?? r.id))
+    },
+    [columnByKey, rowName, splitFor],
+  )
 
   // ── The editor requests and the keyboard ──
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
@@ -267,8 +314,21 @@ export function useSheet<Row extends SheetRow, C extends string>({
 
   const clearSelectedCells = useCallback(() => {
     if (!effective.clear) return
-    for (const { col, rows: group } of columnGroups) columnByKey.get(col)?.clear?.(group)
+    for (const { col, rows: group } of columnGroups) {
+      const column = columnByKey.get(col)
+      const taken = column ? group.filter((row) => takesValue(column, row)) : []
+      if (taken.length > 0) column?.clear?.(taken)
+    }
   }, [columnByKey, columnGroups, effective.clear])
+
+  // ⏎ over one row opens its record. Read through the selected rows, so it names the row the
+  // operator is looking at whichever way it was selected (a click, a name-column drag, ⌘A of one).
+  const openSelectedRow = useMemo(() => {
+    if (onOpenRow == null) return undefined
+    return () => {
+      if (selectedRows.length === 1) onOpenRow(selectedRows[0])
+    }
+  }, [onOpenRow, selectedRows])
 
   useSheetKeyboard<C>({
     cellCount,
@@ -278,6 +338,10 @@ export function useSheet<Row extends SheetRow, C extends string>({
     onOpen: requests.openCellEditor,
     onClear: clearSelectedCells,
     onRefused,
+    // The visible rows, not the selection's raw count: a selected id whose row has since gone (a
+    // delete, a filter) must not make one row read as two.
+    rowCount: cellCount > 0 ? 0 : selectedRows.length,
+    onOpenRow: openSelectedRow,
   })
 
   const [marqueeDragging, setMarqueeDragging] = useState(false)
@@ -298,7 +362,9 @@ export function useSheet<Row extends SheetRow, C extends string>({
   const spreadPlans = useMemo<SpreadPlan[]>(
     () =>
       columnGroups.flatMap(({ col, rows: group }) => {
-        const plan = columnByKey.get(col)?.spread?.(group)
+        const column = columnByKey.get(col)
+        const taken = column ? group.filter((row) => takesValue(column, row)) : []
+        const plan = taken.length > 0 ? column?.spread?.(taken) : null
         return plan ? [plan] : []
       }),
     [columnByKey, columnGroups],
@@ -319,6 +385,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     onCellCommit: handleCellCommit,
     batchCountFor,
     batchRowsFor,
+    skippedFor,
     batchNoun: noun,
     cellDisabled,
     cellSelection: tableCellSelection,

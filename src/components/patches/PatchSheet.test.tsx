@@ -191,6 +191,24 @@ function dragAddresses(from: number, to: number) {
 }
 
 describe('PatchSheet', () => {
+  it('opens a fixture from its pencil — the kit’s now — and from ⏎ with one row selected (library-sheets D4)', () => {
+    const onEditPatch = vi.fn()
+    draw({ onEditPatch })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit PAR 2' }))
+    expect(onEditPatch).toHaveBeenLastCalledWith(2)
+    // A click on the name selects the row and focuses the rename's trigger; ⏎ still opens the row.
+    const name = screen.getByText('PAR 3').closest('button')!
+    fireEvent.click(name)
+    name.focus()
+    fireEvent.keyDown(name, { key: 'Enter' })
+    expect(onEditPatch).toHaveBeenLastCalledWith(3)
+    expect(onEditPatch).toHaveBeenCalledTimes(2)
+    // Two rows: ⏎ opens nothing.
+    fireEvent.click(row('PAR 1').querySelector('[data-first-column]')!, { metaKey: true })
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(onEditPatch).toHaveBeenCalledTimes(2)
+  })
+
   it('lands a Set over N addresses consecutively by footprint from the typed one', async () => {
     draw()
     // PAR 1 (6ch) and PAR 2 (6ch), in visible order, set from 7: 7 and 13.
