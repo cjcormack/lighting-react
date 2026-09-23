@@ -482,7 +482,9 @@ export function BuskPageStrip({
     <div
       data-busk-page-strip="open"
       data-busk-page-strip-dense={dense ? 'true' : undefined}
-      className={cn('@container shrink-0 px-4', dense && 'border-b')}
+      // The merged row's 32px is the wrapper's, border included (`box-sizing: border-box`), and the
+      // row fills what is left: an `h-8` row under a bordered wrapper drew the chrome at 33.
+      className={cn('@container shrink-0 px-4', dense && 'h-8 border-b')}
     >
     <div
       // `data-pad-row`: the handle a test reaches the row by (D20), since the label folds.
@@ -492,7 +494,7 @@ export function BuskPageStrip({
         // The merged row is exactly 32px and never wraps — a second line would cost the pads the
         // row it was merged to save. In Split the row wraps as it always did, for edit mode's
         // name field; in Pads it is `flex-nowrap` above its floor and two rows by design below.
-        dense ? 'h-8 gap-2' : 'min-h-7 gap-x-2 gap-y-1 pt-2.5',
+        dense ? 'h-full gap-2' : 'min-h-7 gap-x-2 gap-y-1 pt-2.5',
         !dense && pads == null && 'flex-wrap',
         !dense && pads != null && PAD_TWO_ROWS_CLASS,
       )}

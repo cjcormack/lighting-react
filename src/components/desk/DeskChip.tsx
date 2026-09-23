@@ -14,9 +14,9 @@ import { FollowPill } from './FollowPill'
  * no longer a press on this chip: ⌘K's *Stop following the desk selection in this window*
  * (`buildWindowCommands`) is the one door — the Screens sheet only *reports* a row's flag, and
  * there is no MIDI target for it — and it lands the operator on a chip that says where they are.
- * A touch-only screen therefore cannot unlink its selection at all; D18 says where the chip goes
- * and not where the unlink moves to, and whether a second door is owed is Chris's call, not
- * something this chip should grow back to provide.
+ * A touch-only screen therefore cannot unlink its selection at all. That was put to Chris when the
+ * busk-chrome plan closed and accepted as it is (2026-09-23): no second door is owed, and if one
+ * ever is, it is not something this chip should grow back to provide.
  *
  * It is a fact about the one selection rather than about this window's chrome: unlinked, the
  * selection is this tab's own and a press from here lands on it, not on the desk's (D8). Sitting on

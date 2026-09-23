@@ -165,8 +165,13 @@ function useChannelKeyState(owner: ChannelOwner | undefined): ProgrammerKeyState
  * as a prop. Blind decides whether an entry is drawn as staged, so a cell's ownership has to move
  * when it flips; reading `isBlind()` inside each cell's memo would not, and 512 subscriptions to
  * the whole-state channel would be the cost `useProgrammerRowSnapshot` exists to avoid.
+ *
+ * Not `hooks/useProgrammerBlind`, which reads the same fact off the RTK `ProgrammerSummary`: this
+ * one reads the WS layer's snapshot, the source `useChannelKeyState` reads each cell's key state
+ * from, so a cell's blind and its entry come from one place — the pairing `useRowOwnership` keeps
+ * on the programmer's grid. It also keeps this sheet mountable with no store.
  */
-function useProgrammerBlind(): boolean {
+function useWsProgrammerBlind(): boolean {
   return useSyncExternalStore(
     (cb) => {
       const sub = lightingApi.programmer.subscribe(() => cb())
@@ -288,7 +293,7 @@ export function DmxSheet({
   const [unparkChannel] = useUnparkChannelMutation()
   const { data: fixtures } = useFixtureListQuery()
   const owners = useMemo(() => channelOwners(fixtures ?? []), [fixtures])
-  const blind = useProgrammerBlind()
+  const blind = useWsProgrammerBlind()
 
   // **How many addresses fit on a row** — the widest arm the container can draw without scrolling
   // sideways. `useContainerBand` reads the floors straight off `DMX_ROW_WIDTHS`, so the arms and

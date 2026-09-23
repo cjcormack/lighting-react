@@ -265,6 +265,13 @@ describe('the pad row', () => {
     draw({ dense: true })
     expect((document.querySelector('[data-busk-page-tabs]') as HTMLElement).className).toContain('p-px')
     expect(screen.getByRole('button', { name: 'Ballads' }).className).toContain('py-0.5')
+    // And it is 32px with its border inside, not a 32px row under a bordered wrapper (33).
+    const wrapper = document.querySelector('[data-busk-page-strip-dense]') as HTMLElement
+    expect(wrapper.className).toContain('h-8')
+    expect(wrapper.className).toContain('border-b')
+    const row = wrapper.querySelector('[data-pad-row="merged"]') as HTMLElement
+    expect(row.className).toContain('h-full')
+    expect(row.className).not.toContain('h-8')
   })
 
   it('folds in the rig row’s order — verbs’ and Edit layout’s words, then the Focus words and the chip’s subject, then the label — and is two rows under its own floor, with the words back as closed ranges (D15, D19, D20)', () => {
@@ -317,7 +324,8 @@ describe('the pad row', () => {
   it('keeps the merged row and the folded strip as they were: no label, no verbs, no summary', () => {
     draw({ dense: true, leading: <span>leading</span>, controls: <span>ctl</span> })
     const merged = document.querySelector('[data-pad-row="merged"]') as HTMLElement
-    expect(merged.className).toContain('h-8')
+    expect(merged.className).toContain('h-full')
+    expect(merged.parentElement!.className).toContain('h-8')
     expect(merged.querySelector('[data-pad-row-tabs]')).toBeNull()
     expect(screen.queryByText('Pads', { selector: 'div' })).toBeNull()
     expect(screen.getByText('leading').compareDocumentPosition(screen.getByText('ctl')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

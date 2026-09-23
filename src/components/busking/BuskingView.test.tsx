@@ -639,7 +639,9 @@ describe('the busk view', () => {
       // One row: the strip's pieces lead the page strip; there is no strip row of its own.
       const strip = document.querySelector('[data-busk-page-strip="open"]')!
       expect(strip).toHaveAttribute('data-busk-page-strip-dense', 'true')
-      expect(strip.querySelector('[data-pad-row]')!.className).toContain('h-8')
+      // 32px with its border inside: the height is the wrapper's, and the row fills it.
+      expect(strip.className).toContain('h-8')
+      expect(strip.querySelector('[data-pad-row]')!.className).toContain('h-full')
       expect(strip.querySelector('[data-testid="rig-strip-content"]')).not.toBeNull()
       expect(screen.queryByTestId('rig-strip')).toBeNull()
       expect(screen.queryByTestId('target-band')).toBeNull()

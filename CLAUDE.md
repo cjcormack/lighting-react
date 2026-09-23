@@ -1461,8 +1461,8 @@ name a test or a screen reader gets never changes with the width. The desk chip 
 row in Split and Rig (`CHIP_SUBJECT_CLASS`, the Focus words' rung) and on the pad row in Pads
 beside the page chip (`PAD_CHIP_SUBJECT_CLASS`, both). The way *out* of following is ⌘K's *Stop
 following the desk selection in this window* and nothing else — the Screens sheet reports the flag
-and no MIDI target sets it — so a touch-only screen cannot unlink its selection; whether a second
-door is owed is Chris's call.
+and no MIDI target sets it — so a touch-only screen cannot unlink its selection. That was put to
+Chris and accepted as it is (2026-09-23): no second door is owed.
 
 **The words come back under the floor, as closed ranges** (D19). Below the floor each row has its
 whole line, so what the ladder took returns while the line holds it and folds again at a second
