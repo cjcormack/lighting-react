@@ -81,7 +81,14 @@ vi.mock('@/components/fixtures/fixtureAppearance', () => ({
 }))
 // The desk chip's readers (the same three `TargetBand.test.tsx` mocked).
 let snapshot: DeskSelectionSnapshot = { targets: [], families: null, source: null }
-vi.mock('@/store/selection', () => ({ useDeskSelectionSnapshot: () => snapshot }))
+vi.mock('@/store/selection', async () => {
+  const { unlinkFromDesk } = await import('@/lib/deskFollow')
+  return {
+    useDeskSelectionSnapshot: () => snapshot,
+    // The badge's press (desk-follow D11): the desk's fact as this window's own.
+    unlinkFromDeskNow: () => unlinkFromDesk({ targets: snapshot.targets, families: snapshot.families ?? null }),
+  }
+})
 vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 2' }))
 // The programmer's blind flag, behind the one seam the band's marks read it through: the band's
 // tests render with no store, and the pill must be flippable per test.
@@ -202,7 +209,13 @@ const handle = () => screen.getByRole('separator', { name: 'Rig height' })
 
 const tileButtons = () =>
   screen.getAllByRole('button', { pressed: false }).concat(screen.queryAllByRole('button', { pressed: true }))
-    .filter((b) => b.getAttribute('aria-pressed') != null && !b.textContent?.startsWith('Targets') && !b.textContent?.startsWith('Cells'))
+    .filter(
+      (b) =>
+        b.getAttribute('aria-pressed') != null &&
+        !b.hasAttribute('data-link-badge') &&
+        !b.textContent?.startsWith('Targets') &&
+        !b.textContent?.startsWith('Cells'),
+    )
 
 beforeEach(() => {
   // A desk screen: wide, tall, so the split defaults to three rows (`lib/buskWindow.ts`'s ladder).
@@ -466,7 +479,8 @@ describe('the rig band', () => {
     )
     expect(order.slice(0, 3)).toEqual(['Cells: All', 'Previous along the rig', 'Next along the rig'])
     expect(order.slice(3, 7)).toEqual(['Spread…', 'Locate', 'Highlight', 'Clear'])
-    expect(order.slice(7)).toEqual(['Colour', 'Focus here'])
+    // The selection's link badge is a button in Split — the toggle's linked face (desk-follow D11).
+    expect(order.slice(7)).toEqual(['Colour', 'Following the desk selection', 'Focus here'])
     const state = row.querySelector('[data-rig-row-state]') as HTMLElement
     expect(within(state).getByText('Colour')).toBeInTheDocument()
     expect(state.lastElementChild).toHaveTextContent('Focus here')
@@ -507,7 +521,10 @@ describe('the rig band', () => {
         const order = [...state.querySelectorAll('button, [data-rig-family], [data-busk-blind]')].map(
           (el) => el.getAttribute('aria-label') ?? el.textContent,
         )
-        expect(order, focus).toEqual(['Colour', 'Blind', 'Focus here'])
+        // In Split the selection badge is the toggle; in Rig, which always follows, it is a mark (D11).
+        expect(order, focus).toEqual(
+          focus === 'split' ? ['Colour', 'Blind', 'Following the desk selection', 'Focus here'] : ['Colour', 'Blind', 'Focus here'],
+        )
         cleanup()
       }
       // With no mask the pill stands alone at the front of the group.
@@ -531,7 +548,7 @@ describe('the rig band', () => {
     // Following: the badge, a glyph that never gives — not the pill, and not nothing.
     expect(screen.queryByRole('button', { name: /^Targets:/ })).toBeNull()
     const linked = document.querySelector('[data-rig-row-state]') as HTMLElement
-    const badge = within(linked).getByRole('img', { name: 'Following the desk selection' })
+    const badge = within(linked).getByRole('button', { name: 'Following the desk selection' })
     expect(badge.className).toContain('shrink-0')
     expect([...linked.querySelectorAll('button, [data-rig-family], [data-link-badge]')].map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual([
       'Colour',
@@ -561,7 +578,7 @@ describe('the rig band', () => {
     cleanup()
     relinkToDesk()
     draw([], { compact: true })
-    expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
   })
 
   it('draws Split and Rig with one DOM order, ending with the host’s controls, and has no Pads arm (D17)', () => {
@@ -572,11 +589,16 @@ describe('the rig band', () => {
       cleanup()
       draw([], { focus, controls })
       const row = document.querySelector('[data-rig-row="desk"]') as HTMLElement
-      positions[focus] = [...row.querySelectorAll('button')].map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '')
+      // The badge counted as itself whatever it is drawn as: a button in Split, a mark in Rig (D11).
+      positions[focus] = [...row.querySelectorAll('button, [data-link-badge]')].map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '')
       expect(row.querySelector('[data-rig-row-state]')!.lastElementChild).toHaveTextContent('Focus here')
       expect(document.querySelector(`[data-rig-band="${focus}"]`)).toHaveAttribute('data-focus', focus)
     }
     expect(positions.rig).toEqual(positions.split)
+    // Rig always follows the desk selection (D2), so there the badge is a mark that says why, not a
+    // press that would be undone at once; in Split it is the toggle (desk-follow D11).
+    const rigBadge = screen.getByRole('img', { name: 'Following the desk selection' })
+    expect(rigBadge).toHaveAttribute('title', 'Following the desk selection — Rig focus always follows')
 
     // Rig focus: no handle and no pill under the rows — the way back is the folded page strip's
     // chevron (`BuskPageStrip`), which the host draws, and the Focus control; there is no Pads
@@ -584,6 +606,9 @@ describe('the rig band', () => {
     expect(screen.queryByRole('separator', { name: 'Rig height' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Show the rig rows again: Split' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Show the page again: Split' })).toBeNull()
+    cleanup()
+    draw([], { focus: 'split', controls })
+    expect(screen.getByRole('button', { name: 'Following the desk selection' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('folds the verbs to their icons first, the Cells prefix and Focus words after, and the label last before the floor (D15, D20)', () => {

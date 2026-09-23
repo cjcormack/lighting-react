@@ -16,39 +16,42 @@ import { cn } from '@/lib/utils'
  * rung for folding them to the glyph alone (D19's convention: the host measures, the part takes a
  * class). With no names it is the glyph and nothing else.
  *
- * **A mark, never a control.** The way out of following is the Screens row and ⌘K, and the way
- * back is the chip that replaces this, so a press here would be a third door that had to answer
- * *to what?*. It is an `img` with the whole reading as its accessible name — the hover sentence,
- * names included — so a test or a screen reader gets the same name at every width. `shrink-0`, and
+ * **It is the toggle's linked face** (desk-follow D11, 2026-09-23, revising D7 and D8's "a mark,
+ * never a control"): with [onUnlink] it is a button whose press takes the window off the desk, and
+ * the dashed chip that replaces it presses back — so the one control on the row flips the two modes
+ * both ways, as the operator reaches for it first. The Screens row and ⌘K stay, for a window other
+ * than this one. Without [onUnlink] it is a mark (`role="img"`): where the window cannot leave —
+ * the selection in Rig and Pads focus (D2) — a press would have nothing to do, and a control that
+ * does nothing reads as broken, so the host says why in [title] instead. [label] is the accessible
+ * name either way — the state, whole at every width — and [title] the hover, which says what a
+ * press does. `aria-pressed` is true, the pill's convention: pressed means linked. `shrink-0`, and
  * the same 20px height as the pills beside it: a badge that gave way would move the controls it
- * exists to sit quietly beside.
+ * exists to sit quietly beside, and the button form is the mark's box to the pixel, so no ladder
+ * moved for it.
  */
 export function LinkBadge({
+  label,
   title,
   names,
   namesClass,
+  onUnlink,
   className,
 }: {
-  /** The hover and the accessible name: *Following the desk selection*. */
-  title: string
+  /** The accessible name — the state: *Following the desk selection*. */
+  label: string
+  /** The hover: the state, and what a press does (or why it cannot). Defaults to [label]. */
+  title?: string
   /** Other windows linked with this one, drawn after the glyph. Absent or empty draws the glyph alone. */
   names?: readonly string[]
   /** The names' fold — the host's rung. Drawn always when absent. */
   namesClass?: string
+  /** Take this window off the desk. Absent draws a mark rather than a button. */
+  onUnlink?: () => void
   className?: string
 }) {
   const shown = names != null && names.length > 0 ? names : null
-  return (
-    <span
-      role="img"
-      aria-label={title}
-      title={title}
-      data-link-badge
-      className={cn(
-        'inline-flex h-5 min-w-5 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border px-1 text-[10px] font-semibold leading-none text-muted-foreground',
-        className,
-      )}
-    >
+  const body = (
+    <>
       <Link2 className="size-[11px] shrink-0" aria-hidden />
       {shown != null && (
         <span data-link-badge-names className={namesClass}>
@@ -58,6 +61,30 @@ export function LinkBadge({
           {shown.length > 1 && ` +${shown.length - 1}`}
         </span>
       )}
-    </span>
+    </>
+  )
+  const base = cn(
+    'inline-flex h-5 min-w-5 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border px-1 text-[10px] font-semibold leading-none text-muted-foreground',
+    className,
+  )
+  if (onUnlink == null) {
+    return (
+      <span role="img" aria-label={label} title={title ?? label} data-link-badge className={base}>
+        {body}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed
+      title={title ?? label}
+      onClick={onUnlink}
+      data-link-badge
+      className={cn(base, 'hover:bg-accent/50 hover:text-foreground')}
+    >
+      {body}
+    </button>
   )
 }

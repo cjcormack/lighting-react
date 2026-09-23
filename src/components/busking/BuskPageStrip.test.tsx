@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { store } from '@/store'
 import type { BuskPage } from '@/api/buskApi'
-import { resetBuskPageFollowStores, unlinkBuskPage } from '@/lib/buskPageFollow'
+import { getLocalBuskPage, isFollowingBuskPage, resetBuskPageFollowStores, unlinkBuskPage } from '@/lib/buskPageFollow'
 import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 import {
   BuskPageStrip,
@@ -241,22 +241,22 @@ describe('the pad row', () => {
   })
 
   it('marks the page in every shape — the link badge while paged with the desk, *Page: Own* while not — beside the tabs (desk-follow D7, D9)', () => {
-    // Paged with the desk: the badge, a mark and never a control, in the tabs' group.
+    // Paged with the desk: the badge — the toggle's linked face (D11) — in the tabs' group.
     draw({ pads: padsOf(verbs().v) })
     expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
-    const badge = screen.getByRole('img', { name: 'Paged with the desk' })
+    const badge = screen.getByRole('button', { name: 'Paged with the desk' })
     expect(badge).toHaveAttribute('data-link-badge')
     expect(badge.closest('[data-pad-row-tabs]')).not.toBeNull()
     // With nobody else paged with it, the glyph alone.
     expect(badge.querySelector('[data-link-badge-names]')).toBeNull()
     cleanup()
     draw()
-    expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Paged with the desk' })).toBeInTheDocument()
     cleanup()
     // Own page: the dashed chip, whose subject folds at the row's rung (D9's *Own*).
     unlinkBuskPage(4)
     draw({ pads: padsOf(verbs().v) })
-    expect(screen.queryByRole('img', { name: /^Paged with the desk/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Paged with the desk/ })).toBeNull()
     const chip = screen.getByRole('button', { name: 'Page: Own' })
     expect(chip.className).toContain('border-dashed')
     expect(chip.closest('[data-pad-row-tabs]')).not.toBeNull()
@@ -272,13 +272,41 @@ describe('the pad row', () => {
     cleanup()
     draw({ pages: [], activePageId: null })
     expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
-    expect(screen.queryByRole('img', { name: /^Paged with the desk/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Paged with the desk/ })).toBeNull()
+  })
+
+  it('is the toggle both ways: the badge keeps the page on show as this window’s own, the chip pages with the desk again (D11)', () => {
+    draw({ activePageId: 5 })
+    const badge = screen.getByRole('button', { name: 'Paged with the desk' })
+    expect(badge).toHaveAttribute('aria-pressed', 'true')
+    expect(badge).toHaveAttribute('title', "Paged with the desk. Click to keep this page as this window's own")
+    fireEvent.click(badge)
+    expect(isFollowingBuskPage()).toBe(false)
+    expect(getLocalBuskPage()).toBe(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Page: Own' }))
+    expect(isFollowingBuskPage()).toBe(true)
+    expect(screen.getByRole('button', { name: 'Paged with the desk' })).toBeInTheDocument()
+    cleanup()
+    // Folded (Rig focus pages with the group too), the same toggle.
+    draw({ folded: true, activePageId: 4 })
+    fireEvent.click(screen.getByRole('button', { name: 'Paged with the desk' }))
+    expect(getLocalBuskPage()).toBe(4)
+  })
+
+  it('draws the selection badge in Pads as a mark, not a press — Pads always follows (D2)', () => {
+    draw({ pads: padsOf(verbs().v) })
+    const row = document.querySelector('[data-pad-row-state]') as HTMLElement
+    expect(within(row).getByRole('img', { name: 'Following the desk selection' })).toHaveAttribute(
+      'title',
+      'Following the desk selection — Pads focus always follows',
+    )
+    expect(within(row).queryByRole('button', { name: 'Following the desk selection' })).toBeNull()
   })
 
   it('names the other windows paged with the desk on the badge, folding them on each row’s own rung (D7)', () => {
     coPaged.names = ['Screen 2', 'Screen 3']
     const title = 'Paged with the desk, with Screen 2 and Screen 3 — a tab click here pages them too'
-    const namesOf = () => screen.getByRole('img', { name: title }).querySelector('[data-link-badge-names]') as HTMLElement
+    const namesOf = () => screen.getByRole('button', { name: title }).querySelector('[data-link-badge-names]') as HTMLElement
     draw({ pads: padsOf(verbs().v) })
     expect(namesOf()).toHaveTextContent('Screen 2 +1')
     expect(namesOf().className).toBe(PAD_PAGE_NAMES_CLASS)
@@ -397,7 +425,7 @@ describe('the pad row', () => {
     expect(folded.className).toContain('h-10')
     expect(folded).toHaveTextContent('Ballads')
     // Rig focus still pages with the group, so the fold carries the page mark (D7).
-    expect(within(folded).getByRole('img', { name: 'Paged with the desk' })).toBeInTheDocument()
+    expect(within(folded).getByRole('button', { name: 'Paged with the desk' })).toBeInTheDocument()
     expect(within(folded).queryByRole('button', { name: 'Ballads' })).toBeNull()
   })
 

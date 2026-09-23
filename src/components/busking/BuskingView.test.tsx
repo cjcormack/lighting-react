@@ -421,7 +421,7 @@ describe('the busk view', () => {
       // ⌘K's, the Screens sheet's or a `?page=` arrival's, and it snapshots the page this window is
       // showing — which the view reports for a Screens row's `pageFollows: 'false'` to keep (D6).
       expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
-      expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Paged with the desk' })).toBeTruthy()
       expect(showingBuskPage()).toBe(second.id)
       act(() => unlinkBuskPage(second.id))
       // Unlinked, still on Dance — and the desk moving no longer reaches this window.
@@ -442,7 +442,7 @@ describe('the busk view', () => {
       )
       expect(buskPageWs.sent).toEqual([])
       expect(screen.queryByRole('button', { name: /^Page:/ })).toBeNull()
-      expect(screen.getByRole('img', { name: 'Paged with the desk' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Paged with the desk' })).toBeTruthy()
     })
 
     it('writes the desk on a tab click while following, and only this window once unlinked', async () => {

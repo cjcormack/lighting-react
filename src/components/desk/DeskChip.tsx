@@ -1,8 +1,9 @@
 import { relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
+import { unlinkFromDeskNow } from '@/store/selection'
 import { FollowPill } from './FollowPill'
 import { LinkBadge } from './LinkBadge'
 
-/** The badge's hover and accessible name while this window follows the desk selection. */
+/** The badge's accessible name while this window follows the desk selection. */
 export const FOLLOWING_DESK_SELECTION = 'Following the desk selection'
 
 /**
@@ -13,16 +14,19 @@ export const FOLLOWING_DESK_SELECTION = 'Following the desk selection'
  * following, on the reasoning that a pill saying *Desk* all night is noise; the desk-follow review
  * kept the reasoning and changed the answer (Chris, 2026-09-23: "always show when we're linked,
  * even if it is just a small badge"). So while following it is `LinkBadge` — glyph only at every
- * width, hover *Following the desk selection*, a mark rather than a control — and unlinked it is
+ * width, hover *Following the desk selection*, whose press unlinks (below) — and unlinked it is
  * the dashed pill, whose press is `relinkToDesk`. The window always says which one it is on.
  *
- * The way *out* of following is not a press here: it is the Selection segment on this window's
- * row of the Screens sheet, from any window (`windows.follow`, D4), and ⌘K's *Stop following the
- * desk selection in this window*. Both are offered only where a selection of its own means
- * something (D1): busk Split and the Programmer. **Rig and Pads focus always follow**
- * (`followIsForced`, D2) — the Screens segment is disabled there with its reason, ⌘K withholds the
- * item, and entering either while local relinks and toasts (D3, `BuskingView`) — so on those rows
- * this is only ever the badge.
+ * **The badge is the toggle's other face** (desk-follow D11, revising D8's "a mark"): a press
+ * takes this window's own copy of the desk's selection, as ⌘K's *Stop following the desk selection
+ * in this window* does (`unlinkFromDeskNow`), and the dashed pill that replaces it presses back.
+ * The Selection segment on a window's row of the Screens sheet (`windows.follow`, D4) and ⌘K stay,
+ * for setting *another* window. A selection of its own is offered only where it means something
+ * (D1): busk Split and the Programmer. **Rig and Pads focus always follow** (`followIsForced`,
+ * D2) — the Screens segment is disabled there with its reason, ⌘K withholds the item, and entering
+ * either while local relinks and toasts (D3, `BuskingView`) — so a host in one of those focuses
+ * passes [forcedBy], and the badge is a mark whose hover says why rather than a press that would be
+ * undone at once.
  *
  * It is a fact about the one selection rather than about this window's chrome: unlinked, the
  * selection is this tab's own and a press from here lands on it, not on the desk's (D8). Sitting on
@@ -41,14 +45,33 @@ export const FOLLOWING_DESK_SELECTION = 'Following the desk selection'
 export function DeskChip({
   showSubject,
   subjectClass,
+  forcedBy,
   className,
 }: {
   showSubject?: boolean
   subjectClass?: string
+  /** The busk focus this host is drawn in, where it forces following (D2): the badge is then a mark. */
+  forcedBy?: 'rig' | 'pads'
   className?: string
 }) {
   const following = useDeskFollow()
-  if (following) return <LinkBadge title={FOLLOWING_DESK_SELECTION} />
+  if (following) {
+    if (forcedBy != null) {
+      return (
+        <LinkBadge
+          label={FOLLOWING_DESK_SELECTION}
+          title={`${FOLLOWING_DESK_SELECTION} — ${forcedBy === 'rig' ? 'Rig' : 'Pads'} focus always follows`}
+        />
+      )
+    }
+    return (
+      <LinkBadge
+        label={FOLLOWING_DESK_SELECTION}
+        title={`${FOLLOWING_DESK_SELECTION} — click to give this window a selection of its own`}
+        onUnlink={unlinkFromDeskNow}
+      />
+    )
+  }
   return (
     <FollowPill
       following={false}

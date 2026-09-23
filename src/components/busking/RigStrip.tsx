@@ -77,7 +77,8 @@ export function RigStripContent({ selectedTargets, families, controls }: Omit<Ri
           are the only rig chrome in Pads — the resting focus there — and the sheet is an overlay
           with no fold, so without it a blind programmer was reported nowhere (`BlindMarks.tsx`). */}
       <BlindPill wordClass={COMPACT_FOCUS_WORD_CLASS} />
-      <DeskChip showSubject />
+      {/* Pads is this strip's only focus, and Pads always follows (D2): the badge is a mark here. */}
+      <DeskChip showSubject forcedBy="pads" />
       {controls}
     </>
   )

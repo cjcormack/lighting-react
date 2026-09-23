@@ -402,7 +402,11 @@ export function BuskPageStrip({
         {/* The page mark (desk-follow D7): Rig focus still pages with the group, so the fold says
             whether it does, and who with. It does not shrink — the page's name is what gives here. */}
         {pages.length > 0 && (
-          <BuskPageChip subjectClass={FOLDED_PAGE_SUBJECT_CLASS} namesClass={FOLDED_PAGE_NAMES_CLASS} />
+          <BuskPageChip
+            showingPageId={activePageId}
+            subjectClass={FOLDED_PAGE_SUBJECT_CLASS}
+            namesClass={FOLDED_PAGE_NAMES_CLASS}
+          />
         )}
         <div className="flex-1" />
         {/* The way back to Split, pointing the way the page will come. The rig strip carries no
@@ -489,6 +493,7 @@ export function BuskPageStrip({
      desk, the dashed *Page: Own* while not (desk-follow D7). */
   const pageChip = pages.length > 0 && (
     <BuskPageChip
+      showingPageId={activePageId}
       subjectClass={pads != null ? PAD_PAGE_SUBJECT_CLASS : dense ? MERGED_PAGE_SUBJECT_CLASS : SPLIT_PAGE_SUBJECT_CLASS}
       namesClass={pads != null ? PAD_PAGE_NAMES_CLASS : dense ? MERGED_PAGE_NAMES_CLASS : SPLIT_PAGE_NAMES_CLASS}
       className="min-w-0 shrink"
@@ -623,7 +628,7 @@ export function BuskPageStrip({
             {/* The desk chip too, in Pads (D17): there is no rig row here to carry it. Pads always
                 follows the desk selection (desk-follow D2), so this is the link badge (D8). */}
             {pads != null && !editing && (
-              <DeskChip showSubject subjectClass={PAD_CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />
+              <DeskChip showSubject forcedBy="pads" subjectClass={PAD_CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />
             )}
             {controls}
             {editingVerbs}

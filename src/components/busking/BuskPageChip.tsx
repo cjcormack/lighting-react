@@ -1,4 +1,4 @@
-import { relinkBuskPage, useBuskPageFollow } from '@/lib/buskPageFollow'
+import { relinkBuskPage, unlinkBuskPage, useBuskPageFollow } from '@/lib/buskPageFollow'
 import { FollowPill } from '@/components/desk/FollowPill'
 import { LinkBadge } from '@/components/desk/LinkBadge'
 import { useCoPagedWindowNames } from '@/store/windows'
@@ -32,19 +32,24 @@ export function pagedWithDeskTitle(names: readonly string[]): string {
  * `FollowPill`, reading *Page: Own* — *Own* alone where the host folds [subjectClass] — whose
  * press pages with the desk again.
  *
- * The ways *onto* a page of its own are the ones that were never a press here — arriving with
- * `?page=`, the Screens row's Page segment or its picker on an own-page row, a
- * `windows.viewOptions {page}`, and a tab click that never reached the desk (`BuskingView`'s
- * `onPageSelect`) — and the ways back are this chip, the Screens row and ⌘K.
+ * **The badge is the toggle's other face** (desk-follow D11, revising D7's "a mark"): a press keeps
+ * the page this window is showing ([showingPageId], the strip's active page) as its own, and the
+ * dashed pill that replaces it presses back — one control on the row flips the two modes both
+ * ways. The other ways onto a page of its own are the Screens row's Page segment or its picker on
+ * an own-page row, ⌘K, a `?page=` arrival and a tab click that never reached the desk
+ * (`BuskingView`'s `onPageSelect`); the other ways back are the Screens row and ⌘K.
  *
  * Only the flag is shared with nobody: following the desk's *selection* while holding a page of
  * your own is the whole point (§The busk layout), so neither this nor `DeskChip` reads the other's.
  */
 export function BuskPageChip({
+  showingPageId,
   subjectClass,
   namesClass,
   className,
 }: {
+  /** The page this window is showing — what a press on the badge keeps as its own. */
+  showingPageId: number | null
   /** The pill's *Page:* fold — the host's rung (D19). */
   subjectClass?: string
   /** The badge's names' fold — the host's rung. Drawn always when absent. */
@@ -53,7 +58,7 @@ export function BuskPageChip({
   className?: string
 }) {
   const following = useBuskPageFollow()
-  if (following) return <PagedWithDeskBadge namesClass={namesClass} />
+  if (following) return <PagedWithDeskBadge namesClass={namesClass} showingPageId={showingPageId} />
   return (
     <FollowPill
       following={false}
@@ -71,7 +76,16 @@ export function BuskPageChip({
  * Split out so the registry subscription is held only while the badge is drawn — an own-page
  * window has no one to name.
  */
-function PagedWithDeskBadge({ namesClass }: { namesClass?: string }) {
+function PagedWithDeskBadge({ namesClass, showingPageId }: { namesClass?: string; showingPageId: number | null }) {
   const names = useCoPagedWindowNames()
-  return <LinkBadge title={pagedWithDeskTitle(names)} names={names} namesClass={namesClass} />
+  const label = pagedWithDeskTitle(names)
+  return (
+    <LinkBadge
+      label={label}
+      title={`${label}. Click to keep this page as this window's own`}
+      names={names}
+      namesClass={namesClass}
+      onUnlink={() => unlinkBuskPage(showingPageId)}
+    />
+  )
 }

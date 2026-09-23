@@ -20,9 +20,11 @@ const desk = vi.hoisted(() => ({
   snapshot: { targets: [], families: null, source: null } as DeskSelectionSnapshot,
 }))
 vi.mock('@/store/selection', async () => {
-  const { useDeskFollow } = await import('@/lib/deskFollow')
+  const { unlinkFromDesk, useDeskFollow } = await import('@/lib/deskFollow')
   return {
     useDeskSelectionSnapshot: () => desk.snapshot,
+    // The badge's press (desk-follow D11): the desk's fact as this window's own.
+    unlinkFromDeskNow: () => unlinkFromDesk({ targets: desk.snapshot.targets, families: desk.snapshot.families }),
     // The press mask: the desk's while following, the marquee's own when not — the real rule, over
     // the mocked snapshot and the real (subscribed) follow store.
     usePressFamilies: (local: AttributeFamily[] | null) =>
@@ -38,7 +40,7 @@ const { SelectionBar } = await import('./SelectionBar')
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { isFollowingDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 
 const CELLS: CellRef<ColumnKey>[] = [
   { rowId: 'fixture:a', col: 'colour' },
@@ -152,30 +154,30 @@ describe('SelectionBar', () => {
    * The desk chip (multi-screen plan §4, D7; desk-follow plan D8, revisiting busk-chrome D18):
    * between the family pill and the strip, on the programmer only — the plain lists never bridge
    * to the desk (D1), so a chip there would name a link that does not exist. While following it is
-   * the link badge, a glyph and no control; once unlinked, the dashed *This window*, whose press
-   * is the way back. The unlink is ⌘K's or the Screens row's.
+   * the link badge, whose press unlinks (D11); once unlinked, the dashed *This window*, whose press
+   * is the way back. ⌘K and the Screens row can do either too, for another window.
    */
   describe('the desk chip', () => {
-    it('is the link badge while following — whoever moved the selection last — and no button', () => {
+    it('is the link badge while following — whoever moved the selection last — not the pill', () => {
       desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
       const first = render(bar())
-      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
       first.unmount()
       desk.snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
       render(bar())
-      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
 
     it('draws the badge between the family pill and the strip, and with nothing selected', () => {
       desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
       const live = render(bar())
-      const badge = screen.getByRole('img', { name: 'Following the desk selection' })
+      const badge = screen.getByRole('button', { name: 'Following the desk selection' })
       expect(screen.getByText('Colour').compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(badge.compareDocumentPosition(screen.getByTestId('strip')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       live.unmount()
       render(bar({ cells: [], templateTargets: [] }))
-      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
 
     it('sits between the family pill and the strip, dashed, once unlinked', () => {
@@ -198,11 +200,19 @@ describe('SelectionBar', () => {
 
     it('is not drawn on the plain lists, linked or not', () => {
       const linked = render(bar({ projectId: undefined }))
-      expect(screen.queryByRole('img', { name: 'Following the desk selection' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Following the desk selection' })).not.toBeInTheDocument()
       linked.unmount()
       unlinkFromDesk({ targets: [], families: null })
       render(bar({ projectId: undefined }))
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
+    })
+
+    it('unlinks on a press of the badge, taking the desk’s selection as its own (desk-follow D11)', () => {
+      desk.snapshot = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+      render(bar())
+      fireEvent.click(screen.getByRole('button', { name: 'Following the desk selection' }))
+      expect(isFollowingDesk()).toBe(false)
+      expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
     })
 
     it('follows the desk again on a click, and is then gone', () => {
@@ -210,7 +220,7 @@ describe('SelectionBar', () => {
       render(bar())
       fireEvent.click(screen.getByRole('button', { name: 'This window' }))
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
-      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
   })
 

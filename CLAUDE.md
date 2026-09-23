@@ -753,8 +753,17 @@ following would pin both screens to one page, and unlinking to get two pages wou
 selection with it, so the operator would select twice. `DeskChip` governs the selection and
 `BuskPageChip` the page, and **each is always drawn, one way or the other** (desk-follow plan D7,
 D8, revisiting busk-chrome D18): while linked, the **link badge** (`components/desk/LinkBadge.tsx`,
-one component for both so they cannot drift — a glyph, a mark and never a control); while not, the
-dashed `FollowPill` whose press is the way back. The two badges differ in one thing: the page's
+one component for both so they cannot drift); while not, the dashed `FollowPill`. **The mark is
+the toggle, both ways** (desk-follow D11, 2026-09-23, revising D7 and D8's "a mark, never a
+control" after Chris tried it: the chip on the row is the first thing an operator reaches for, and
+a Screens sheet was the wrong primary door): the badge's press unlinks — the selection's takes the
+desk's selection as this window's own (`unlinkFromDeskNow`, ⌘K's gesture), the page's keeps the
+page on show as its own (`unlinkBuskPage(activePageId)`, handed down by the strip) — and the dashed
+pill's press relinks. The badge is `aria-pressed` like the pill (pressed = linked) and the same
+20px box as the mark, so no ladder moved. **Where the window cannot leave it stays a mark**: the
+selection in Rig and Pads focus always follows (D2), so there `DeskChip` takes `forcedBy` and draws
+`role="img"` with the reason on its hover, rather than a press the D3 relink would undo at once. The
+Screens row and ⌘K stay, for setting *another* window. The two badges differ in one thing: the page's
 **names the other open busk windows paged with this one** (*⛓ Screen 2*, `+N` for several, every
 one on the hover, which also says a tab click here pages them too) — `useCoPagedWindowNames` in
 `store/windows.ts`, from `windows.state`: rows on `busk` whose `viewOptions.pageFollows` is not
@@ -1489,8 +1498,8 @@ numbers on that box, as the band's are.
 **A chip is drawn while its window is unlinked, and a linked window says so with a badge**
 (busk-chrome D18, revisited by desk-follow D7 and D8). Unlinked, `DeskChip` draws the dashed
 *This window* and `BuskPageChip` the dashed *Own*, each pressing back. Following, `DeskChip` draws **`LinkBadge`**
-(`components/desk/LinkBadge.tsx`) — a 20px glyph, glyph only at every width, hover and accessible
-name *Following the desk selection*, a mark and never a control, `shrink-0` — where D18 drew
+(`components/desk/LinkBadge.tsx`) — a 20px glyph, glyph only at every width, accessible name
+*Following the desk selection*, whose press unlinks (D11; a mark instead in Rig and Pads), `shrink-0` — where D18 drew
 nothing: a pill saying *Desk* all night was noise, but a window saying nothing about which selection
 it is on left the operator to remember (Chris, 2026-09-23: "always show when we're linked, even if
 it is just a small badge"). `BuskPageChip` draws the same badge while paged with the desk, naming
@@ -1500,12 +1509,13 @@ same, each part under a class of its own (D19: the host's rung for the suffix an
 with the **whole reading as `aria-label`** — `Targets: This window`, `Page: Own` — so the
 name a test or a screen reader gets never changes with the width. The desk chip is on the rig
 row in Split and Rig (`CHIP_SUBJECT_CLASS`, the Focus words' rung) and on the pad row's state line
-in Pads (`PAD_CHIP_SUBJECT_CLASS`, both); the page mark is beside the tabs. The ways *out* of following are ⌘K's *Stop
-following the desk selection in this window* and the Selection segment on the window's row of the
-Screens sheet, from any window (`windows.follow`, desk-follow D4) — the second door, which a
-touch-only screen needed and which D18's review had first declined; there is still no MIDI target
-(`FU-SURFACE-SELECTION-FOLLOW-SET`). **Rig and Pads always follow** (§One selection, two shapes),
-so on those shapes only the badge is ever drawn.
+in Pads (`PAD_CHIP_SUBJECT_CLASS`, both); the page mark is beside the tabs. The way *out* of
+following is the badge's own press (D11), with ⌘K's *Stop following the desk selection in this
+window* and the Selection segment on the window's row of the Screens sheet, from any window
+(`windows.follow`, desk-follow D4), beside it — the Screens row being the door for a touch-only
+screen set up from another; there is still no MIDI target (`FU-SURFACE-SELECTION-FOLLOW-SET`).
+**Rig and Pads always follow** (§One selection, two shapes), so on those shapes only the badge is
+ever drawn, and drawn as a mark.
 
 **The words come back under the floor, as closed ranges** (D19). Below the floor each row has its
 whole line, so what the ladder took returns while the line holds it and folds again at a second
@@ -2868,7 +2878,8 @@ same way; the flag in the key makes it a backstop against anything that ever unl
 window. Holding the selection dormant until Split was declined: it needs a chip, in a focus that
 has none, to explain a selection nothing is using.
 
-**The ways out of following are the Screens row and ⌘K** (D4). The Screens sheet draws a
+**The ways out of following are the badge, the Screens row and ⌘K** (D4, D11). The badge's own
+press is the primary one (§The rig); the other two set a window from elsewhere. The Screens sheet draws a
 *Selection · Desk | This window* segment on every Busk and Programmer row (`viewHasOwnSelection`,
 the one list of those two views, which ⌘K's arm reads too), from `row.follows`, and writes the
 fifth windows command, `windows.follow` (§Windows, full screen and the hand); on a busk
@@ -2877,12 +2888,13 @@ offers *<Window> · own selection* / *<Window> · follow the desk selection* for
 Programmer window, flipping with that row's flag and withholding the unlink for a forced row, and
 *Stop following the desk selection in this window* is withheld in Rig and Pads. There is no MIDI
 target (`FU-SURFACE-SELECTION-FOLLOW-SET`). The page has the same two doors and its own flag
-(§The busk layout): the row's *Page* segment and ⌘K's page pair.
+(§The busk layout): its badge's press, the row's *Page* segment and ⌘K's page pair.
 
 **The desk chip always says which selection this window is on** (D8, revisiting busk-chrome D18):
 following, it is **`LinkBadge`** (`components/desk/LinkBadge.tsx`) — a 20px link glyph, glyph only
-at every width, hover and accessible name *Following the desk selection*, a mark and never a
-control, `shrink-0`; unlinked, the dashed `This window`, whose click follows the desk again. The
+at every width, accessible name *Following the desk selection*, whose press unlinks — a mark
+instead, reason on the hover, in Rig and Pads, which always follow (D11) — `shrink-0`; unlinked,
+the dashed `This window`, whose click follows the desk again. The
 four readings the following chip once carried (`Desk`, `Desk · from <name>`, `Desk · from the
 desk`) stay gone with `deskReading`: an operator at a two-screen desk knows which screen they are
 selecting from. It sits on the programmer's row C between the family pill and the strip (a `chip`

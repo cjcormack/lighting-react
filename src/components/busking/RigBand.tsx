@@ -627,7 +627,7 @@ function RigBandBody({
           )}
           <FamilyPill families={families} />
           <BlindPill wordClass={COMPACT_FOCUS_WORD_CLASS} />
-          {!editing && <DeskChip showSubject />}
+          {!editing && <DeskChip showSubject forcedBy={focus === 'rig' ? 'rig' : undefined} />}
           {!editing && (
             <CompactVerbs
               onSubselect={onSubselect}
@@ -685,7 +685,14 @@ function RigBandBody({
             {/* `showSubject`: the pad row below carries the same pill for the page, and two bare
                 chips a row apart would be worse than either alone. The link badge while following
                 (desk-follow D8). */}
-            {!editing && <DeskChip showSubject subjectClass={CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />}
+            {!editing && (
+              <DeskChip
+                showSubject
+                forcedBy={focus === 'rig' ? 'rig' : undefined}
+                subjectClass={CHIP_SUBJECT_CLASS}
+                className="min-w-0 shrink"
+              />
+            )}
             {editing ? (
               <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
                 Editing · drag targets from the palette, rows reorder by their grip
