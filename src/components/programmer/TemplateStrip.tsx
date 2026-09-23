@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { AudioWaveform, Hand, LayoutGrid, Plus } from 'lucide-react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
@@ -304,10 +305,15 @@ export function TemplateStrip({
           size="sm"
           className="h-7 shrink-0 gap-1 border-dashed px-2 text-xs"
           title="Record what you have selected as a new template"
+          aria-label="New template"
           onClick={() => setNewOpen(true)}
         >
           <Plus className="size-3.5" />
-          New
+          {/* The word folds on the phone arm (desk-follow plan D8): row C is full to the pixel at
+              375 with a cell selected — glyph · count · All · New · Set · Clear · Deselect — and
+              the desk chip's link badge (21 + a gap, drawn all night while following) had to come
+              from somewhere without moving a control. The word is ~30 and the title says it. */}
+          <span className={PHONE_FOLDED_CLASS}>New</span>
         </Button>
       </>
     )

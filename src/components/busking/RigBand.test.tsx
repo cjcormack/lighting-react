@@ -6,7 +6,7 @@ import type { GroupSummary } from '@/api/groupsApi'
 import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { BuskRig, BuskRigPatch, BuskRigTile } from '@/api/buskRigApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { relinkToDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 import { getBuskFocus, getBuskRigHeight, getBuskSheet, resetBuskWindowStores, setBuskRigHeight } from '@/lib/buskWindow'
 import {
   CHIP_SUBJECT_CLASS,
@@ -525,11 +525,19 @@ describe('the rig band', () => {
     }
   })
 
-  it('draws the desk chip only while this window is unlinked, right after the pill, and lets it truncate first (D18)', () => {
+  it('draws the link badge while following and the desk chip once unlinked, right after the pill, the chip truncating first (desk-follow D8)', () => {
     const controls = <button type="button">Focus here</button>
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, ['COLOUR'])
-    // Following: no chip at all — *Desk* is the resting state and a pill saying so is noise.
+    // Following: the badge, a glyph that never gives — not the pill, and not nothing.
     expect(screen.queryByRole('button', { name: /^Targets:/ })).toBeNull()
+    const linked = document.querySelector('[data-rig-row-state]') as HTMLElement
+    const badge = within(linked).getByRole('img', { name: 'Following the desk selection' })
+    expect(badge.className).toContain('shrink-0')
+    expect([...linked.querySelectorAll('button, [data-rig-family], [data-link-badge]')].map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual([
+      'Colour',
+      'Following the desk selection',
+      'Focus here',
+    ])
     cleanup()
     unlinkFromDesk({ targets: [], families: null })
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, ['COLOUR'])
@@ -546,10 +554,14 @@ describe('the rig band', () => {
     expect(chip.className).toContain('min-w-0')
     // Its subject folds at the row's rung (D19) while the name stays whole.
     expect(chip.querySelector('[data-pill-subject]')!.className).toContain(CHIP_SUBJECT_CLASS)
-    // The compact row's chip too.
+    // The compact row's chip too, and its badge once linked again.
     cleanup()
     draw([], { compact: true })
     expect(screen.getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
+    cleanup()
+    relinkToDesk()
+    draw([], { compact: true })
+    expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
   })
 
   it('draws Split and Rig with one DOM order, ending with the host’s controls, and has no Pads arm (D17)', () => {
@@ -1223,6 +1235,8 @@ describe('the folded rig strip', () => {
     } finally {
       programmer.blind = false
     }
+    // Following, the badge (desk-follow D8); unlinked, the chip.
+    expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
     cleanup()
     unlinkFromDesk({ targets: [], families: null })
     render(<RigStrip selectedTargets={map} families={['COLOUR']} />)

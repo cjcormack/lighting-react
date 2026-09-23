@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/sheet'
 import type { DeskWindow } from '@/api/windowsApi'
 import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } from '@/lib/fullscreen'
+import { followIsForced, viewHasOwnSelection } from '@/lib/deskFollow'
 import { windowId } from '@/lib/windowIdentity'
 import {
   canChooseDisplay,
@@ -44,10 +45,12 @@ import {
   type WindowViewOption,
 } from '@/lib/windowViews'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
 import { useBuskPagesQuery, useBuskShowingPageQuery } from '@/store/busk'
 import { useViewedProject } from '@/ProjectSwitcher'
 import {
   renameWindowRow,
+  setWindowFollow,
   setWindowFullscreen,
   setWindowViewOptions,
   showOnWindow,
@@ -62,12 +65,11 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * and copy). Mounted once in `Layout`; opened from the user menu and from ⌘K through
  * `screensSheetState`.
  *
- * One row per registry row: an editable name, *this window*, full screen or in a browser tab,
- * follows the desk or not, a view picker over the six views, and a Full screen / Exit full screen
- * button. Every write is a `windows.*` command by **row id** — this window's included, so a rename
- * of this tab goes out and comes back like any other and there is one path, not two. The one
- * thing read locally is this window's own full-screen state, which `fullscreenchange` knows before
- * the registry does.
+ * One row per registry row: an editable name, *this window*, full screen or in a browser tab, a
+ * view picker over the six views, and a Full screen / Exit full screen button. Every write is a
+ * `windows.*` command by **row id** — this window's included, so a rename of this tab goes out and
+ * comes back like any other and there is one path, not two. The one thing read locally is this
+ * window's own full-screen state, which `fullscreenchange` knows before the registry does.
  *
  * **A row also draws its view's options, generically** (busk-further plan D13). Each entry in
  * `lib/windowViews.ts` may carry an `options` descriptor, and the row renders whatever its
@@ -78,11 +80,11 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * and the target applies it to its own tab facts and re-announces, so the row is drawn from the
  * registry and never from a guess. **Page is settable**, and a remote set unlinks that window
  * onto the page exactly as arriving with `?page=` does; a following row shows the desk's page and
- * says *follows the desk*, an unlinked one its own and *own page* (the wording of the row's *own
- * selection* line above it). What is *not* on the row is anything a remote set could lose for the operator at that
- * window — selection follow, the split's rows, the documents themselves. *Copy link for <name>*
- * mints the row's whole setup, `?window=…&page=…&focus=…&sheet=…&immersive=on` (the last only
- * while it is on — `lib/screens.ts`).
+ * says *follows the desk*, an unlinked one its own and *own page*. What is *not* on the row is
+ * anything a remote set could lose for the operator at that window — the split's height, the
+ * documents themselves. *Copy link for <name>* mints the row's whole setup,
+ * `?window=…&page=…&focus=…&sheet=…&immersive=on` (the last only while it is on —
+ * `lib/screens.ts`).
  *
  * Below the rows, the two ways to make a new window:
  *
@@ -104,6 +106,17 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  *   server-side per request (`auth/ResetUrls.kt`) and exposes it on no GET route, so a tab open at
  *   `localhost` copies a link that names the desk to itself — said under the button rather than
  *   guessed at (`FU-SCREENS-LAN-URL`).
+ *
+ * **Selection follow is set here too** (desk-follow plan D4): a *Selection · Desk | This window*
+ * segment on every Busk and Programmer row — the two places a window's own selection means
+ * something (D1) — drawn from `row.follows` and written with `windows.follow`, the fifth command.
+ * It is not a view option, because follow is the window's and not a view's. On a busk row in Rig
+ * or Pads focus it is **disabled with its reason** (*Pads focus follows*, `followIsForced`), never
+ * hidden, so the row reads the same shape in every focus. It is what lets a touch-only screen leave
+ * following at all — ⌘K was the one door, and ⌘K needs a keyboard. Unlinking takes the desk's
+ * selection as the window's own and loses nothing there; the target refuses an unlink its focus
+ * forbids and re-announces, so a row drawn from a stale frame corrects itself. The *follows the
+ * desk / own selection* caption the row carried went with it: the segment says it.
  *
  * The row's server-stamped `user` is drawn only where two rows share a name, which is the one
  * time it disambiguates anything. **Layouts** is `FU-SCREENS-LAYOUTS`, not built.
@@ -211,8 +224,7 @@ function WindowRow({
         )}
       </div>
       <p className="mt-1 truncate text-xs text-muted-foreground">
-        {fullscreen ? 'full screen' : 'in a browser tab'} ·{' '}
-        {row.follows ? 'follows the desk' : 'own selection'}
+        {fullscreen ? 'full screen' : 'in a browser tab'}
         {showUser && row.user != null && ` · ${row.user}`}
       </p>
       <div className="mt-2 flex items-center gap-2">
@@ -314,6 +326,7 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
           </label>
         ),
       )}
+      {viewHasOwnSelection(view.id) && <SelectionFollowOption row={row} viewId={view.id} />}
       <Button
         variant="ghost"
         size="sm"
@@ -328,16 +341,55 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
   )
 }
 
+/**
+ * *Selection · Desk | This window* — drawn as an enum segment, but **not a view option**: follow is
+ * the window's, not a view's, so it rides `row.follows` and `windows.follow` rather than
+ * `viewOptions` (D4). One descriptor, so the segment is `EnumOption`'s shape and cannot drift from
+ * the Focus, Sheet and Chrome segments beside it.
+ */
+const SELECTION_FOLLOW_OPTION: Extract<WindowViewOption, { kind: 'enum' }> = {
+  key: 'follows',
+  label: 'Selection',
+  kind: 'enum',
+  values: ['desk', 'window'],
+  valueLabels: { desk: 'Desk', window: 'This window' },
+}
+
+/**
+ * The Selection segment (D4), drawn from the row's announced flag and disabled with its reason
+ * where the row's announced busk focus forces following (D2).
+ */
+function SelectionFollowOption({ row, viewId }: { row: DeskWindow; viewId: string }) {
+  const focus = row.viewOptions?.focus
+  const forced = followIsForced(viewId, focus)
+  return (
+    <EnumOption
+      option={SELECTION_FOLLOW_OPTION}
+      rowName={row.name}
+      value={row.follows ? 'desk' : 'window'}
+      onSet={(next) => setWindowFollow(row.id, next === 'desk')}
+      disabledReason={forced ? `${focus === 'rig' ? 'Rig' : 'Pads'} focus follows` : undefined}
+    />
+  )
+}
+
+/**
+ * One enum segment. [disabledReason] disables it and says why **beside** the segment rather than
+ * only on its title, because a disabled control's title is unreachable on a touchscreen — and the
+ * control stays drawn, so the row reads the same shape whatever it holds.
+ */
 function EnumOption({
   option,
   rowName,
   value,
   onSet,
+  disabledReason,
 }: {
   option: Extract<WindowViewOption, { kind: 'enum' }>
   rowName: string
   value: string
   onSet: (value: string) => void
+  disabledReason?: string
 }) {
   return (
     <div className="flex items-center gap-1.5 text-xs">
@@ -347,20 +399,29 @@ function EnumOption({
         size="sm"
         value={value}
         onValueChange={(next) => next !== '' && onSet(next)}
+        disabled={disabledReason != null}
         aria-label={`${option.label} on ${rowName}`}
         className="h-7 gap-0.5 p-0.5"
       >
         {option.values.map((v) => {
           // The wire's spelling unless the descriptor says otherwise — the Chrome segment says
           // *App · Immersive* over `off` | `on` (busk-chrome plan D9).
-          const label = option.valueLabels?.[v] ?? v
+          // A wire spelling is capitalised for the row; a descriptor's own label is drawn as
+          // written, so *This window* does not become *This Window*.
+          const label = option.valueLabels?.[v]
           return (
-            <ToggleGroupItem key={v} value={v} aria-label={label} className="h-6 px-2 text-xs capitalize">
-              {label}
+            <ToggleGroupItem
+              key={v}
+              value={v}
+              aria-label={label ?? v}
+              className={cn('h-6 px-2 text-xs', label == null && 'capitalize')}
+            >
+              {label ?? v}
             </ToggleGroupItem>
           )
         })}
       </ToggleGroup>
+      {disabledReason != null && <span className="text-muted-foreground">{disabledReason}</span>}
     </div>
   )
 }

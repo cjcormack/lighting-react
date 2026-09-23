@@ -233,6 +233,7 @@ describe("window commands", () => {
     unlink: vi.fn(),
     setFocus: vi.fn(),
     setViewOptions: vi.fn(),
+    setFollow: vi.fn(),
   })
   const row = (id: string, name: string, view = "/projects/1/programmer") => ({
     id,
@@ -328,6 +329,41 @@ describe("window commands", () => {
     expect(off.actions.follow).toHaveBeenCalledTimes(1)
     // Reachable from the same search as every sibling in the Screens group.
     expect(follow.keywords).toEqual(expect.arrayContaining(["screen", "window"]))
+  })
+
+  it("withholds Stop following in Rig and Pads, where the focus forces following, and keeps Follow (desk-follow D4)", () => {
+    for (const focus of ["rig", "pads"] as const) {
+      const commands = buildWindowCommands(base({ buskFocus: focus }))
+      expect(commands.some((c) => c.id === "window-follow"), focus).toBe(false)
+      // A window caught local there (the D3 relink not yet rendered) is still offered the way back.
+      const local = buildWindowCommands(base({ buskFocus: focus, following: false }))
+      expect(local.find((c) => c.id === "window-follow")?.label).toBe("Follow the desk selection in this window")
+    }
+    expect(buildWindowCommands(base({ buskFocus: "split" })).some((c) => c.id === "window-follow")).toBe(true)
+  })
+
+  it("gives every other Busk or Programmer window the follow arm that changes its flag (desk-follow D4)", () => {
+    const withOptions = (r: ReturnType<typeof row>, over: Partial<WindowCommandInputs["windows"][number]>) => ({ ...r, ...over })
+    const inputs = base({
+      windows: [
+        row("s-1", "Screen 1"),
+        withOptions(row("s-2", "Screen 2", "/projects/1/busk"), { viewOptions: { focus: "split" } }),
+        withOptions(row("s-4", "iPad"), { follows: false }),
+        withOptions(row("s-5", "Screen 3", "/projects/1/busk"), { viewOptions: { focus: "pads" } }),
+        row("s-6", "Stage", "/projects/1/show"),
+      ],
+    })
+    const commands = buildWindowCommands(inputs)
+    const arms = commands.filter((c) => c.id.startsWith("window-follow-"))
+    expect(arms.map((c) => c.label)).toEqual(["Screen 2 · own selection", "iPad · follow the desk selection"])
+    // Never this window (it has its own item), never a forced row, never a view with no selection.
+    expect(arms.some((c) => /Screen 1|Screen 3|Stage/.test(c.label))).toBe(false)
+    arms[0]!.run()
+    arms[1]!.run()
+    expect(inputs.actions.setFollow).toHaveBeenNthCalledWith(1, "s-2", false)
+    expect(inputs.actions.setFollow).toHaveBeenNthCalledWith(2, "s-4", true)
+    // Before this window's own follow item, which stays last.
+    expect(commands.at(-1)!.id).toBe("window-follow")
   })
 
   it("offers Split · Focus pads · Focus rig for this window only while it is on the busk view", () => {

@@ -206,13 +206,14 @@ export interface RigBandProps {
  *    · Invert · Masters — and is never a bare glyph: *All* is the state an operator most needs to
  *    be sure of, and *Odd* or *Masters* on a 28px button is what the menu was for. The desk chip's
  *    subject goes at this rung too ([CHIP_SUBJECT_CLASS]): the chip is drawn only while the window
- *    is unlinked (D18), and *This window* alone still says what it is.
+ *    is unlinked — linked, it is the link badge, a glyph with nothing to fold (desk-follow plan D8)
+ *    — and *This window* alone still says what it is.
  * 3. **The `RIG` label** ([RIG_LABEL_CLASS]) — to nothing, at the narrow end of the ladder and
  *    before the floor, to gain its width (D20). `data-rig-row` is the handle a test reaches the
  *    row by, since the label no longer is.
  * 4. **Two rows, by design** (`TWO_ROWS_CLASS`, `SECOND_ROW_CLASS`): below the floor the row wraps
- *    at exactly one point — the selection verbs on the first row, the pill, the chip and the Focus
- *    control on the second. Not `flex-wrap`'s own choice of break: the row is `flex-nowrap` above
+ *    at exactly one point — the selection verbs on the first row, the pill, the badge or chip and
+ *    the Focus control on the second. Not `flex-wrap`'s own choice of break: the row is `flex-nowrap` above
  *    the floor, so a control never lands mid-row. Only under that floor does the verbs group wrap
  *    within its own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the icons.
  * 5. **The words come back under the floor** (D19). Each row then has its whole line, so what the
@@ -225,37 +226,44 @@ export interface RigBandProps {
  *
  * The desk chip's value truncates before anything else moves — `DeskChip` is given `min-w-0
  * shrink` here, both words, because the pill's base class is `shrink-0` and a bare `min-w-0`
- * leaves it unshrinkable. Under the floor the verbs group itself may wrap (`FIRST_ROW_CLASS`): the
+ * leaves it unshrinkable. The badge it draws while linked takes none of that: a glyph that gave
+ * way would be the one thing on the row moving for nothing. Under the floor the verbs group itself may wrap (`FIRST_ROW_CLASS`): the
  * desk board can be narrowed to a band below the ~330px the iconic verbs need (a ~900px window, the
  * sidebar open and the sheet at its 480 ceiling), and a size-contained `@container` clips nothing,
  * so without that last resort the verbs painted over the sheet. That wrap is under the designed
  * break, never instead of it: above the floor the row is `flex-nowrap`.
  *
- * **The numbers are the app's, measured in the browser on 2026-09-21 (evening)** at the desk's
- * control sizes, with a one-family pill drawn (~60; the row has to hold when a mask is set) and
- * **no chip** (D18 — absent while following, and unlinked it folds and truncates on its own before
- * any control moves): worded, the row is 943px — the verbs group 573 (`RIG` 19, Cells 107, the
- * steps 58, the four verbs 93 · 81 · 94 · 72, six 8px gaps), the state group 362 (pill 60, Focus
- * 183, *Edit layout* 103, two gaps), 8 between — so the verbs' words and *Edit layout*'s go at
- * **960**; iconic (36 each, the Cells control 71), the row is 675, so the *Cells:* prefix (36) and
- * the Focus words (85) go at **700**; with those gone it is 554, the label (19 + a gap) goes at
- * **580**, and with it gone the row is 527, so the floor is **540**. Under it the verbs line has no
- * label and is 546 fully worded — six wider than the floor — so the verbs' words return only with
- * the prefix still folded (510) from **520**, and the prefix on the iconic line (349) from **350**
- * up to that 520, where the words take its place; the state line is 362 worded, so *Edit layout*'s
- * word returns from **370** and the Focus words and the chip's subject, with it iconic (291), from
- * **300**. They were 1100 / 820 / 700 with the chip on the row, and 860 / 680 while the summary
- * had a row of its own.
+ * **The numbers are the app's, measured in the browser on 2026-09-21 (evening) and re-measured on
+ * 2026-09-23 for the link badge** (desk-follow plan D8), at the desk's control sizes, with a
+ * one-family pill drawn (~60; the row has to hold when a mask is set) and **the badge drawn** (21,
+ * plus a gap: a following window always shows it, and Pads and Rig always follow). Unlinked, the
+ * chip takes the badge's place and folds and truncates on its own; its floor is 35, which the 14px
+ * of slack at the floor covers exactly. Worded, the row is 972px — the verbs group 573 (`RIG` 19,
+ * Cells 107, the steps 58, the four verbs 93 · 81 · 94 · 72, six 8px gaps), the state group 391
+ * (pill 60, badge 21, Focus 183, *Edit layout* 103, four gaps round the spacer), 8 between — so the
+ * verbs' words and *Edit layout*'s go at **990**; iconic (36 each, the Cells control 71), the row
+ * is 704, so the *Cells:* prefix (36) and the Focus words (85) go at **730**; with those gone it is
+ * 583, the label (19 + a gap) goes at **610**, and with it gone the row is 556, so the floor is
+ * **570**. Under it the verbs line has no label and is 546 fully worded, but the verbs' words still
+ * return only with the prefix folded (510), from **520**, and the prefix on the iconic line (349)
+ * from **350** up to that 520, where the words take its place — conservative by 24px, kept so the
+ * two never share the line; the state line is 399 worded, so *Edit layout*'s word returns from
+ * **400**, and 332 with it iconic (the toggle is 36, not the 32 the first note assumed), so the
+ * Focus words and the chip's subject return from **340**. Checked in the browser with the band
+ * forced to each rung and one below it, and a 60px stand-in for the mask pill: the row's
+ * `scrollWidth` never exceeded its `clientWidth`. They were 960 / 700 / 580 / 540 with no chip or
+ * badge on the row, 1100 / 820 / 700 with the chip, and 860 / 680 while the summary had a row of
+ * its own.
  *
  * **The blind pill is not in those numbers, by design.** `BlindPill` (`BlindMarks.tsx`) is drawn
  * only while the programmer is blind — 63px worded, 26 iconic, plus a gap — so the ladder is
  * measured without it, as it is measured with a one-family pill: the row must hold for the state
  * that lasts all night, not for the one that is an operator's mistake. Its word therefore has a
- * rung of its own above every other (`BLIND_WORD_CLASS`, 1020, and 440 on the state line under the
+ * rung of its own above every other (`BLIND_WORD_CLASS`, 1050, and 470 on the state line under the
  * floor), and the pill is `min-w-0 shrink` — the one thing on the row besides the chip that may
- * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 960
- * (17 spare), 700 (25), 580 (26) and 540 (13) — so in the bands 960–977, 700–709, 580–588 and
- * 540–561 the pill squashes to an amber sliver rather than pushing the Focus control under the
+ * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 990
+ * (18 spare), 730 (26), 610 (27) and 570 (14) — so in the bands 990–1006, 730–738, 610–617 and
+ * 570–590 the pill squashes to an amber sliver rather than pushing the Focus control under the
  * sheet. Measured 2026-09-21: the pill on the desk row at 738 of band is 62.5 worded and 26 iconic,
  * and the row's `scrollWidth` equalled its `clientWidth` at 738, 616, 540 and 496 with no mask.
  */
@@ -269,44 +277,44 @@ export { snapRigHeight, stepRigHeight } from './RigHandle'
  * `${…}` is in no file — the first cut did that, and the built CSS had no floor and no
  * re-expansion at all. `RigBand.test.tsx` pins that each literal's floor equals this constant.
  */
-export const RIG_ROW_FLOOR_PX = 540
+export const RIG_ROW_FLOOR_PX = 570
 
 /** The verbs' words: first to fold above the floor, and back on their own line from 520 under it. */
-export const VERB_WORD_CLASS = 'hidden @[960px]:inline @min-[520px]:@max-[540px]:inline'
-/** *Edit layout*'s word, folded with the verbs' above the floor; under it, on the state line, from 370. */
-export const EDIT_WORD_CLASS = 'hidden @[960px]:inline @min-[370px]:@max-[540px]:inline'
+export const VERB_WORD_CLASS = 'hidden @[990px]:inline @min-[520px]:@max-[570px]:inline'
+/** *Edit layout*'s word, folded with the verbs' above the floor; under it, on the state line, from 400. */
+export const EDIT_WORD_CLASS = 'hidden @[990px]:inline @min-[400px]:@max-[570px]:inline'
 
 /**
  * The *Cells:* prefix, which goes a step after the verbs' words; the mode word beside it never
  * does. Under the floor it is drawn on the iconic line from 350 **up to 520, where the verbs' words
  * return**: the fully worded line is six pixels wider than the floor, so the two never share it.
  */
-const CELLS_PREFIX_CLASS = 'hidden @[700px]:inline @min-[350px]:@max-[520px]:inline'
+const CELLS_PREFIX_CLASS = 'hidden @[730px]:inline @min-[350px]:@max-[520px]:inline'
 /** The mode word's *short* form, drawn while the prefix is folded — `1st`, not `1st half`. */
-const CELLS_SHORT_CLASS = 'inline @[700px]:hidden @min-[350px]:@max-[520px]:hidden'
+const CELLS_SHORT_CLASS = 'inline @[730px]:hidden @min-[350px]:@max-[520px]:hidden'
 /** The mode word's full form, drawn beside the prefix. */
 const CELLS_FULL_CLASS = CELLS_PREFIX_CLASS
 
-/** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 300. */
-export const FOCUS_WORD_CLASS = 'hidden @[700px]:inline @min-[300px]:@max-[540px]:inline'
+/** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 340. */
+export const FOCUS_WORD_CLASS = 'hidden @[730px]:inline @min-[340px]:@max-[570px]:inline'
 /**
  * The blind pill's word (`BlindMarks.tsx`): worded only where the fully-worded row has room for
- * its 71 (63 + a gap) — from **1020**, above every other rung — and, under the floor, on the state
- * line from **440** (362 worded + 71). Its glyph stays at every width; see the ladder note above
+ * its 71 (63 + a gap) — from **1050**, above every other rung — and, under the floor, on the state
+ * line from **470** (391 worded + 71). Its glyph stays at every width; see the ladder note above
  * for the four bands where the pill itself gives.
  */
-export const BLIND_WORD_CLASS = 'hidden @[1020px]:inline @min-[440px]:@max-[540px]:inline'
+export const BLIND_WORD_CLASS = 'hidden @[1050px]:inline @min-[470px]:@max-[570px]:inline'
 /** The desk chip's *Targets:* subject — the chip's second part to go (D19), at the prefix's rung. */
-export const CHIP_SUBJECT_CLASS = 'hidden @[700px]:inline @min-[300px]:@max-[540px]:inline'
+export const CHIP_SUBJECT_CLASS = 'hidden @[730px]:inline @min-[340px]:@max-[570px]:inline'
 
-/** The `RIG` label: folded to nothing below 580, the rung before the floor (D20). */
-export const RIG_LABEL_CLASS = 'hidden @[580px]:block'
+/** The `RIG` label: folded to nothing below 610, the rung before the floor (D20). */
+export const RIG_LABEL_CLASS = 'hidden @[610px]:block'
 
 /** The floor: below it the row wraps once, at the state group, into two rows by design. */
-export const TWO_ROWS_CLASS = '@max-[540px]:flex-wrap'
-export const SECOND_ROW_CLASS = '@max-[540px]:basis-full'
+export const TWO_ROWS_CLASS = '@max-[570px]:flex-wrap'
+export const SECOND_ROW_CLASS = '@max-[570px]:basis-full'
 /** Under the floor the verbs group takes its whole line and may wrap within it — the last resort under ~330px. */
-export const FIRST_ROW_CLASS = '@max-[540px]:w-full @max-[540px]:flex-wrap'
+export const FIRST_ROW_CLASS = '@max-[570px]:w-full @max-[570px]:flex-wrap'
 
 /**
  * The Focus control's labels on the **compact** boards — `RigStrip` and the short board's merged
@@ -675,7 +683,8 @@ function RigBandBody({
                 (`BlindMarks.tsx`): the pads' own row is where a press that reaches nothing is made. */}
             <BlindPill wordClass={BLIND_WORD_CLASS} />
             {/* `showSubject`: the pad row below carries the same pill for the page, and two bare
-                chips a row apart would be worse than either alone. Nothing while following (D18). */}
+                chips a row apart would be worse than either alone. The link badge while following
+                (desk-follow D8). */}
             {!editing && <DeskChip showSubject subjectClass={CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />}
             {editing ? (
               <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">

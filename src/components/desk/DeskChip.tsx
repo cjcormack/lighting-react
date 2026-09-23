@@ -1,34 +1,42 @@
 import { relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import { FollowPill } from './FollowPill'
+import { LinkBadge } from './LinkBadge'
+
+/** The badge's hover and accessible name while this window follows the desk selection. */
+export const FOLLOWING_DESK_SELECTION = 'Following the desk selection'
 
 /**
- * The **desk chip** — this window has a selection of its own, and a click joins it to the desk
- * again (multi-screen plan §4, `Main.dc.html` / `Screen2.dc.html`; busk-chrome plan D18).
+ * The **desk chip** — which selection this window is on, the desk's or its own (multi-screen plan
+ * §4; busk-chrome plan D18, revisited by desk-follow plan D8).
  *
- * **Drawn only while the window is unlinked.** *Desk* is the resting state — every window follows
- * the desk selection unless it chose not to — and a pill saying so all night was noise on a live
- * view, so while following the chip renders nothing at all; unlinked, it is the dashed *This
- * window*, and its press is `relinkToDesk`. The readings the following chip used to carry went
- * with it: *Desk · from <name>* named the last mover, and an operator at a two-screen desk knows
- * which screen they are selecting from. What that leaves is the way *out* of following, which is
- * no longer a press on this chip: ⌘K's *Stop following the desk selection in this window*
- * (`buildWindowCommands`) is the one door — the Screens sheet only *reports* a row's flag, and
- * there is no MIDI target for it — and it lands the operator on a chip that says where they are.
- * A touch-only screen therefore cannot unlink its selection at all. That was put to Chris when the
- * busk-chrome plan closed and accepted as it is (2026-09-23): no second door is owed, and if one
- * ever is, it is not something this chip should grow back to provide.
+ * **Following, it is the link badge; unlinked, the dashed *This window*.** D18 drew nothing while
+ * following, on the reasoning that a pill saying *Desk* all night is noise; the desk-follow review
+ * kept the reasoning and changed the answer (Chris, 2026-09-23: "always show when we're linked,
+ * even if it is just a small badge"). So while following it is `LinkBadge` — glyph only at every
+ * width, hover *Following the desk selection*, a mark rather than a control — and unlinked it is
+ * the dashed pill, whose press is `relinkToDesk`. The window always says which one it is on.
+ *
+ * The way *out* of following is not a press here: it is the Selection segment on this window's
+ * row of the Screens sheet, from any window (`windows.follow`, D4), and ⌘K's *Stop following the
+ * desk selection in this window*. Both are offered only where a selection of its own means
+ * something (D1): busk Split and the Programmer. **Rig and Pads focus always follow**
+ * (`followIsForced`, D2) — the Screens segment is disabled there with its reason, ⌘K withholds the
+ * item, and entering either while local relinks and toasts (D3, `BuskingView`) — so on those rows
+ * this is only ever the badge.
  *
  * It is a fact about the one selection rather than about this window's chrome: unlinked, the
  * selection is this tab's own and a press from here lands on it, not on the desk's (D8). Sitting on
- * the programmer's row C, the busk rig row, the compact boards' rig strip and — in Pads on the
- * desk board, where there is no rig row — the pad row, and nowhere else — the plain lists
- * never bridge to the desk (D1), so they have nothing to say — and on the busk view it has a
+ * the programmer's row C, the busk rig row (Split and Rig), the pad row (Pads, on the desk board),
+ * the compact boards' rig strip and the short board's merged row, and nowhere else — the plain
+ * lists never bridge to the desk (D1), so they have nothing to say — and on the busk view it has a
  * sibling, `BuskPageChip`, the same pill for the *page*, which is why the band's copy says
  * *Targets:* (`showSubject`) and row C's, alone and budgeted to the pixel, stays bare.
  *
  * The pill itself is `FollowPill`'s, shared with the page chip so the two cannot drift apart
- * visually; the flags stay entirely separate. `subjectClass` is the host's rung for the subject's
- * fold (D19) — the accessible name is whole whatever it hides.
+ * visually, and the badge `LinkBadge`'s, which the page's link takes too (D7); the flags stay entirely
+ * separate. `subjectClass` is the host's rung for the subject's fold (D19) — the accessible name is
+ * whole whatever it hides. [className] is the pill's alone: a host hands the pill `min-w-0 shrink`
+ * so its value truncates, and the badge must never shrink.
  */
 export function DeskChip({
   showSubject,
@@ -40,7 +48,7 @@ export function DeskChip({
   className?: string
 }) {
   const following = useDeskFollow()
-  if (following) return null
+  if (following) return <LinkBadge title={FOLLOWING_DESK_SELECTION} />
   return (
     <FollowPill
       following={false}

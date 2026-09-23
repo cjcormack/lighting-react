@@ -103,3 +103,14 @@ export function setWindowFullscreen(targetId: string, on: boolean): void {
 export function setWindowViewOptions(targetId: string, view: string, options: Readonly<Record<string, string>>): void {
   lightingApi.windows.viewOptions(targetId, view, options)
 }
+
+/**
+ * Link (`on`) or unlink another window's selection from the desk's — the Screens row's Selection
+ * segment and ⌘K's per-window arm (desk-follow plan D4). Nothing is applied here even for this tab,
+ * as for a rename: the command comes back rebroadcast and the target — this tab included — applies
+ * it in its handler, refusing an unlink its focus forbids (`followIsForced`) and re-announcing
+ * either way, so the row corrects itself.
+ */
+export function setWindowFollow(targetId: string, on: boolean): void {
+  lightingApi.windows.follow(targetId, on)
+}

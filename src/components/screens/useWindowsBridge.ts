@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import type { WindowCommand } from '@/api/windowsApi'
-import { useDeskFollow } from '@/lib/deskFollow'
+import { followIsForced, isFollowingDesk, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import {
   enterFullscreen,
   exitFullscreen,
@@ -12,15 +12,16 @@ import {
 import { hasUnsavedSheets } from '@/lib/unsavedSheets'
 import { renameWindow, useWindowName } from '@/lib/windowIdentity'
 import { WINDOW_VIEWS, announcedViewOptions, windowViewLabel, windowViewOf } from '@/lib/windowViews'
-import { applyBuskViewOptions, useBuskViewOptions } from '@/lib/buskWindow'
+import { applyBuskViewOptions, getBuskFocus, useBuskViewOptions } from '@/lib/buskWindow'
 import { applyImmersiveViewOption, useImmersive } from '@/lib/immersive'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
+import { unlinkFromDeskNow } from '@/store/selection'
 import { isEditableTarget } from '@/lib/domUtils'
 
 /**
  * The half of the `windows.*` family that needs the router (multi-screen plan §3.4): the announce
- * of what this window is showing, and the handler for the four commands another window sends it.
+ * of what this window is showing, and the handler for the five commands another window sends it.
  * Mounted once, in `Layout`, inside `RouterProvider` — a store-level bridge could do neither,
  * because `navigate` and the location exist only there.
  *
@@ -66,6 +67,16 @@ import { isEditableTarget } from '@/lib/domUtils'
  * effect above re-announces, which is what makes the new name survive that tab's reload.
  * `windows.fullscreen {on:false}` exits at once (no gesture needed); `{on:true}` cannot call
  * `requestFullscreen` without one, so it raises the *Return to full screen* banner instead.
+ *
+ * A `windows.follow` (desk-follow plan D4) links or unlinks this window's selection: `on` is
+ * `relinkToDesk`, the desk chip's own press; `off` is `unlinkFromDesk` over the desk's fact as it
+ * stands, ⌘K's gesture — **refused** while this window is on the busk view in Rig or Pads focus
+ * (`followIsForced`, D2), where the Screens row that sent it was stale. An `off` for a window that
+ * is already local is a no-op rather than a re-snapshot, which would silently replace the selection
+ * the operator built with the desk's. **The window re-announces either way**: a changed flag moves
+ * the announce effect above, and an unchanged one — a refusal, a no-op — re-sends the last announce,
+ * so a row the sender drew from a stale frame corrects itself rather than waiting for the next
+ * unrelated change.
  */
 export function useWindowsBridge(): void {
   const location = useLocation()
@@ -126,6 +137,19 @@ export interface WindowCommandContext {
   askToReturn?: () => void
   /** Apply a view's options; answers false for a view that contributes none. */
   applyViewOptions?: (viewId: string, options: Readonly<Record<string, string>>) => boolean
+  /** This window's stored busk focus, read at command time. */
+  focus?: () => string
+  /** Whether this window follows the desk's selection now. */
+  following?: () => boolean
+  /** Link this window's selection to the desk's (`true`) or take the desk's as its own (`false`). */
+  setFollow?: (on: boolean) => void
+  /** Re-send the last announce, unchanged. */
+  reannounce?: () => void
+}
+
+function reannounceThisWindow(): void {
+  const last = lightingApi.windows.lastAnnounce()
+  if (last != null) lightingApi.windows.announce(last)
 }
 
 /**
@@ -151,7 +175,7 @@ export const WINDOW_SHOW_DECLINED_TOAST_ID = 'window-show-declined'
 export function handleWindowCommand(
   command: WindowCommand,
   context: WindowCommandContext,
-): 'ignored' | 'navigated' | 'declined' | 'renamed' | 'exited' | 'asked' | 'applied' {
+): 'ignored' | 'navigated' | 'declined' | 'renamed' | 'exited' | 'asked' | 'applied' | 'followed' | 'refused' {
   if (context.myRowId == null || command.targetId !== context.myRowId) return 'ignored'
   switch (command.type) {
     case 'show': {
@@ -187,6 +211,24 @@ export function handleWindowCommand(
       const showing = windowViewOf(context.currentView)
       if (named == null || showing == null || named.id !== showing.id) return 'ignored'
       return (context.applyViewOptions ?? applyViewOptionsFor)(named.id, command.options) ? 'applied' : 'ignored'
+    }
+    case 'follow': {
+      const reannounce = context.reannounce ?? reannounceThisWindow
+      const forced = followIsForced(windowViewOf(context.currentView)?.id, (context.focus ?? getBuskFocus)())
+      if (!command.on && forced) {
+        reannounce()
+        return 'refused'
+      }
+      // Already where it was asked to be: nothing to apply — an `off` here would re-snapshot the desk
+      // over the operator's own selection — and nothing moves the announce effect, so the unchanged
+      // flag is re-sent here and a stale row corrects itself. A flag that does move re-announces
+      // through that effect.
+      if (command.on === (context.following ?? isFollowingDesk)()) {
+        reannounce()
+        return 'followed'
+      }
+      ;(context.setFollow ?? ((on: boolean) => (on ? relinkToDesk() : unlinkFromDeskNow())))(command.on)
+      return 'followed'
     }
   }
 }

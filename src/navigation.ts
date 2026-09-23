@@ -44,9 +44,9 @@ import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } fr
 import { VIEW_OPTION_IMMERSIVE, setImmersive, useImmersive } from "./lib/immersive"
 import { toggleTheme, useTheme, type Theme } from "./lib/theme"
 import { isLiveViewPath } from "./lib/liveViews"
-import { relinkToDesk, unlinkFromDesk, useDeskFollow } from "./lib/deskFollow"
-import { setWindowViewOptions, showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
-import { lightingApi } from "./api/lightingApi"
+import { followIsForced, relinkToDesk, useDeskFollow, viewHasOwnSelection } from "./lib/deskFollow"
+import { setWindowFollow, setWindowViewOptions, showOnWindow, thisWindowRow, useDeskWindows } from "./store/windows"
+import { unlinkFromDeskNow } from "./store/selection"
 import { openScreensSheet } from "./components/screens/screensSheetState"
 import { canChooseDisplay, listDisplays, newWindowUrl, nextScreenName, openWindowOn } from "./lib/screens"
 
@@ -505,6 +505,8 @@ export interface WindowCommandInputs {
     setFocus: (focus: BuskFocus) => void
     /** Another window's view options, by row id and the view it will be showing. */
     setViewOptions: (targetId: string, view: string, options: Record<string, string>) => void
+    /** Link (`true`) or unlink another window's selection, by row id (`windows.follow`). */
+    setFollow: (targetId: string, on: boolean) => void
   }
 }
 
@@ -530,7 +532,13 @@ const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus p
  *   (busk-chrome plan D9);
  * - *Open <view> on another display* per view, Chrome only (the display itself is chosen in the
  *   prompt the gesture opens, since `getScreenDetails` needs one);
- * - *Follow the desk selection in this window*, with its state as the detail.
+ * - *<Window> · follow the desk selection* / *<Window> · own selection* for every **other** window
+ *   on the Busk or Programmer view — the two places a selection of its own means something
+ *   (desk-follow plan D1, D4) — flipping with that row's announced flag, mirroring *Show <view> on
+ *   <window>*; the *own selection* arm is withheld for a busk row in Rig or Pads focus
+ *   (`followIsForced`), where the target would refuse it;
+ * - *Follow the desk selection in this window*, with its state as the detail — and *Stop
+ *   following…* withheld in Rig and Pads focus, for the same reason (D4).
  */
 export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[] {
   const commands: WindowCommand[] = []
@@ -648,18 +656,50 @@ export function buildWindowCommands(inputs: WindowCommandInputs): WindowCommand[
     }
   }
 
+  // Another window's selection follow (D4) — its flag as it announced it, so the arm offered is
+  // the one that changes something, and nothing for a row whose view has no selection to follow.
+  for (const row of inputs.windows) {
+    if (row.id === inputs.thisRowId) continue
+    const viewId = windowViewOf(row.view)?.id
+    if (!viewHasOwnSelection(viewId)) continue
+    if (row.follows) {
+      if (followIsForced(viewId, row.viewOptions?.focus)) continue
+      commands.push({
+        id: `window-follow-${row.id}-off`,
+        label: `${row.name} · own selection`,
+        icon: Unlink2,
+        keywords: ["follow", "desk", "selection", "local", "unlink", "own", "screen", "window", row.name],
+        detail: "follows the desk",
+        run: () => actions.setFollow(row.id, false),
+      })
+    } else {
+      commands.push({
+        id: `window-follow-${row.id}-on`,
+        label: `${row.name} · follow the desk selection`,
+        icon: Link2,
+        keywords: ["follow", "desk", "selection", "link", "screen", "window", row.name],
+        detail: "own selection",
+        run: () => actions.setFollow(row.id, true),
+      })
+    }
+  }
+
   // The label flips with the state, like the full-screen pair above: an item that read *Follow…*
-  // on a following window and unlinked it said the opposite of what it did.
-  commands.push({
-    id: "window-follow",
-    label: inputs.following
-      ? "Stop following the desk selection in this window"
-      : "Follow the desk selection in this window",
-    icon: inputs.following ? Link2 : Unlink2,
-    keywords: ["follow", "desk", "selection", "local", "unlink", "link", "screen", "window"],
-    detail: inputs.following ? "on" : "off",
-    run: inputs.following ? actions.unlink : actions.follow,
-  })
+  // on a following window and unlinked it said the opposite of what it did. *Stop following* is
+  // withheld where this window's focus forces following — it would only be undone at once.
+  // `buskFocus` is null off the busk view (see the input's docblock), which the rule reads as free.
+  if (!inputs.following || !followIsForced("busk", inputs.buskFocus)) {
+    commands.push({
+      id: "window-follow",
+      label: inputs.following
+        ? "Stop following the desk selection in this window"
+        : "Follow the desk selection in this window",
+      icon: inputs.following ? Link2 : Unlink2,
+      keywords: ["follow", "desk", "selection", "local", "unlink", "link", "screen", "window"],
+      detail: inputs.following ? "on" : "off",
+      run: inputs.following ? actions.unlink : actions.follow,
+    })
+  }
 
   return commands
 }
@@ -705,13 +745,11 @@ export function useWindowCommands(projectId: number | null): WindowCommand[] {
           follow: relinkToDesk,
           setFocus: setBuskFocus,
           setViewOptions: setWindowViewOptions,
+          setFollow: setWindowFollow,
           // The desk's fact is read at press time rather than subscribed: the palette is mounted
           // on every route and closed almost always, and a `selection.state` subscription here
           // would re-render it on every marquee frame for a value only this one press reads.
-          unlink: () => {
-            const desk = lightingApi.selection.getState()
-            unlinkFromDesk({ targets: desk?.targets ?? [], families: desk?.families ?? null })
-          },
+          unlink: unlinkFromDeskNow,
         },
       }),
     [windows, thisRowId, projectId, fullscreen, following, buskFocus, immersive, theme],

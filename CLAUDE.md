@@ -741,10 +741,11 @@ falls back on its own.
 **Two flags, two chips, and neither may drive the other.** A single flag cannot express the flow:
 following would pin both screens to one page, and unlinking to get two pages would take the shared
 selection with it, so the operator would select twice. `DeskChip` on the rig row governs the
-selection, `BuskPageChip` on the pad row governs the page — the same pill, **each drawn only while
-its window is unlinked** (busk-chrome plan D18: following is the resting state, and the chip's
-press is the way back; the ways *in* are ⌘K, the Screens sheet, a `?page=` arrival and a tab click
-that never reached the desk), and on this view both name their subject (*Targets:* / *Page:*) so
+selection, `BuskPageChip` on the pad row governs the page — the same pill, **drawn while its
+window is unlinked**, whose press is the way back (busk-chrome plan D18). The selection's is the
+link badge while following (desk-follow plan D8, §The rig); the page chip still draws nothing while
+following (busk-chrome D18; the ways *in* are the Screens sheet, a `?page=` arrival and a tab
+click that never reached the desk). On this view both name their subject (*Targets:* / *Page:*) so
 neither reads as governing the whole view. On the programmer's row C the selection chip is alone
 and stays bare; there is **no page chip there**. A window that has unlinked its page has not unlinked its selection and
 still presses onto the desk's targets and mask.
@@ -800,7 +801,7 @@ nothing here reads the selection's follow flag or the page's. The reason is the 
 exists: two screens at one desk showing two shapes of one view, pressed onto one selection.
 
 **Split** is the band drawing the rig as a scroller at `busk.rigHeight` over the page with the handle between; **Pads**
-folds the rig to `RigStrip` (the summary, the family pill, the desk chip while unlinked — what a
+folds the rig to `RigStrip` (the summary, the family pill, the desk chip or its link badge — what a
 press needs to be honest about — labelled *Pads*, since in Pads it is the body's top row, and with
 no chevron: the Focus control beside it is the way back) **off the desk board**, and on it draws **no rig
 row at all** (busk-chrome plan D17, session A.5): the **pad row** is the body's top row and the page
@@ -1407,10 +1408,12 @@ own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the ~330p
 need, which the desk board reaches with the sidebar open and the sheet at its 480 ceiling, and
 which a size-contained `@container` would otherwise paint over the sheet. The desk chip is given
 `min-w-0 shrink` on this row — both words, because `FollowPill`'s base is `shrink-0` — so its value
-truncates before any control moves. The rungs are **960 / 700 / 580 / 540** since session A.5
-(`RigBand.tsx`'s docblock has the measurements); they were 1100 / 820 / 700 with a chip on the
-resting row, 860 / 680 while the summary had a row of its own, and 1150 / 1000 before that, when
-the verbs shared the label row with the summary and the chips. The compact boards keep their one `flex-wrap` row — the row chip, the
+truncates before any control moves; the link badge it draws while following is `shrink-0` and
+never gives. The rungs are **990 / 730 / 610 / 570** since desk-follow session 2 put the badge on
+the resting row — 21px plus a gap, measured in the app (`RigBand.tsx`'s docblock has the
+measurements); they were 960 / 700 / 580 / 540 with nothing there, 1100 / 820 / 700 with a chip,
+860 / 680 while the summary had a row of its own, and 1150 / 1000 before that, when the verbs
+shared the label row with the summary and the chips. The compact boards keep their one `flex-wrap` row — the row chip, the
 summary, the verbs menu — and their Focus words fold at that row's own measure
 (`COMPACT_FOCUS_WORD_CLASS`, 680), not the desk row's. **A
 tile's cross and menu sit inside its top-right corner**: hanging 7px off the corners they were
@@ -1427,9 +1430,10 @@ label, the page tabs **at the rig row's control size** (an `h-7 p-0.5` group of 
 items — the Focus control's segmented look; they were larger and rounder than everything beside
 them), **Spread · Locate · Highlight** as icon verbs, the selection summary in the gap (`min-w-0`,
 truncating, its whole text on the title — nothing else says it in Pads), the family pill while a
-mask is set, **both chips** while their window is unlinked (D17: "the chips of D18" — the desk
-chip too, since there is no rig row here to carry it and an unlinked window pressing onto its own
-selection must say so), then the host's Focus control and *Edit layout* / *Done*. **No Cells menu, no steps, no Clear**: those act on a selection made on the tiles, and the
+mask is set, the selection's **link badge** (Pads always follows the desk selection — desk-follow
+D2 — so here the desk chip is only ever the badge; D17 put the chip on this row since there is no
+rig row to carry it), the page chip while the page is unlinked, then the host's Focus control and
+*Edit layout* / *Done*. **No Cells menu, no steps, no Clear**: those act on a selection made on the tiles, and the
 use this view is built for is a two-screen desk with the rig on one screen, so a rig operation is
 reached there; the three verbs act on the rig from either screen. In Split and Rig the same row
 (`data-pad-row="split"`) is the tabs and the page chip only, and it wraps as it always did for edit
@@ -1450,32 +1454,46 @@ jsdom evaluates no container query, so `BuskPageStrip.test.tsx` pins the *struct
 the 12px gutter is the wrapper's, so the container's content box is the row's and the rungs are
 numbers on that box, as the band's are.
 
-**A chip is drawn only while its window is unlinked** (D18). `DeskChip` and `BuskPageChip` render
-nothing while following — *Desk* is the resting state and a pill saying so all night is noise — and
-the dashed *This window* once unlinked, whose press relinks. The *· from <window>* readout went
-with the following state: an operator at a two-screen desk knows which screen they are selecting
-from, and `deskReading` is deleted. `FollowPill` keeps the solid form and a `from` part all the
+**A chip is drawn while its window is unlinked, and a linked selection says so with a badge**
+(busk-chrome D18, revisited by desk-follow D8). Unlinked, `DeskChip` and `BuskPageChip` draw the
+dashed *This window*, whose press relinks. Following, `DeskChip` draws **`LinkBadge`**
+(`components/desk/LinkBadge.tsx`) — a 20px glyph, glyph only at every width, hover and accessible
+name *Following the desk selection*, a mark and never a control, `shrink-0` — where D18 drew
+nothing: a pill saying *Desk* all night was noise, but a window saying nothing about which selection
+it is on left the operator to remember (Chris, 2026-09-23: "always show when we're linked, even if
+it is just a small badge"). `BuskPageChip` still draws nothing while following until the page's
+half lands (desk-follow session 3), and the badge takes an optional name list and fold class for
+exactly that use. The *· from <window>* readout went with D18 and stays gone: an operator at a
+two-screen desk knows which screen they are selecting from, and `deskReading` is deleted. `FollowPill` keeps the solid form and a `from` part all the
 same, each part under a class of its own (D19: the host's rung for the suffix and for the subject),
 with the **whole reading as `aria-label`** — `Targets: This window`, `Page: This window` — so the
 name a test or a screen reader gets never changes with the width. The desk chip is on the rig
 row in Split and Rig (`CHIP_SUBJECT_CLASS`, the Focus words' rung) and on the pad row in Pads
-beside the page chip (`PAD_CHIP_SUBJECT_CLASS`, both). The way *out* of following is ⌘K's *Stop
-following the desk selection in this window* and nothing else — the Screens sheet reports the flag
-and no MIDI target sets it — so a touch-only screen cannot unlink its selection. That was put to
-Chris and accepted as it is (2026-09-23): no second door is owed.
+beside the page chip (`PAD_CHIP_SUBJECT_CLASS`, both). The ways *out* of following are ⌘K's *Stop
+following the desk selection in this window* and the Selection segment on the window's row of the
+Screens sheet, from any window (`windows.follow`, desk-follow D4) — the second door, which a
+touch-only screen needed and which D18's review had first declined; there is still no MIDI target
+(`FU-SURFACE-SELECTION-FOLLOW-SET`). **Rig and Pads always follow** (§One selection, two shapes),
+so on those shapes only the badge is ever drawn.
 
 **The words come back under the floor, as closed ranges** (D19). Below the floor each row has its
 whole line, so what the ladder took returns while the line holds it and folds again at a second
 measured rung — every re-expansion a **stacked `@min-[…]:@max-[floor]:` variant**, which overlaps
 no rung above the floor, so no rung depends on the order Tailwind emits the rules in. On the rig
-row the verbs line without its label is 546px fully worded, six wider than the 540 floor, so the
-verbs' words return (from 520) only with the *Cells:* prefix folded, and the prefix's range (from
-350) ends at 520 where the words take its place; on the state line *Edit layout*'s word returns
-from 370 and the Focus words and the chip's subject from 300. **The pad row has a ladder of the
-same shape and its own numbers** (`BuskPageStrip.tsx`'s docblock: 1040 / 800 / 720 / 680, then 460
-· 530 · 460 under the floor) — measured on the dev rig's two page names, since the tabs have no
-ceiling and a longer name moves every rung by its width. **The labels fold last before each floor**
-(D20): `RIG` at 580 and `PADS` at 720, to nothing, and neither comes back under it. Both ladders
+row the verbs' words return (from 520) only with the *Cells:* prefix folded, and the prefix's range
+(from 350) ends at 520 where the words take its place — the verbs line is 546 fully worded, which
+fits under the 570 floor, so that split is now conservative by 24px and kept so the two never share
+the line; on the state line *Edit layout*'s word returns from 400 and the Focus words and the chip's
+subject from 340 (the badge's 29 on that line, and the toggle measured at 36 rather than the 32 the
+first note assumed). **The pad row has a ladder of the same shape and its own numbers**
+(`BuskPageStrip.tsx`'s docblock: 1070 / 830 / 750 / 710, then 460 · 560 · 490 under the floor,
+with the badge) — measured on the dev rig's two page names, since the tabs have no ceiling and a
+longer name moves every rung by its width. **The labels fold last before each floor** (D20): `RIG`
+at 610 and `PADS` at 750, to nothing, and neither comes back under it. **Row C gave its `New`
+word for the badge on the phone arm**: at 375 with a cell selected the row was full to the pixel,
+so `TemplateStrip`'s `New` folds to its `+` below `@[600px]` (`PHONE_FOLDED_CLASS`, its title and
+`aria-label` carry it) rather than the badge moving Deselect off the screen; above 600 the chip
+scroller absorbs the badge. Both ladders
 are pinned as orderings, not numbers, by `RigBand.test.tsx` and `BuskPageStrip.test.tsx`.
 
 ### The hand
@@ -2789,23 +2807,60 @@ into the tab's copy and leaves the desk's alone; re-linking adopts the desk's an
 (the bridge treats re-enable as a fresh mount, for the mount rule's reason: a window joining must
 not clear what another screen has selected). On the programmer the local selection *is* the list's
 own row selection — an unlinked window records and presses what it shows; on the busk view it is
-the copy in `deskFollow.ts`, read through `useSelectionPair`. **The desk chip**
-(`components/desk/DeskChip.tsx`) is drawn **only while this window is unlinked** (busk-chrome plan
-D18): the dashed `This window`, whose click follows the desk again. While following it renders
-nothing — *Desk* is the resting state, and the four readings it used to carry (`Desk`, `Desk · from
-<name>`, `Desk · from the desk`) are gone with `deskReading`: an operator at a two-screen desk knows
-which screen they are selecting from. The way *out* of following is therefore not a press on the
-chip: ⌘K's *Stop following the desk selection in this window* (`buildWindowCommands`) is the door,
-and it lands on a chip that says where you are. It sits on the programmer's row C between the
-family pill and the strip (a `chip` slot on the kit's `SelectionBar`, filled only with a
-`projectId`) and on the busk rig row beside the family pill, and nowhere else — the plain lists
-never bridge (D1), so a chip there would name a link that does not exist. **On the busk band it
-takes `showSubject` and reads `Targets: This window`**, because there it has a sibling — the page
-chip (§The busk layout) — and two bare chips a row apart would be worse than either alone; on row
-C it is alone and stays bare, that row being budgeted to the pixel. The pill itself is
-`components/desk/FollowPill.tsx`, shared by both chips so they cannot drift apart visually while
-their flags stay entirely separate; its parts fold under the host's classes with the whole reading
-as `aria-label` (§The rig).
+the copy in `deskFollow.ts`, read through `useSelectionPair`.
+
+**A window's own selection is offered only where it can both select and act on it** (desk-follow
+plan D1, D2): busk **Split** and the **Programmer**. Rig focus selects and has no pads — it exists
+to be the selector for another screen's pads, even with the sheet's Colour or Spread tab open —
+and Pads focus presses and has no tiles, so a local selection there would be a frozen snapshot
+the operator could neither see nor change from that screen. So **Rig and Pads always follow**, and
+the effective rule is `follows || followIsForced(view, focus)` on the busk view and the stored
+flag alone on the Programmer. `followIsForced` in `lib/deskFollow.ts` is the one statement of it,
+read by all four places that need it and restated by none: `BuskingView`'s relink, the
+`windows.follow` refusal in `useWindowsBridge`, the Screens row's Selection segment and ⌘K. It
+takes the window's **stored** busk focus, never the Split that edit mode or an empty project forces
+for their duration — the focus is what the window returns to, and what other windows see
+announced.
+
+**Entering Rig or Pads while local drops the local selection and says so** (D3): `BuskingView`
+relinks (`relinkToDesk` — adopts the desk's, publishes nothing) and toasts *<Window> follows the
+desk selection again* over *<Focus> focus presses onto the desk's selection. Your own was
+dropped.* The effect is keyed on the focus and the flag, **never on a mount gate**, because the
+focus moves through five doors — the Focus control, the Screens row, ⌘K, a MIDI `BuskFocusSet`,
+`?focus=` on arrival — three of them from elsewhere, and a window that *arrives* in Pads while local
+(a reload over stale `sessionStorage`, an unlinked Programmer window navigated here) must relink the
+same way; the flag in the key makes it a backstop against anything that ever unlinks a forced
+window. Holding the selection dormant until Split was declined: it needs a chip, in a focus that
+has none, to explain a selection nothing is using.
+
+**The ways out of following are the Screens row and ⌘K** (D4). The Screens sheet draws a
+*Selection · Desk | This window* segment on every Busk and Programmer row (`viewHasOwnSelection`,
+the one list of those two views, which ⌘K's arm reads too), from `row.follows`, and writes the
+fifth windows command, `windows.follow` (§Windows, full screen and the hand); on a busk
+row in Rig or Pads it is **disabled with its reason** (*Pads focus follows*), never hidden. ⌘K
+offers *<Window> · own selection* / *<Window> · follow the desk selection* for every other Busk or
+Programmer window, flipping with that row's flag and withholding the unlink for a forced row, and
+*Stop following the desk selection in this window* is withheld in Rig and Pads. There is no MIDI
+target (`FU-SURFACE-SELECTION-FOLLOW-SET`).
+
+**The desk chip always says which selection this window is on** (D8, revisiting busk-chrome D18):
+following, it is **`LinkBadge`** (`components/desk/LinkBadge.tsx`) — a 20px link glyph, glyph only
+at every width, hover and accessible name *Following the desk selection*, a mark and never a
+control, `shrink-0`; unlinked, the dashed `This window`, whose click follows the desk again. The
+four readings the following chip once carried (`Desk`, `Desk · from <name>`, `Desk · from the
+desk`) stay gone with `deskReading`: an operator at a two-screen desk knows which screen they are
+selecting from. It sits on the programmer's row C between the family pill and the strip (a `chip`
+slot on the kit's `SelectionBar`, filled only with a `projectId`), on the busk rig row beside the
+family pill in Split and Rig, on the pad row in Pads, on the compact rig strip and the short board's
+merged row, and nowhere else — the plain lists never bridge (D1), so a mark there would name a link
+that does not exist. **The badge must never move a control**, so every row it sits on was
+re-measured for it (§The rig): the rig and pad rows' rungs moved by its 29px, and row C gave its
+template `New` word on the phone arm. **On the busk band the chip takes `showSubject` and reads
+`Targets: This window`**, because there it has a sibling — the page chip (§The busk layout) — and
+two bare chips a row apart would be worse than either alone; on row C it is alone and stays bare,
+that row being budgeted to the pixel. The pill itself is `components/desk/FollowPill.tsx`, shared
+by both chips so they cannot drift apart visually while their flags stay entirely separate; its
+parts fold under the host's classes with the whole reading as `aria-label` (§The rig).
 
 **The checkbox column is gone, and a drag from the name column selects rows** — the same
 `useCellMarquee`, which decides at the press which side of the first value column it landed on and
@@ -3263,6 +3318,18 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
   window where this one follows. **A following row's link carries no page even with the desk on
   one**: the code wrote the desk's page whenever it was non-null until session 8, and
   `ScreensSheet.test.tsx` now pins a following row against a non-null desk page.
+- **The fifth command, `windows.follow {targetId, on}`, sets a window's selection follow**
+  (desk-follow plan D4; lighting7 3f4fb5b) — `windows.fullscreen`'s exact shape, rebroadcast like
+  the other four, nothing written server-side. It is **not a view option**, because follow is the
+  window's and not a view's and a Programmer row carries no busk options; the Screens row's
+  Selection segment and ⌘K's per-window arm send it (`setWindowFollow` in `store/windows.ts`). The
+  named window applies it in `useWindowsBridge`: `on` is `relinkToDesk`, `off` is `unlinkFromDesk`
+  over the desk's fact as it stands — **refused** on the busk view in Rig or Pads focus
+  (`followIsForced`, §One selection, two shapes), and a no-op for a window already local, which
+  would otherwise re-snapshot the desk over the operator's own selection. **It re-announces either
+  way**: a flag that moved goes out through the announce effect, and one that did not — a refusal,
+  a no-op — re-sends the last announce, so a row a sender drew from a stale frame corrects itself.
+  Like a show, a follow aimed at a disconnected window is lost (`FU-WINDOWS-SHOW-OFFLINE`).
 - **The row's `id` is socket-minted and is what every command addresses**; the `windowId` is how a
   tab recognises its own row (`thisWindowRow`, first match). A duplicated tab copies its storage, so
   two rows can share a `windowId` and cannot be told apart from this side — D9 accepts that, the
@@ -3922,8 +3989,11 @@ path may quietly change where it lands.
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
   every **other** window × the six views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
-  missing feature is quiet, never a disabled row saying "use Chrome"), and *Follow the desk selection
-  in this window* with its state as the detail. They carry a `run`, not a `path`, because most of
+  missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
+  *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,
+  the unlink withheld where that row's focus forces following), and *Follow the desk selection in
+  this window* with its state as the detail — its *Stop following…* arm withheld in Rig and Pads
+  focus. They carry a `run`, not a `path`, because most of
   them move *another* window; the sidebar never lists them.
 - **Exception — cards/list sibling routes**: list views that pair with a cards
   view (`/fixtures/list`, `/groups/list`, `/channels/:universe/table`,

@@ -21,8 +21,8 @@ import { summariseSelection, type BuskingTarget } from './buskingTypes'
  * and a row labelled *Rig* over a page of pads named the region that had just been folded away.
  *
  * It keeps what a press needs to be honest about: the selection summary, the family pill and the
- * desk chip (drawn only while this window is unlinked, busk-chrome plan D18 — following says
- * nothing) — and whatever the host hands in as [controls]: on the compact boards, the Focus
+ * desk chip (the link badge while this window follows the desk selection, which in Pads — this
+ * strip's only focus — it always does, desk-follow plan D2 and D8) — and whatever the host hands in as [controls]: on the compact boards, the Focus
  * control and the edit toggle, which on the desk board live on the rig band's one row. It
  * cannot select — that is the other screen's job. Built here so the band and its strip are one
  * file apart and share one summary; `BuskingView` mounts it **only off the desk board** while

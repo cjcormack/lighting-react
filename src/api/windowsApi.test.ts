@@ -143,7 +143,7 @@ describe('windows.state', () => {
 })
 
 describe('the commands', () => {
-  it('delivers the four rebroadcast commands, this window’s own included, as parsed', () => {
+  it('delivers the five rebroadcast commands, this window’s own included, as parsed', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createWindowsWsApi(conn)
     const seen = vi.fn()
@@ -153,6 +153,8 @@ describe('the commands', () => {
     frame({ type: 'windows.rename', targetId: 's-2', name: 'iPad' })
     frame({ type: 'windows.fullscreen', targetId: 's-2', on: false })
     frame({ type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 'rig' } })
+    frame({ type: 'windows.follow', targetId: 's-2', on: false })
+    frame({ type: 'windows.follow', targetId: 's-2', on: 'yes' })
     frame({ type: 'windows.show', targetId: 7, view: '/x' })
     frame({ type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 1 } })
     frame({ type: 'windows.viewOptions', targetId: 's-2', options: { focus: 'rig' } })
@@ -162,21 +164,24 @@ describe('the commands', () => {
       { type: 'rename', targetId: 's-2', name: 'iPad' },
       { type: 'fullscreen', targetId: 's-2', on: false },
       { type: 'viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { focus: 'rig' } },
+      { type: 'follow', targetId: 's-2', on: false },
     ])
   })
 
-  it('sends the four commands by row id, as gestures', () => {
+  it('sends the five commands by row id, as gestures', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createWindowsWsApi(conn)
     api.show('s-2', '/projects/1/busk')
     api.rename('s-2', 'iPad')
     api.fullscreen('s-2', true)
     api.viewOptions('s-2', '/projects/1/busk', { sheet: 'toggle' })
+    api.follow('s-2', false)
     expect(sent).toEqual([
       { type: 'windows.show', targetId: 's-2', view: '/projects/1/busk' },
       { type: 'windows.rename', targetId: 's-2', name: 'iPad' },
       { type: 'windows.fullscreen', targetId: 's-2', on: true },
       { type: 'windows.viewOptions', targetId: 's-2', view: '/projects/1/busk', options: { sheet: 'toggle' } },
+      { type: 'windows.follow', targetId: 's-2', on: false },
     ])
   })
 })

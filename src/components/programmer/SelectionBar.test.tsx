@@ -149,21 +149,33 @@ describe('SelectionBar', () => {
   })
 
   /**
-   * The desk chip (multi-screen plan §4, D7; busk-chrome plan D18): between the family pill and
-   * the strip, on the programmer only — the plain lists never bridge to the desk (D1), so a chip
-   * there would name a link that does not exist — and **only while this window is unlinked**:
-   * *Desk* is the resting state, and the chip saying so all night was noise. The unlink is ⌘K's
-   * *Stop following the desk selection in this window*; the chip's press is the way back.
+   * The desk chip (multi-screen plan §4, D7; desk-follow plan D8, revisiting busk-chrome D18):
+   * between the family pill and the strip, on the programmer only — the plain lists never bridge
+   * to the desk (D1), so a chip there would name a link that does not exist. While following it is
+   * the link badge, a glyph and no control; once unlinked, the dashed *This window*, whose press
+   * is the way back. The unlink is ⌘K's or the Screens row's.
    */
   describe('the desk chip', () => {
-    it('is not drawn while following — whoever moved the selection last', () => {
+    it('is the link badge while following — whoever moved the selection last — and no button', () => {
       desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
       const first = render(bar())
+      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
       first.unmount()
       desk.snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
       render(bar())
-      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+    })
+
+    it('draws the badge between the family pill and the strip, and with nothing selected', () => {
+      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
+      const live = render(bar())
+      const badge = screen.getByRole('img', { name: 'Following the desk selection' })
+      expect(screen.getByText('Colour').compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(badge.compareDocumentPosition(screen.getByTestId('strip')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      live.unmount()
+      render(bar({ cells: [], templateTargets: [] }))
+      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
 
     it('sits between the family pill and the strip, dashed, once unlinked', () => {
@@ -184,7 +196,10 @@ describe('SelectionBar', () => {
       expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
     })
 
-    it('is not drawn on the plain lists', () => {
+    it('is not drawn on the plain lists, linked or not', () => {
+      const linked = render(bar({ projectId: undefined }))
+      expect(screen.queryByRole('img', { name: 'Following the desk selection' })).not.toBeInTheDocument()
+      linked.unmount()
       unlinkFromDesk({ targets: [], families: null })
       render(bar({ projectId: undefined }))
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
@@ -195,6 +210,7 @@ describe('SelectionBar', () => {
       render(bar())
       fireEvent.click(screen.getByRole('button', { name: 'This window' }))
       expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
   })
 

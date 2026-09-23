@@ -73,10 +73,10 @@ const showStub = {
 import { store } from '@/store'
 import { enterBuskEdit } from '@/store/buskEditSlice'
 import { restApi } from '@/store/restApi'
-import { BuskingView } from './BuskingView'
+import { BuskingView, RELINK_TOAST_ID } from './BuskingView'
 import type { BuskPage, BuskPressResponse } from '@/api/buskApi'
 import { buskPageWs, selectionWs } from '@/test/backendMock'
-import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { getLocalSelection, isFollowingDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 import {
   BUSK_PAGE_FOLLOW_KEY,
   isFollowingBuskPage,
@@ -612,6 +612,53 @@ describe('the busk view', () => {
       await screen.findByRole('button', { name: 'Ballads' })
       await waitFor(() => expect(shapeSeen.at(-1)).toBe('split/speed'))
       expect(window.sessionStorage.getItem('busk.windowDecided')).toBe('true')
+    })
+
+    describe('Rig and Pads always follow the desk selection (desk-follow D2, D3)', () => {
+      it('relinks a local window that enters Pads, dropping its own selection, and says so', async () => {
+        const message = vi.spyOn(toast, 'message').mockImplementation(() => '' as never)
+        selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: null, source: null }
+        unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['POSITION'] })
+        draw([emptyPage])
+        await screen.findByRole('button', { name: 'Ballads' })
+        // Split is where a selection of its own means something: nothing moved yet.
+        expect(isFollowingDesk()).toBe(false)
+        expect(message).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('radio', { name: 'Pads' }))
+        await waitFor(() => expect(isFollowingDesk()).toBe(true))
+        expect(getLocalSelection()).toEqual({ targets: [], families: null })
+        expect(message).toHaveBeenCalledTimes(1)
+        expect(message.mock.calls[0]![0]).toMatch(/ follows the desk selection again$/)
+        // Keyed, so a second relink replaces the toast rather than stacking another.
+        expect(message.mock.calls[0]![1]).toMatchObject({
+          id: RELINK_TOAST_ID,
+          description: "Pads focus presses onto the desk's selection. Your own was dropped.",
+        })
+      })
+
+      it('relinks a window that arrives in Rig focus while local — keyed on the focus, not on a move', async () => {
+        const message = vi.spyOn(toast, 'message').mockImplementation(() => '' as never)
+        setBuskFocus('rig')
+        unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: null })
+        draw([emptyPage])
+        await waitFor(() => expect(isFollowingDesk()).toBe(true))
+        expect(message.mock.calls[0]![1]).toMatchObject({
+          description: "Rig focus presses onto the desk's selection. Your own was dropped.",
+        })
+      })
+
+      it('says nothing for a following window entering Pads', async () => {
+        const message = vi.spyOn(toast, 'message').mockImplementation(() => '' as never)
+        draw([emptyPage])
+        await screen.findByRole('button', { name: 'Ballads' })
+        fireEvent.click(screen.getByRole('radio', { name: 'Pads' }))
+        await waitFor(() => expect(getBuskFocus()).toBe('pads'))
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        })
+        expect(message).not.toHaveBeenCalled()
+        expect(isFollowingDesk()).toBe(true)
+      })
     })
 
     it('does not read its own mirror as an arrival on reload', async () => {

@@ -43,9 +43,10 @@ import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
  * everything beside them), the three selection verbs — *Spread…* · Locate · Highlight, the band's
  * three with the band's handlers, handed down by `BuskingView` as [pads] — the selection summary
  * in the gap (nothing else says it in Pads: the tiles are off screen), the family pill while a mask
- * is set, **both chips of D18** while their window is unlinked — the desk chip too, since in Pads
- * there is no rig row to carry it and an unlinked window pressing onto its own selection must say
- * so — then the host's Focus control and *Edit layout* / *Done* right-anchored. **No Cells menu, no steps, no Clear**: those act on a selection
+ * is set, the selection's **link badge** (desk-follow plan D8 — Pads always follows the desk
+ * selection, D2, so here the desk chip is only ever the badge; the chip's dashed form is kept for
+ * the moment between a local window entering Pads and the D3 relink), the page chip while the page
+ * is unlinked (D18) — then the host's Focus control and *Edit layout* / *Done* right-anchored. **No Cells menu, no steps, no Clear**: those act on a selection
  * made on the tiles, and the use this view is built for is a two-screen desk — the rig on one
  * screen and the pads on the other — so a rig operation is reached on the rig screen. Spread,
  * Locate and Highlight act on the rig from either, and Spread is arguably the pads' own. There is
@@ -96,17 +97,22 @@ import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
  * gutter is the wrapper's, not the row's, so the container's content box is the row's and every
  * rung above is a number on that box — as the band's are, whose `px-4` is the band's.
  *
- * **The numbers are the app's, measured in the browser on 2026-09-21 (evening)** on the dev rig's
- * two pages (*Page 1* · *S5 Check Page*, 167px of tabs — the tabs have no ceiling, and a longer
- * name moves every rung by its width), a one-family pill (~60) and **150px kept for the summary**,
+ * **The numbers are the app's, measured in the browser on 2026-09-21 (evening) and re-measured on
+ * 2026-09-23 for the link badge** (desk-follow plan D8) on the dev rig's two pages (*Page 1* ·
+ * *S5 Check Page*, 167px of tabs — the tabs have no ceiling, and a longer name moves every rung by
+ * its width), a one-family pill (~60), **the selection's link badge** (21 — Pads always follows the
+ * desk selection, D2, so on this row it is drawn all night) and **150px kept for the summary**,
  * which is `min-w-0` and truncates but is what Pads has instead of tiles: worded, the fixed content
- * is 874 (`PADS` 29, the tabs 167, the verbs 93 · 81 · 94, the pill 60, Focus 183, *Edit layout*
- * 103, eight 8px gaps), 1024 with the summary, so the verbs' words and *Edit layout*'s go at
- * **1040**; iconic (36 each, the toggle 32) it is 793, so the Focus words and the chip's subject
- * go at **800**; 708 with those gone, so the label (29 + a gap) goes at **720**, and without it
- * 671, so the floor is **680**. Under it the tabs-and-verbs line is 452 worded, so the words
- * return from **460**; the state line is 370 worded beside the summary's 150, so *Edit layout*'s
- * word returns from **530** and the Focus words and the subject, with it iconic, from **460**.
+ * is 903 (`PADS` 29, the tabs 167, the verbs 93 · 81 · 94, the pill 60, the badge 21, Focus 183,
+ * *Edit layout* 103, nine 8px gaps), 1053 with the summary, so the verbs' words and *Edit
+ * layout*'s go at **1070**; iconic (36 each) it is 822, so the Focus words and the chip's subject
+ * go at **830**; 737 with those gone, so the label (29 + a gap) goes at **750**, and without it
+ * 700, so the floor is **710**. Under it the tabs-and-verbs line is 452 worded, so the words
+ * return from **460**; the state line is 399 worded beside the summary's 150, so *Edit layout*'s
+ * word returns from **560** and the Focus words and the subject, with it iconic, from **490**.
+ * Checked in the browser with the strip forced to each rung and one below it and a 60px stand-in
+ * for the pill. They were 1040 / 800 / 720 / 680 before the badge. The page's own badge (D7) will
+ * sit on this row too, and moves them again when it lands.
  *
  * **The blind pill is not in those numbers** (`BlindPill`, `BlindMarks.tsx`: 63px worded, 26
  * iconic, drawn only while the programmer is blind, its word on the Focus words' rung here). This
@@ -115,20 +121,20 @@ import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
  * between 800 and 1040, 34 iconic below — and never moves a control. The pill is `min-w-0 shrink`
  * besides, the same last resort as on the rig row.
  */
-export const PAD_ROW_FLOOR_PX = 680
+export const PAD_ROW_FLOOR_PX = 710
 
 // Literals, never built from the floor: Tailwind's scanner finds candidates in the source text,
 // and a variant assembled at runtime is generated for nothing (`RigBand.tsx`, `RIG_ROW_FLOOR_PX`).
 // `BuskPageStrip.test.tsx` pins each literal's floor against the constant.
-export const PAD_VERB_WORD_CLASS = 'hidden @[1040px]:inline @min-[460px]:@max-[680px]:inline'
-export const PAD_EDIT_WORD_CLASS = 'hidden @[1040px]:inline @min-[530px]:@max-[680px]:inline'
-export const PAD_FOCUS_WORD_CLASS = 'hidden @[800px]:inline @min-[460px]:@max-[680px]:inline'
-export const PAD_CHIP_SUBJECT_CLASS = 'hidden @[800px]:inline @min-[460px]:@max-[680px]:inline'
-/** The `PADS` label: folded to nothing below 720, the rung before the floor (D20). */
-export const PAD_LABEL_CLASS = 'hidden @[720px]:block'
-export const PAD_TWO_ROWS_CLASS = '@max-[680px]:flex-wrap'
-export const PAD_SECOND_ROW_CLASS = '@max-[680px]:basis-full'
-export const PAD_FIRST_ROW_CLASS = '@max-[680px]:w-full @max-[680px]:flex-wrap'
+export const PAD_VERB_WORD_CLASS = 'hidden @[1070px]:inline @min-[460px]:@max-[710px]:inline'
+export const PAD_EDIT_WORD_CLASS = 'hidden @[1070px]:inline @min-[560px]:@max-[710px]:inline'
+export const PAD_FOCUS_WORD_CLASS = 'hidden @[830px]:inline @min-[490px]:@max-[710px]:inline'
+export const PAD_CHIP_SUBJECT_CLASS = 'hidden @[830px]:inline @min-[490px]:@max-[710px]:inline'
+/** The `PADS` label: folded to nothing below 750, the rung before the floor (D20). */
+export const PAD_LABEL_CLASS = 'hidden @[750px]:block'
+export const PAD_TWO_ROWS_CLASS = '@max-[710px]:flex-wrap'
+export const PAD_SECOND_ROW_CLASS = '@max-[710px]:basis-full'
+export const PAD_FIRST_ROW_CLASS = '@max-[710px]:w-full @max-[710px]:flex-wrap'
 
 /** What the pad row carries in Pads on the desk board, beyond the tabs (D17). */
 export interface PadRowSelection {
@@ -557,9 +563,8 @@ export function BuskPageStrip({
             {/* Blind beside the mask, in Pads only: in Split and Rig the rig row carries it
                 (`BlindMarks.tsx`). */}
             {pads != null && <BlindPill wordClass={PAD_FOCUS_WORD_CLASS} />}
-            {/* The desk chip too, in Pads (D17: "the chips of D18"): there is no rig row here
-                to carry it, and an unlinked window pressing onto its own selection must say so.
-                Nothing while following, like its sibling. */}
+            {/* The desk chip too, in Pads (D17): there is no rig row here to carry it. Pads always
+                follows the desk selection (desk-follow D2), so this is the link badge (D8). */}
             {pads != null && !editing && (
               <DeskChip showSubject subjectClass={PAD_CHIP_SUBJECT_CLASS} className="min-w-0 shrink" />
             )}

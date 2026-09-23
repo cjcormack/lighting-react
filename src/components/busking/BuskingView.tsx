@@ -47,6 +47,8 @@ import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayout
 import { recordsOnRig } from '@/lib/buskRig'
 import { buskAddBody } from '@/lib/buskAdd'
 import { skippedRowsMessage } from '@/lib/selectionMask'
+import { followIsForced, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
+import { windowName } from '@/lib/windowIdentity'
 import type { BuskPad } from '@/api/buskApi'
 import { lookLayerPresence, templateLayerPresence } from './lookPresence'
 import { COMPACT_FOCUS_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, VERB_WORD_CLASS } from './RigBand'
@@ -146,6 +148,9 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * stack has that cue on stage, playhead or not, which is what makes a cue pad a toggle rather than
  * a playhead move.
  */
+/** Sonner id for the D3 relink, so a second one replaces the toast rather than stacking. */
+export const RELINK_TOAST_ID = 'busk-relinked'
+
 export function BuskingView({ projectId, show }: { projectId: number; show: ShowTabSource }) {
   const isDesktop = useMediaQuery('(min-width: 768px)')
   const isShort = useMediaQuery(SHORT_VIEWPORT)
@@ -288,6 +293,26 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   useEffect(() => {
     applyBuskArrival(launchShape)
   }, [launchShape])
+
+  // **Rig and Pads always follow the desk selection** (desk-follow plan D2, `followIsForced`), so
+  // entering either while this window holds its own **drops it and says so** (D3). Keyed on the
+  // focus and the flag, never on a mount gate, because the focus moves through five doors — the
+  // Focus control, the Screens row, ⌘K, a MIDI `BuskFocusSet`, `?focus=` on arrival — three of
+  // them from elsewhere, and a window that *arrives* in Pads while local (a reload over stale
+  // `sessionStorage`, a Programmer window unlinked and navigated here) must relink the same way.
+  // The flag in the key makes it a backstop too: anything that ever unlinked this window in a
+  // forced focus is undone on the next render rather than left pressing onto a frozen snapshot.
+  // The stored focus, not `shape`: edit mode and an empty project force Split only for their
+  // duration, and the focus is what the window returns to — and what other windows see announced.
+  const followingDesk = useDeskFollow()
+  useEffect(() => {
+    if (followingDesk || !followIsForced('busk', focus)) return
+    relinkToDesk()
+    toast.message(`${windowName()} follows the desk selection again`, {
+      id: RELINK_TOAST_ID,
+      description: `${focus === 'rig' ? 'Rig' : 'Pads'} focus presses onto the desk's selection. Your own was dropped.`,
+    })
+  }, [focus, followingDesk])
 
   // The shape's mirror has the same gate, on its own rendered tri-state: not until its arrival
   // decision has been rendered, or the mirror writes the shape the window is arriving *from*.

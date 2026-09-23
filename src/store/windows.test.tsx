@@ -4,7 +4,7 @@ import { act, render, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
-import { windowsWs } from '@/test/backendMock'
+import { selectionWs, windowsWs } from '@/test/backendMock'
 
 // lightingApi opens a real WebSocket at import time (jsdom has none). The mock's `windows`
 // namespace remembers the subscriber and every announce.
@@ -44,7 +44,7 @@ vi.mock('sonner', () => ({
   toast: Object.assign((...args: unknown[]) => toasts.push(args), { error: (...args: unknown[]) => toasts.push(args) }),
 }))
 
-import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { getLocalSelection, isFollowingDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 import { getFullscreenState, resetFullscreenState } from '@/lib/fullscreen'
 import { resetUnsavedSheets, setSheetUnsaved } from '@/lib/unsavedSheets'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
@@ -78,6 +78,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   windowsWs.reset()
+  selectionWs.last = null
   store.dispatch(restApi.util.resetApiState())
 })
 
@@ -310,6 +311,61 @@ describe('handleWindowCommand', () => {
   })
 })
 
+describe('handleWindowCommand — windows.follow (desk-follow D4)', () => {
+  const ctx = (currentView: string, focus: string, following: boolean) => {
+    const state = { following }
+    return {
+      state,
+      myRowId: 's-1',
+      currentView,
+      navigate: vi.fn(),
+      focus: () => focus,
+      following: () => state.following,
+      setFollow: vi.fn((on: boolean) => {
+        state.following = on
+      }),
+      reannounce: vi.fn(),
+    }
+  }
+  const follow = (on: boolean, targetId = 's-1') => ({ type: 'follow' as const, targetId, on })
+
+  it('unlinks and relinks this window, and leaves the re-announce to the flag that moved', () => {
+    const c = ctx('/projects/1/programmer', 'split', true)
+    expect(handleWindowCommand(follow(false), c)).toBe('followed')
+    expect(c.setFollow).toHaveBeenLastCalledWith(false)
+    expect(handleWindowCommand(follow(true), c)).toBe('followed')
+    expect(c.setFollow).toHaveBeenLastCalledWith(true)
+    // Both moved the flag, so the announce effect carries them; nothing is re-sent here.
+    expect(c.reannounce).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unlink on the busk view in Rig or Pads focus, and re-announces so the row corrects', () => {
+    for (const focus of ['rig', 'pads']) {
+      const c = ctx('/projects/1/busk', focus, true)
+      expect(handleWindowCommand(follow(false), c), focus).toBe('refused')
+      expect(c.setFollow).not.toHaveBeenCalled()
+      expect(c.reannounce).toHaveBeenCalledTimes(1)
+    }
+    // Split is free, and so is Pads' stored focus on another view: the rule is the busk view's.
+    expect(handleWindowCommand(follow(false), ctx('/projects/1/busk', 'split', true))).toBe('followed')
+    expect(handleWindowCommand(follow(false), ctx('/projects/1/programmer', 'pads', true))).toBe('followed')
+  })
+
+  it('does not re-snapshot a window that is already local, and re-announces the unchanged flag', () => {
+    const c = ctx('/projects/1/programmer', 'split', false)
+    expect(handleWindowCommand(follow(false), c)).toBe('followed')
+    expect(c.setFollow).not.toHaveBeenCalled()
+    expect(c.reannounce).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a follow aimed at another row', () => {
+    const c = ctx('/projects/1/programmer', 'split', true)
+    expect(handleWindowCommand(follow(false, 's-2'), c)).toBe('ignored')
+    expect(c.setFollow).not.toHaveBeenCalled()
+    expect(c.reannounce).not.toHaveBeenCalled()
+  })
+})
+
 describe('the mounted bridge', () => {
   it('navigates this window on a rebroadcast show that names its row, and not another’s', async () => {
     windowsWs.last = [row('s-1', 'w-1', 'Screen 1'), row('s-2', 'w-2', 'Screen 2')]
@@ -393,6 +449,41 @@ describe('the mounted bridge', () => {
       windowsWs.command({ type: 'viewOptions', targetId: 's-1', view: '/projects/1/busk', options: { sheet: 'toggle' } })
     })
     expect(getBuskSheet()).toBe('speed')
+  })
+
+  it('unlinks onto the desk’s selection on a follow off, and relinks on a follow on — re-announcing both', async () => {
+    windowsWs.last = [row('s-1', 'w-1', 'Screen 1')]
+    selectionWs.last = { targets: [{ type: 'group', key: 'Front' }], families: ['COLOUR'] }
+    mountBridge()
+    await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    act(() => {
+      windowsWs.command({ type: 'follow', targetId: 's-1', on: false })
+    })
+    expect(isFollowingDesk()).toBe(false)
+    expect(getLocalSelection()).toEqual({ targets: [{ type: 'group', key: 'Front' }], families: ['COLOUR'] })
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect(windowsWs.announced[1]).toMatchObject({ follows: false })
+    act(() => {
+      windowsWs.command({ type: 'follow', targetId: 's-1', on: true })
+    })
+    expect(isFollowingDesk()).toBe(true)
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(3))
+    expect(windowsWs.announced[2]).toMatchObject({ follows: true })
+  })
+
+  it('refuses a follow off in Pads focus and re-sends the unchanged announce', async () => {
+    windowsWs.last = [row('s-1', 'w-1', 'Screen 1', '/projects/1/busk')]
+    setBuskFocus('pads')
+    mountBridge('/projects/1/busk')
+    await waitFor(() => expect(windowsWs.commandCallback).not.toBeNull())
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    act(() => {
+      windowsWs.command({ type: 'follow', targetId: 's-1', on: false })
+    })
+    expect(isFollowingDesk()).toBe(true)
+    expect(windowsWs.announced).toHaveLength(2)
+    expect(windowsWs.announced[1]).toEqual(windowsWs.announced[0])
   })
 
   it('applies a focus arm after a show that moved it onto the busk view — two frames in a row', async () => {

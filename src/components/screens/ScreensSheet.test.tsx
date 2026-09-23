@@ -16,6 +16,7 @@ vi.mock('@/store/windows', async () => {
     setWindowFullscreen: (targetId: string, on: boolean) => sent.push({ type: 'fullscreen', targetId, on }),
     setWindowViewOptions: (targetId: string, view: string, options: Record<string, string>) =>
       sent.push({ type: 'viewOptions', targetId, view, options }),
+    setWindowFollow: (targetId: string, on: boolean) => sent.push({ type: 'follow', targetId, on }),
   }
 })
 // The busk pages a Page picker resolves against, and the desk's showing page.
@@ -141,10 +142,12 @@ describe('ScreensSheet', () => {
     expect(rows).toHaveLength(3)
 
     expect(rowFor('Screen 1')).toHaveTextContent('this window')
-    expect(rowFor('Screen 1')).toHaveTextContent('in a browser tab · follows the desk')
+    expect(rowFor('Screen 1')).toHaveTextContent('in a browser tab')
     expect(rowFor('Screen 2')).not.toHaveTextContent('this window')
-    expect(rowFor('Screen 2')).toHaveTextContent('full screen · follows the desk')
-    expect(rowFor('Chris’s iPad')).toHaveTextContent('in a browser tab · own selection')
+    expect(rowFor('Screen 2')).toHaveTextContent('full screen')
+    // The selection caption went with the Selection segment (desk-follow D4): the segment says it.
+    expect(rowFor('Chris’s iPad')).not.toHaveTextContent('own selection')
+    expect(rowFor('Screen 1')).not.toHaveTextContent('follows the desk')
     // The user is not drawn while every name is unique.
     expect(rowFor('Chris’s iPad')).not.toHaveTextContent('· Chris')
   })
@@ -210,7 +213,8 @@ describe('ScreensSheet', () => {
   it('reads this window’s own full-screen state from the document, ahead of the registry', () => {
     fullscreen.active = true
     render(<ScreensSheet />)
-    expect(rowFor('Screen 1')).toHaveTextContent('full screen ·')
+    expect(rowFor('Screen 1')).toHaveTextContent('full screen')
+    expect(rowFor('Screen 1')).not.toHaveTextContent('in a browser tab')
     fireEvent.click(within(rowFor('Screen 1')).getByRole('button', { name: 'Exit full screen' }))
     expect(fullscreen.exit).toHaveBeenCalledTimes(1)
   })
@@ -336,6 +340,45 @@ describe('ScreensSheet', () => {
     })
   })
 
+  describe('the Selection segment (desk-follow plan D4)', () => {
+    const segment = (name: string) => within(rowFor(name)).getByRole('radiogroup', { name: `Selection on ${name}` })
+
+    it('draws Desk · This window on every Busk and Programmer row from the row’s flag, and on no other', () => {
+      registry.windows.push(row('s-4', 'w-4', 'Stage', { view: '/projects/1/show', viewOptions: { immersive: 'off' } }))
+      render(<ScreensSheet />)
+      expect(within(segment('Screen 1')).getByRole('radio', { name: 'Desk' })).toHaveAttribute('aria-checked', 'true')
+      expect(within(segment('Chris’s iPad')).getByRole('radio', { name: 'This window' })).toHaveAttribute('aria-checked', 'true')
+      expect(segment('Screen 2')).toBeInTheDocument()
+      // Show has no selection to follow, so it has no segment.
+      expect(within(rowFor('Stage')).queryByRole('radiogroup', { name: 'Selection on Stage' })).toBeNull()
+    })
+
+    it('writes windows.follow by row id — this window’s own included', () => {
+      render(<ScreensSheet />)
+      fireEvent.click(within(segment('Screen 1')).getByRole('radio', { name: 'This window' }))
+      fireEvent.click(within(segment('Chris’s iPad')).getByRole('radio', { name: 'Desk' }))
+      expect(sent).toEqual([
+        { type: 'follow', targetId: 's-1', on: false },
+        { type: 'follow', targetId: 's-3', on: true },
+      ])
+    })
+
+    it('is disabled with its reason on a busk row in Rig or Pads focus — never hidden — and free in Split', () => {
+      registry.windows.push(row('s-4', 'w-4', 'Screen 3', { view: '/projects/1/busk', viewOptions: { focus: 'rig' } }))
+      registry.windows.push(row('s-5', 'w-5', 'Screen 4', { view: '/projects/1/busk', viewOptions: { focus: 'split' } }))
+      render(<ScreensSheet />)
+      for (const [name, reason] of [['Screen 2', 'Pads focus follows'], ['Screen 3', 'Rig focus follows']] as const) {
+        const radios = within(segment(name)).getAllByRole('radio')
+        expect(radios.every((r) => r.hasAttribute('disabled')), name).toBe(true)
+        expect(rowFor(name)).toHaveTextContent(reason)
+      }
+      expect(within(segment('Screen 4')).getAllByRole('radio').some((r) => r.hasAttribute('disabled'))).toBe(false)
+      expect(rowFor('Screen 4')).not.toHaveTextContent('focus follows')
+      fireEvent.click(within(segment('Screen 2')).getByRole('radio', { name: 'This window' }))
+      expect(sent).toEqual([])
+    })
+  })
+
   describe('the Chrome segment (busk-chrome plan D9)', () => {
     it('draws App · Immersive on a Programmer row and a Show row from the descriptor, reading what the window announced', () => {
       registry.windows[0] = row('s-1', 'w-1', 'Screen 1', { viewOptions: { immersive: 'off' } })
@@ -348,7 +391,7 @@ describe('ScreensSheet', () => {
       expect(within(show).getByRole('radio', { name: 'Immersive' })).toHaveAttribute('aria-checked', 'true')
       // And on the busk row too, last, after Focus · Sheet · Page.
       const busk2 = rowFor('Screen 2')
-      expect(within(busk2).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Focus on Screen 2', 'Sheet on Screen 2', 'Chrome on Screen 2'])
+      expect(within(busk2).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Focus on Screen 2', 'Sheet on Screen 2', 'Chrome on Screen 2', 'Selection on Screen 2'])
     })
 
     it('sets it by the one keyed command carrying the row’s view, on the wire’s spelling', () => {

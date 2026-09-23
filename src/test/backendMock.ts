@@ -615,6 +615,9 @@ export function lightingApiMock() {
         viewOptions: (targetId: string, view: string, options: Record<string, string>) => {
           windowsWs.sent.push({ type: 'windows.viewOptions', targetId, view, options })
         },
+        follow: (targetId: string, on: boolean) => {
+          windowsWs.sent.push({ type: 'windows.follow', targetId, on })
+        },
       },
       cueStacks: {
         subscribe: noopSub,

@@ -4,7 +4,7 @@ import { sameSelectionSnapshot, type DeskSelectionSnapshot, type SubselectMode }
 import type { CueTarget } from '../api/cuesApi'
 import type { AttributeFamily } from '../lib/attributeFamily'
 import { normaliseFamilies } from '../lib/selectionMask'
-import { useDeskFollow, useLocalSelection } from '../lib/deskFollow'
+import { unlinkFromDesk, useDeskFollow, useLocalSelection } from '../lib/deskFollow'
 
 /**
  * The desk selection — see `api/selectionApi.ts` for what it is and why it is server-owned.
@@ -126,4 +126,15 @@ export function clearDeskSelection(): void {
  */
 export function subselectDeskSelection(mode: SubselectMode): void {
   lightingApi.selection.subselect(mode)
+}
+
+/**
+ * Unlink this tab from the desk's selection, taking the desk's fact **as it stands now** as the
+ * tab's own — ⌘K's *Stop following…* and a `windows.follow {on: false}` alike. Read at call time
+ * rather than subscribed: both callers act once, and a `selection.state` subscription in either
+ * would re-render it on every marquee frame for a value only this one call reads.
+ */
+export function unlinkFromDeskNow(): void {
+  const desk = lightingApi.selection.getState()
+  unlinkFromDesk({ targets: desk?.targets ?? [], families: desk?.families ?? null })
 }

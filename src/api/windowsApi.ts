@@ -5,7 +5,7 @@ import { sendGesture } from './wsGesture'
 import { Status } from './statusApi'
 
 /**
- * The `windows.*` family — the desk's registry of signed-in browser windows, and the four
+ * The `windows.*` family — the desk's registry of signed-in browser windows, and the five
  * commands one window sends another (multi-screen plan §3.4, busk-further plan §3.5; lighting7
  * `plugins/WindowsSocket.kt`, which is the wire contract wherever this comment and the plan's
  * sketch differ).
@@ -34,6 +34,12 @@ import { Status } from './statusApi'
  * under which view) and `lib/buskWindow.ts` / `lib/immersive.ts` own the values. The fourth
  * command, `windows.viewOptions {targetId, view, options}`, is rebroadcast like the other three;
  * the named window applies `options` to its own tab facts **for that view only** and re-announces.
+ *
+ * **The fifth, `windows.follow {targetId, on}`, sets a window's selection follow** (desk-follow
+ * plan D4; lighting7 3f4fb5b) — `windows.fullscreen`'s exact shape. It is not a view option,
+ * because follow is the window's and not a view's, and a Programmer row carries no busk options.
+ * Nothing is written server-side: the target applies it — or refuses an `off` its focus forbids —
+ * and re-announces `follows`, which is how the registry learns it, as for a rename.
  *
  * **The announce is re-sent on every `open`.** It is the second legitimate `open` branch in this
  * tree (`speedMastersWsApi`'s beat re-requests are the first), and for the same reason: it re-sends
@@ -86,13 +92,14 @@ export type WindowCommand =
   | { type: 'rename'; targetId: string; name: string }
   | { type: 'fullscreen'; targetId: string; on: boolean }
   | { type: 'viewOptions'; targetId: string; view: string; options: Readonly<Record<string, string>> }
+  | { type: 'follow'; targetId: string; on: boolean }
 
 export interface WindowsWsApi {
   /** Every signed-in window, on connect and on every change. */
   subscribe(fn: (windows: DeskWindow[]) => void): Subscription
   /** The last state frame, or null before the first — for an RTK Query `queryFn` seeding its entry. */
   getState(): DeskWindow[] | null
-  /** The four commands, as rebroadcast — this window's own included. */
+  /** The five commands, as rebroadcast — this window's own included. */
   subscribeCommands(fn: (command: WindowCommand) => void): Subscription
   /**
    * Say what this window is. Remembered and re-sent on every `open`; sent now if the socket is up,
@@ -107,6 +114,8 @@ export interface WindowsWsApi {
   fullscreen(targetId: string, on: boolean): void
   /** Set a window's per-view options, for the view it is showing. */
   viewOptions(targetId: string, view: string, options: Readonly<Record<string, string>>): void
+  /** Link (`on`) or unlink a window's selection from the desk's. */
+  follow(targetId: string, on: boolean): void
 }
 
 type WindowsInMessage =
@@ -115,6 +124,7 @@ type WindowsInMessage =
   | { type: 'windows.rename'; targetId: unknown; name: unknown }
   | { type: 'windows.fullscreen'; targetId: unknown; on: unknown }
   | { type: 'windows.viewOptions'; targetId: unknown; view: unknown; options: unknown }
+  | { type: 'windows.follow'; targetId: unknown; on: unknown }
 
 /** A `Map<String, String>` as the desk serialises it, or null for anything else. */
 function parseStringMap(raw: unknown): Readonly<Record<string, string>> | null {
@@ -168,6 +178,8 @@ function parseCommand(message: Exclude<WindowsInMessage, { type: 'windows.state'
         ? { type: 'viewOptions', targetId, view: message.view, options }
         : null
     }
+    case 'windows.follow':
+      return typeof message.on === 'boolean' ? { type: 'follow', targetId, on: message.on } : null
   }
 }
 
@@ -220,7 +232,8 @@ export function createWindowsWsApi(conn: InternalApiConnection): WindowsWsApi {
       message.type === 'windows.show' ||
       message.type === 'windows.rename' ||
       message.type === 'windows.fullscreen' ||
-      message.type === 'windows.viewOptions'
+      message.type === 'windows.viewOptions' ||
+      message.type === 'windows.follow'
     ) {
       const command = parseCommand(message)
       if (command != null) commands.notify(command)
@@ -245,5 +258,6 @@ export function createWindowsWsApi(conn: InternalApiConnection): WindowsWsApi {
     fullscreen: (targetId, on) => sendGesture(conn, { type: 'windows.fullscreen', targetId, on }),
     viewOptions: (targetId, view, options) =>
       sendGesture(conn, { type: 'windows.viewOptions', targetId, view, options: { ...options } }),
+    follow: (targetId, on) => sendGesture(conn, { type: 'windows.follow', targetId, on }),
   }
 }

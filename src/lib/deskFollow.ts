@@ -9,7 +9,8 @@ import { createSyncStore, sessionStorageArea } from './syncStore'
  *
  * A window follows the desk by default: every console makes a second screen a view on one
  * programmer, and a window that started unlinked would look broken (the band on the other screen
- * stays dark). A tab unlinks by clicking its desk chip, and what it gets is a selection of its own —
+ * stays dark). A tab unlinks from ⌘K, or from the Selection segment on its row of the Screens sheet
+ * on any window (`windows.follow`), and what it gets is a selection of its own —
  * on the busk view a Map held here, on the programmer the list's own row selection — that a press
  * from this tab acts on instead of the desk's.
  *
@@ -53,6 +54,40 @@ const localStore = createSyncStore<LocalSelection>({
   parse: parseLocalSelection,
   storage: sessionStorageArea,
 })
+
+/**
+ * **Must this window follow the desk?** The one statement of D1 and D2 (desk-follow plan): a
+ * window's own selection is offered only where it can both select *and* act on it — busk Split and
+ * the Programmer — so on the busk view **Rig and Pads focus always follow**. Rig focus selects and
+ * has no pads (it exists to be the selector for another screen's pads, even with the sheet's Colour
+ * or Spread tab open); Pads focus presses and has no tiles, so a local selection there would be a
+ * frozen snapshot the operator can neither see nor change from that screen.
+ *
+ * The effective rule is therefore `follows || followIsForced(view, focus)`, and the stored flag
+ * alone everywhere else. Four readers, and none of them restates it: the D3 relink in
+ * `BuskingView`, the `windows.follow` refusal in `useWindowsBridge`, the Screens row's disabled
+ * Selection segment, and ⌘K's withheld *Stop following…*.
+ *
+ * [view] is a `lib/windowViews.ts` view id (`busk`, `programmer`, …) and [focus] the window's
+ * **stored** busk focus — `useBuskFocus()` here, a row's announced `viewOptions.focus` on the
+ * Screens sheet — deliberately not the shape edit mode or an empty project forces the view into:
+ * those are transient, the focus is what the window returns to, and it is the one value every
+ * reader (this window and a Screens sheet on another) can see alike. Both loose strings, because a
+ * row's options are a free `string → string` map.
+ */
+export function followIsForced(view: string | null | undefined, focus: string | null | undefined): boolean {
+  return view === 'busk' && (focus === 'rig' || focus === 'pads')
+}
+
+/**
+ * **Does [view] carry a selection of its own worth following or leaving?** Busk and the Programmer,
+ * and no other view (desk-follow plan D1): Show and the Prompt Book have no selection, and the
+ * Fixtures and Groups lists never bridge. The Screens row draws its Selection segment and ⌘K its
+ * per-window follow arm on exactly these, so the two cannot disagree about which windows can unlink.
+ */
+export function viewHasOwnSelection(view: string | null | undefined): boolean {
+  return view === 'busk' || view === 'programmer'
+}
 
 /** Is this tab following the desk's selection? Re-renders every reader when it flips. */
 export function useDeskFollow(): boolean {
