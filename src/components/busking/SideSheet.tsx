@@ -15,6 +15,7 @@ import {
   SIDE_PANEL_ENTER_CLASS,
   SIDE_PANEL_HEADER_BUTTON_CLASS,
   SIDE_PANEL_OVERLAY_CLASS,
+  tabWordClass,
   usePanelEnter,
   useSidePanelResize,
 } from '@/components/sheet/sidePanel'
@@ -103,16 +104,15 @@ export const SIDE_SHEET_TABS: readonly TabSpec[] = [
 
 /**
  * A tab's word on either strip: drawn at 400px of sheet and up, and below that only on the open
- * tab (D3). The strip's **unpadded wrapper** is the `@container` (`sheetFrame.ts`'s convention for
- * a chrome row: a size query measures the content box, and the row's own `px-3` would fire every
- * threshold 24px early), so 400 is 400 of the sheet — what the operator dragged it to, or the
- * overlay's own width — and not the window's. The overlay strip takes the same rule: three worded
- * tabs measure ~291px, which overran the right-hand form while it was 288 and ran under
- * `SheetContent`'s close cross; at that form's 320 they are folded anyway, and end well clear of it.
+ * tab (D3) — the shared panel chrome's rule, in `components/sheet/sidePanel.ts` since the rail took
+ * a tab strip of its own; re-exported here, where the sheet's tests read it. The strip's
+ * **unpadded wrapper** is the `@container`, so 400 is 400 of the sheet — what the operator dragged
+ * it to, or the overlay's own width — and not the window's. The overlay strip takes the same rule:
+ * three worded tabs measure ~291px, which overran the right-hand form while it was 288 and ran
+ * under `SheetContent`'s close cross; at that form's 320 they are folded anyway, and end well
+ * clear of it.
  */
-export function tabWordClass(open: boolean): string {
-  return open ? 'inline' : 'hidden @[400px]:inline'
-}
+export { tabWordClass }
 
 /**
  * Which tabs a sheet offers in a given form: the landed ones, docked; the landed ones **minus

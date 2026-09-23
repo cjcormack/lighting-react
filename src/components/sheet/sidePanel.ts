@@ -53,6 +53,23 @@ export const SIDE_PANEL_STRIP_CELL_CLASS =
 export const SIDE_PANEL_HEADER_BUTTON_CLASS = 'size-6 text-muted-foreground'
 
 /**
+ * A header tab's word: drawn at 400px of tab strip and up, and below that only on the **open** tab
+ * (busk-chrome plan D3). Both panels' headers are tab strips — the busk sheet's four tabs and the
+ * rail's Stack · Colour · Spread — and each strip's **unpadded wrapper** is the `@container`
+ * (`sheetFrame.ts`'s convention for a chrome row: a size query measures the content box, and the
+ * row's own `px-3` would fire the threshold 24px early). Every tab keeps its glyph at every width.
+ *
+ * It lived in the busk sheet until the rail took a strip of its own (editor-kit plan session 4);
+ * the rule is the panels' shared chrome, so it moved here rather than being copied. On the rail
+ * the strip is narrower than the rail by the mode toggle and the chevron, so at the rail's 480
+ * ceiling it is still under 400 — the fold holds at every width the rail has, which is what the
+ * board draws.
+ */
+export function tabWordClass(open: boolean): string {
+  return open ? 'inline' : 'hidden @[400px]:inline'
+}
+
+/**
  * Where an **overlay**-mode panel sits: over the content, against the right edge, under nothing.
  * Both surfaces hide their strip while the panel is up (`SIDE_PANEL_MODE`), so this is flush
  * `right-0` rather than inset by a strip width.

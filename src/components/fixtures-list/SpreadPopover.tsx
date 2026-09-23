@@ -91,43 +91,44 @@ interface SpreadPopoverProps {
   /** A colour editor's *Spread…*: opens the panel on Colour with *From* seeded. See `SpreadSeed`. */
   seed?: SpreadSeed | null
   onSeedConsumed?: () => void
+  /**
+   * The programmer rail's Spread tab is open, and is this verb's panel while it is: a press calls
+   * this — the tab focuses its From — rather than opening a second Spread over the same marquee
+   * (editor-kit plan session 4). Absent, the button opens the popover as always.
+   */
+  onClaimed?: () => void
   /** For the trigger button — the programmer's selection bar folds it away at phone widths. */
   className?: string
 }
 
+/** What `useMarqueeSpreadPlans` is asked, and answers — the popover and the rail tab alike. */
+export interface MarqueeSpreadInput {
+  columns: readonly SpreadColumn[]
+  projectId?: number
+  desk?: boolean
+  scopeLabel?: string
+  /** The rail's docked host: its label line is drawn whatever the viewport's form. */
+  docked?: boolean
+}
+
+export interface MarqueeSpreadPlans {
+  plans: SpreadPlan[]
+  /** The scope's refusal — Output, or a focused template layer — in the words Set and Clear use. Null where a spread can land. */
+  disabledReason: string | null
+  labelLine: ReactNode
+  footerNote: ReactNode
+}
+
 /**
- * The fixtures list's **Spread** — the editor kit's panel with plans built from this list's columns
- * (editor-kit plan D4, D6; `Spread.dc.html`).
+ * The plans a marquee spreads by, and the words around them — **one builder for the popover and
+ * the programmer rail's Spread tab** (editor-kit plan session 4), so the two cannot build different
+ * targets, masks or scope arms from one selection. Everything the component docblock below says
+ * about the plans is this hook's; the component is the popover host around it.
  *
- * **The marquee answers the panel's first two questions.** The heads are `spreadTargetsOf` over the
- * marquee's write targets — a group row already expanded to its *visible* members, an element row
- * kept as a cell — and the family is the marquee's column, so the panel opens one row further down
- * than the busk tab does: the segment drawn checked, the other families the heads can take offered
- * disabled with the reason, the Property row from what the heads can take in that family. A
- * marquee spanning two families (Dimmer + Colour) offers both live, which is the chooser Fan drew
- * for the same case. `families` on the request is the pair the press sends (`usePressFamilies`):
- * the desk's while this tab follows it, the marquee's own when unlinked.
- *
- * **The desk resolves** every column in the template vocabulary (D3): the request goes through
- * `useSpreadMutation` and one literal per head lands in Local. Speed is outside the vocabulary and
- * keeps a client byte walk as a `raw` plan (D15), built through `resolveTargetCells` so a bar's
- * cells are its steps over Cells; Gobo and Prism build no plan, as they never did.
- *
- * **The scope arm is one flag on the route** (D6). Local sends no `write` key. A focused **Look**
- * layer sends `write: false`: the desk resolves exactly as it does for Local and answers without
- * writing, and each `written[].value` — the head's literal, in the Look row grammar — is landed in
- * the layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope
- * edit does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the
- * intent (mid-upgrade, plan §6) is told apart by shape (`isIntentString`: a `pct:` / `deg:` /
- * `dmx:` / `tmpl:` prefix or a `;policy=` tag — the literal parser alone would take a colour
- * intent as a colour) and refused with a toast naming the desk rather than landing an intent in
- * a Look row. In practice such a desk 400s the `write: false` request first, since its Json
- * refuses the unknown key; the guard is for the answer, should one ever arrive.
- * Output is a read of the cook and a focused *template* layer is a read of a template: neither's
- * cells are editable and `useCellWriters` has no arm for either, so both refuse with the words Set
- * and Clear use, disabled with the reason rather than hidden.
+ * It reads the scope, the focused layers and `useCellWriters`, so a host must sit inside the same
+ * `EditorContext` the grid provides — the rail's tabs mount `ScopedEditorContextProvider` for it.
  */
-export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = 'Local', seed, onSeedConsumed, className }: SpreadPopoverProps) {
+export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeLabel = 'Local', docked = false }: MarqueeSpreadInput): MarqueeSpreadPlans {
   const writers = useCellWriters()
   const scope = useProgrammerScope()
   const focusedTemplate = useFocusedTemplateLayer()
@@ -250,9 +251,10 @@ export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = '
       <EditorLabelLine
         subject={`into ${lookName} · ${intent.count} ${intent.count === 1 ? 'head' : 'heads'}`}
         column={`${intent.label} marquee`}
+        docked={docked}
       />
     ) : (
-      <EditorLabelLine subject={headsLine(intent.count, scopeLabel)} column={`${intent.label} marquee`} />
+      <EditorLabelLine subject={headsLine(intent.count, scopeLabel)} column={`${intent.label} marquee`} docked={docked} />
     )
   const footerNote: ReactNode =
     setLookValue == null ? undefined : (
@@ -260,6 +262,44 @@ export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = '
         <Layers className="size-3" aria-hidden /> resolved on the desk, written to the layer’s draft
       </span>
     )
+
+  return { plans, disabledReason, labelLine, footerNote }
+}
+
+/**
+ * The fixtures list's **Spread** — the editor kit's panel with plans built from this list's columns
+ * (editor-kit plan D4, D6; `Spread.dc.html`).
+ *
+ * **The marquee answers the panel's first two questions.** The heads are `spreadTargetsOf` over the
+ * marquee's write targets — a group row already expanded to its *visible* members, an element row
+ * kept as a cell — and the family is the marquee's column, so the panel opens one row further down
+ * than the busk tab does: the segment drawn checked, the other families the heads can take offered
+ * disabled with the reason, the Property row from what the heads can take in that family. A
+ * marquee spanning two families (Dimmer + Colour) offers both live, which is the chooser Fan drew
+ * for the same case. `families` on the request is the pair the press sends (`usePressFamilies`):
+ * the desk's while this tab follows it, the marquee's own when unlinked.
+ *
+ * **The desk resolves** every column in the template vocabulary (D3): the request goes through
+ * `useSpreadMutation` and one literal per head lands in Local. Speed is outside the vocabulary and
+ * keeps a client byte walk as a `raw` plan (D15), built through `resolveTargetCells` so a bar's
+ * cells are its steps over Cells; Gobo and Prism build no plan, as they never did.
+ *
+ * **The scope arm is one flag on the route** (D6). Local sends no `write` key. A focused **Look**
+ * layer sends `write: false`: the desk resolves exactly as it does for Local and answers without
+ * writing, and each `written[].value` — the head's literal, in the Look row grammar — is landed in
+ * the layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope
+ * edit does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the
+ * intent (mid-upgrade, plan §6) is told apart by shape (`isIntentString`: a `pct:` / `deg:` /
+ * `dmx:` / `tmpl:` prefix or a `;policy=` tag — the literal parser alone would take a colour
+ * intent as a colour) and refused with a toast naming the desk rather than landing an intent in
+ * a Look row. In practice such a desk 400s the `write: false` request first, since its Json
+ * refuses the unknown key; the guard is for the answer, should one ever arrive.
+ * Output is a read of the cook and a focused *template* layer is a read of a template: neither's
+ * cells are editable and `useCellWriters` has no arm for either, so both refuse with the words Set
+ * and Clear use, disabled with the reason rather than hidden.
+ */
+export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = 'Local', seed, onSeedConsumed, onClaimed, className }: SpreadPopoverProps) {
+  const { plans, disabledReason, labelLine, footerNote } = useMarqueeSpreadPlans({ columns, projectId, desk, scopeLabel })
 
   return (
     <SpreadPanel
@@ -270,6 +310,7 @@ export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = '
       footerNote={footerNote}
       seed={seed}
       onSeedConsumed={onSeedConsumed}
+      onClaimed={onClaimed}
       disabledReason={disabledReason}
       drivableHint={DRIVABLE_HINT}
       // The plans above are already filtered to columns Spread can drive, so a Setting marquee

@@ -995,7 +995,10 @@ chrome system exists to settle: the sheet was a transparent column on a 36px hea
 strip, whose chevron was `p-1` and whose tab glyphs were `p-1.5`, against the rail's opaque fill,
 40px header and 40px strip cells. The module states each once (`SIDE_PANEL_BODY_CLASS`,
 `_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`, `_ENTER_CLASS`), `sheetFrame.ts`'s
-model — a surface that wants to differ says so at its own import. **There is no
+model — a surface that wants to differ says so at its own import. **Both headers are tab strips
+since the editor kit's session 4**, and the fold their words take is the module's too:
+`tabWordClass`, moved there from the busk sheet when the rail took Stack · Colour · Spread (§The
+rail's tabs), so the two strips fold by one rule. **There is no
 `SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so both
 surfaces take `CHROME_ROW_CLASS` from `sheetFrame.ts` and a panel-specific name for it would have
 been the one measurement stated twice — the drift both modules exist to close. The overlay form's
@@ -2874,7 +2877,8 @@ whose `INDEX.md` has the reasoning). A 12px gutter on every row, the `ShowHeader
 that header is shared, so Show, the Prompt Book and Busk take it too, and on those three it differs
 from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row is 40px and holds
 32px controls, so the inset is 4px everywhere: row A, row B (`h-10`, `min-h-10` when folded), row
-C (`SelectionBar`), the rail header and the strip's chevrons, all level. Three control tiers by
+C (`SelectionBar`), the rail header — a tab strip since the editor kit's session 4, §The rail's
+tabs — and the strip's chevrons, all level. Three control tiers by
 nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
 a control (`h-7`: Update and Revert in the source box, a template chip, `New`), 24 for a toggle
 item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
@@ -3001,6 +3005,64 @@ which Record writes onto the cue; Output → disabled, naming the two places tha
 **Make layer** promotes a Local selection into a named Look applied here — record-look, then
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
 yours. It is a sequence, so a failure part-way leaves the Look and says so.
+
+### The rail's tabs
+
+**The rail's header is a tab strip — Stack · Colour · Spread** (editor-kit plan session 4,
+`lighting7/docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail as it always was,
+`LAYERS n · FX n` its face and the body and footer unchanged; **Colour** and **Spread** are the busk
+sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
+`RailSpreadTab.tsx`) — a long busk over one marquee with the grid uncovered, where a cell's popover
+is the quick form. The strip is the header row itself, the mode toggle and the chevron after it; a
+second tab row was declined. Its words fold by the busk sheet's rule, `tabWordClass`, which lives in
+`components/sheet/sidePanel.ts` now as the panels' shared chrome: the strip's unpadded wrapper is the
+`@container`, and below 400px of strip only the open tab keeps its word — every width the rail has,
+the strip being the rail less its toggle and chevron — while the Stack tab folds to the collapsed
+strip's glyph-and-count pairs, so the counts are never lost. `RailTabs.test.tsx` pins that as an
+ordering.
+
+Six rules, each with a reason:
+
+- **Docked only.** The push-mode narrow arm (704–1200) and overlay mode both shut on the next press
+  outside the panel, which a picker over the grid has to survive — so the strip carries
+  `@max-[1200px]:hidden`, overlay mode draws the plain face, and the strip writes the tab back to
+  Stack when it sees its own box go to zero (`RailHandleFrame`'s trick). The collapsed strip's
+  palette and wave cells, which expand the rail onto their tab, are docked-only the same way; the
+  phone's bottom sheet keeps the stack.
+- **The fact rests on Stack and is not persisted** (call 10). `railTab` is plain state beside
+  `collapsed` in `RailArm`, a collapse forgets it, and a strip count opens the Stack tab. A rail that
+  opened on a picker for a marquee that does not exist yet would be a panel saying nothing.
+- **The marquee is published, not moved.** The cells stay local state in `FixturesListContainer`
+  (`useCellSelection`'s reason); the container publishes what its own editors are handed —
+  `marqueeBatches`, `columnTargets`, the rows' heads for a rows-only selection, the scope's
+  `cellKeyboardPermission` and `scopeLabel`, and a throttled `commit(col, …)` — into
+  `fixtures-list/marqueeContext.ts`, a **store** `ProgrammerPage` provides above the grid and the
+  rail. A store and not a context value: the marquee moves at pointer rate and only a mounted tab
+  should hear it. The plain lists mount no store, so they publish into nothing.
+- **A tab claims its own column's open gesture** (call 9). With Colour open, Enter, Set, a typed
+  character and a double click on a Colour cell land in the tab — R focused, the character seeded —
+  and no popover opens; with Spread open, row C's Spread focuses the tab's From, and a colour cell's
+  *Spread…* seeds the tab rather than the popover. Every other column opens its popover. The claim
+  is `programmer/railTab.ts`'s `RailTabClaim`, which `ProgrammerWorkspace` provides around *both*
+  its children, keyed on the drawn tab alone; the keyboard's branch is `useCellEditorRequests`'
+  `intercept`, the double click's is `ColourCell`'s `onOpenChange`.
+- **The tabs write where the grid is pointed.** The page keeps an outer `live` `EditorContext` for
+  the rail's FX controls, so the tabs mount `ScopedEditorContextProvider` — the grid's own
+  derivation, extracted — and a value lands in a focused Look layer's draft, not in Local. The
+  Colour tab writes through the published commit, which is the container's column commit on its
+  ~30 Hz throttle; the Spread tab's plans come from `useMarqueeSpreadPlans`, lifted out of
+  `SpreadPopover` so the two build one plan list. Output and a focused template layer are
+  read-only in both, with the cell's and the popover's own words (`ColourEditor`'s `readOnly`,
+  `SpreadPanel`'s docked refusal); Pick stays live.
+- **The Colour tab's emitters start unstated.** Its buffer is its own and seeded by Pick, as the
+  busk tab's is, but an emitter stays `undefined` — which the writer samples from the wire — until
+  the operator states it, and a new set of heads unstates it again: the appearance store has no
+  per-emitter reading, and a 0 would drive every white LED in the marquee dark on the first byte.
+  Each tab draws the label line (*4 heads · Local*, call 11 — `EditorLabelLine`'s `docked`) and no
+  Recent (D11: row C's strip is on screen). The rail's floor stays 260 (call 12): the Spread panel
+  takes its compact curve row below 300 of rail (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked
+  panel's root). That root is the busk Spread tab's too, so the busk sheet carries the container as
+  well; it never matches there, because that sheet's floor is 320.
 
 ### Speed Masters
 
@@ -4081,7 +4143,10 @@ path may quietly change where it lands.
   and that a second sidebar row pointing at one page was the `"/program"` vs
   `"/programmer"` collision. The tabs premise held; the *pane* did not. Three readings
   of one object is an argument for showing them **together**, not for a switcher, and
-  a collapsed pane could never do that. So: no tabs, and a page with room. Renaming
+  a collapsed pane could never do that. So: no tabs, and a page with room. (The rail's
+  Stack · Colour · Spread strip since the editor kit's session 4 is a different thing: Stack *is*
+  the layers and the effects together, and nothing separates the three readings — §The rail's
+  tabs.) Renaming
   Program to Show removes the near-collision outright.
 
   Two traps that survive both the rename and the merge:

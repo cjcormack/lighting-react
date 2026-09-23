@@ -6,7 +6,9 @@ import type { CellSelection } from '../sheet/useCellSelection'
 import type { ColumnKey } from './columns'
 import type { Row, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
-import { makeFixture } from '../../test/fixtureFactories'
+import { chan, colourProp, makeFixture, sliderProp } from '../../test/fixtureFactories'
+import { RailTabClaimContext, type RailTabClaim } from '../programmer/railTab'
+import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
 
 /**
  * What the three lists now share, asserted at the seam where they used to differ.
@@ -60,8 +62,10 @@ vi.mock('../programmer/ProgrammerScope', async (importOriginal) => ({
 // Through the shared factory, like every other suite in this directory: a hand-rolled partial
 // would not carry the fields a real `Fixture` always has, so a render path that started reading
 // one would find `undefined` here and a value on the rig.
+// `a` resolves a Dimmer and a Colour cell, which is what the claimed-open tests below open; the
+// rest of the suite only needs rows to exist.
 const FIXTURES = [
-  makeFixture('a', [], { name: 'SL Wash 1' }),
+  makeFixture('a', [sliderProp('dimmer', 'dimmer', chan(1)), colourProp('rgbColour', chan(2), chan(3), chan(4))], { name: 'SL Wash 1' }),
   makeFixture('b', [], { name: 'SL Wash 2' }),
 ]
 vi.mock('../../store/fixtures', async (importOriginal) => ({
@@ -127,6 +131,8 @@ const table = vi.hoisted(() => ({
   closeEditorCell: null as { rowId: string; col: ColumnKey } | null,
   /** Draw the DOM shape of an open cell editor, which is how the container finds one to close. */
   editorOpen: false,
+  /** Every open request the container handed the table — what would have opened a popover. */
+  keyboardOpens: [] as CellOpenRequest<ColumnKey>[],
 }))
 vi.mock('./FixturesTable', () => ({
   FixturesTable: (props: {
@@ -135,10 +141,12 @@ vi.mock('./FixturesTable', () => ({
     onBeginCellEdit: (row: Row, col: ColumnKey) => void
     onBackgroundClick?: () => void
     closeEditorCell?: { rowId: string; col: ColumnKey } | null
+    keyboardOpen?: CellOpenRequest<ColumnKey> | null
   }) => {
     table.cellSelection = props.cellSelection
     table.rows = props.rows
     if (props.closeEditorCell) table.closeEditorCell = props.closeEditorCell
+    if (props.keyboardOpen) table.keyboardOpens.push(props.keyboardOpen)
     return (
       <>
         <button
@@ -147,6 +155,7 @@ vi.mock('./FixturesTable', () => ({
         >
           {props.cellSelection.count} cells
         </button>
+        <button data-testid="colour-cell" onClick={() => props.onBeginCellEdit(props.rows[0], 'colour')} />
         {/* What the real table renders for a column a row resolves nothing for, and for the
             empty space under the last row: both call `onBackgroundClick`. */}
         <button data-testid="blank-cell" onClick={() => props.onBackgroundClick?.()} />
@@ -177,6 +186,7 @@ beforeEach(() => {
   table.cellSelection = undefined
   table.closeEditorCell = null
   table.editorOpen = false
+  table.keyboardOpens = []
 })
 afterEach(cleanup)
 
@@ -351,5 +361,56 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
     rerender(view())
 
     expect(table.closeEditorCell).toBeNull()
+  })
+})
+
+/**
+ * **A rail tab claims its own column's open gesture** (editor-kit plan session 4, call 9). With the
+ * programmer rail's Colour tab open it is the Colour column's editor: Enter, a typed character and
+ * Set over a marquee whose first editable cell is a Colour cell land in the tab, and no popover is
+ * asked for. Every other column opens its popover as before — the tab claims its column only.
+ */
+describe('FixturesListContainer with the rail Colour tab open', () => {
+  function claim(tab: RailTabClaim['tab']): RailTabClaim {
+    return { tab, focusColour: vi.fn(), focusSpread: vi.fn(), spreadFrom: vi.fn() }
+  }
+  function drawWith(rail: RailTabClaim) {
+    programmerScope.value = { kind: 'local' }
+    // The row the request names must be on screen, or the container scrolls rather than opens.
+    table.editorOpen = true
+    return render(
+      <RailTabClaimContext.Provider value={rail}>
+        <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+      </RailTabClaimContext.Provider>,
+    )
+  }
+
+  it('lands Enter and a typed digit over a Colour cell in the tab, and opens no popover', () => {
+    const rail = claim('colour')
+    drawWith(rail)
+    fireEvent.click(screen.getByTestId('colour-cell'))
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(rail.focusColour).toHaveBeenLastCalledWith('')
+    fireEvent.keyDown(window, { key: '5' })
+    expect(rail.focusColour).toHaveBeenLastCalledWith('5')
+    expect(table.keyboardOpens).toEqual([])
+  })
+
+  it('opens the popover as always over a Dimmer cell — the tab claims its own column only', () => {
+    const rail = claim('colour')
+    drawWith(rail)
+    fireEvent.click(screen.getByTestId('cell'))
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(rail.focusColour).not.toHaveBeenCalled()
+    expect(table.keyboardOpens.map((open) => open.col)).toEqual(['dimmer'])
+  })
+
+  it('claims nothing while the rail rests on Stack', () => {
+    const rail = claim('stack')
+    drawWith(rail)
+    fireEvent.click(screen.getByTestId('colour-cell'))
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(rail.focusColour).not.toHaveBeenCalled()
+    expect(table.keyboardOpens.map((open) => open.col)).toEqual(['colour'])
   })
 })

@@ -60,7 +60,7 @@ export interface ColourChannels {
  * from an RGB row's cell. It becomes stated only when the operator states it — its own field or
  * slider — and a gesture that replaces the colour (the picker) zeroes only what was held.
  */
-interface ColourBuffer {
+export interface ColourBuffer {
   r: number
   g: number
   b: number
@@ -190,8 +190,20 @@ export interface ColourEditorProps {
    * visualisers pass false and keep their own `R:… G:… B:…` line.
    */
   counts?: boolean
-  /** The popover's label line (`EditorLabelLine`), drawn first. The sheets and the busk tab pass none. */
+  /**
+   * The label line (`EditorLabelLine`), drawn first — the popover's, and the programmer rail's
+   * docked tab's (editor-kit plan session 4, call 11). The sheets and the busk tab pass none.
+   */
   labelLine?: ReactNode
+  /**
+   * The scope takes no value — the programmer rail's tab in Output or on a focused template layer.
+   * **A whole guarantee, not a part one**: every control that writes is drawn but takes no input —
+   * the picker, the fields and the emitter rows, and the Recent chips (a template press) — and
+   * *Spread…* is disabled, since it hands a value on to be written. Pick stays live, since it reads
+   * and writes nothing, and so does *Save as template…*, which records from the selection rather
+   * than writing through the scope.
+   */
+  readOnly?: boolean
   /**
    * The busk tab's frame: the body, the read-out and Recent in one scroller, the footer static
    * under it. Off, everything stacks in one column, which is the popover's shape.
@@ -333,6 +345,7 @@ export function ColourEditor({
   footer = true,
   counts = true,
   labelLine,
+  readOnly = false,
   docked = false,
   onPick,
   onSave,
@@ -614,6 +627,17 @@ export function ColourEditor({
     </div>
   )
 
+  // Read-only: drawn, dimmed, and out of reach of pointer and keyboard alike — `inert` rather than
+  // per-control `disabled`, because the picker and the emitter sliders have no `disabled` of their
+  // own to set, and a scope that takes no value must not be written by any of them.
+  const controls = readOnly ? (
+    <div inert data-colour-editor-readonly className="opacity-50">
+      {body}
+    </div>
+  ) : (
+    body
+  )
+
   // The read-out: what the picker holds, and where the emitters land. The count sentence is drawn
   // only where the union has an emitter and there are heads to count.
   const readout = counts ? (
@@ -641,9 +665,18 @@ export function ColourEditor({
   // it would not show. One shared-media subscription per open editor.
   const form = useEditorForm()
   const recentShown = recent != null && (recent.forms == null || recent.forms.includes(form))
-  const recentSection = recentShown ? (
+  const recentChips = recentShown ? (
     <RecentTemplates projectId={recent.projectId} targets={recent.targets} localFamilies={recent.localFamilies} available={available} className={docked ? 'px-3 pb-2' : undefined} />
   ) : null
+  // A chip is a template press — a write — so read-only takes it out of reach with the controls.
+  const recentSection =
+    recentChips != null && readOnly ? (
+      <div inert className="opacity-50">
+        {recentChips}
+      </div>
+    ) : (
+      recentChips
+    )
 
   // The footer: the save first, then Pick and Spread…, the busk Colour tab's shape. **One line,
   // never a wrap**: docked, it is its own container and the two lesser verbs fold to their icons
@@ -684,9 +717,9 @@ export function ColourEditor({
         variant="outline"
         size="sm"
         className="h-7 text-xs"
-        disabled={onSpread == null}
+        disabled={onSpread == null || readOnly}
         aria-label="Spread to a second colour…"
-        title={onSpread == null ? 'No Spread panel to open from here' : 'Open Spread with this colour as From'}
+        title={onSpread == null ? 'No Spread panel to open from here' : readOnly ? 'This scope takes no value to spread' : 'Open Spread with this colour as From'}
         onClick={() => onSpread?.(toChannels(currentChannels()))}
       >
         <Waves className="size-3.5" /> <span className={wordClass}>Spread…</span>
@@ -707,7 +740,8 @@ export function ColourEditor({
             knob's half-width, since a scroller clips at its edge. */}
         <div data-colour-editor-scroller className="min-h-0 flex-1 overflow-y-auto">
           <div className={cn('px-3.5 pt-3', compact ? 'pb-2' : 'pb-3')}>
-            {body}
+            {labelLine != null && <div className="mb-2">{labelLine}</div>}
+            {controls}
             {readout}
           </div>
           {recentSection}
@@ -721,7 +755,7 @@ export function ColourEditor({
     <div ref={contentRef} onKeyDown={onKeyDown} data-colour-editor={compact ? 'compact' : 'full'} className="space-y-3">
       {leaves}
       {labelLine}
-      {body}
+      {controls}
       {readout}
       {recentSection}
       {footerRow}

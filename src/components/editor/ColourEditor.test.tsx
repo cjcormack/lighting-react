@@ -380,6 +380,31 @@ describe('the footer', () => {
   })
 })
 
+describe('read-only — the programmer rail’s tab in Output or on a template layer', () => {
+  it('takes no input on the picker, the fields or the emitters, and leaves Pick and the label line live', () => {
+    // A scope that takes no value must not be written by any control of the editor, and Pick is a
+    // read: it moves the fields and writes nothing, so it stays live (editor-kit plan session 4).
+    draw({ targets: FOUR, docked: true, readOnly: true, hasWhiteChannel: true, onSpread: vi.fn(), labelLine: <span>Output · read-only</span> })
+    const inertRegion = document.querySelector('[data-colour-editor-readonly]')
+    expect(inertRegion).not.toBeNull()
+    expect(inertRegion!.hasAttribute('inert')).toBe(true)
+    expect(inertRegion!.contains(field('R'))).toBe(true)
+    expect(inertRegion!.contains(document.querySelector('.react-colorful'))).toBe(true)
+    const pick = screen.getByRole('button', { name: 'Pick' })
+    expect(inertRegion!.contains(pick)).toBe(false)
+    expect(pick).toBeEnabled()
+    // Spread… hands a value on to be written, so read-only disables it here, not in each host.
+    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    // The docked frame draws the host's label line, above the controls.
+    expect(screen.getByText('Output · read-only')).toBeInTheDocument()
+  })
+
+  it('draws the controls live by default', () => {
+    draw({ targets: FOUR, docked: true })
+    expect(document.querySelector('[data-colour-editor-readonly]')).toBeNull()
+  })
+})
+
 describe('the keyboard, through the popover host', () => {
   it('focuses R on open, seeds it, and comma steps R → G → B → W → A → UV and round; Enter closes', () => {
     const onOpenChange = vi.fn()

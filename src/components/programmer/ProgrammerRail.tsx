@@ -11,6 +11,7 @@ import {
   Layers,
   Palette,
   Plus,
+  Waves,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import { useSidePanelMode } from '@/lib/sidePanelMode'
 import {
   SIDE_PANEL_HEADER_BUTTON_CLASS,
   SIDE_PANEL_STRIP_CELL_CLASS,
+  tabWordClass,
   usePanelEnter,
 } from '@/components/sheet/sidePanel'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -48,6 +50,10 @@ import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { RailBodyFrame, RailHandleFrame, RailStripFrame, useRailArm } from './ProgrammerWorkspace'
+import { RailColourTab } from './RailColourTab'
+import { RailSpreadTab } from './RailSpreadTab'
+import { ScopedEditorContextProvider } from './ScopedEditorContext'
+import type { RailTab } from './railTab'
 
 /** One label for every band of the rail: the editor kit's `EditorLabel` (`components/editor/`), in a rail that has no icon room — its own copy, tracked at 0.1em where the kit's is 0.08em. */
 const LABEL_CLASS =
@@ -211,8 +217,22 @@ export function ProgrammerRail() {
         bodyShown && (
           <RailBodyFrame enter={bodyEnter}>
             <RailHeader layerCount={layerCount} fxCount={fxCount} />
-            {body}
-            <RailFooter onAdd={setAdding} addEffect={addEffect} />
+            {/* **The Stack tab is the rail as it always was** — the body and its footer, untouched.
+                The other two are the busk sheet's docked editors over the marquee, inside the
+                grid's own `EditorContext` so a value lands where the grid is pointed (a focused
+                Look layer's draft, not Local). One panel mounted at a time, as the busk sheet's. */}
+            {arm.railTab === 'stack' ? (
+              <>
+                {body}
+                <RailFooter onAdd={setAdding} addEffect={addEffect} />
+              </>
+            ) : (
+              <ScopedEditorContextProvider>
+                <div role="tabpanel" aria-label={arm.railTab === 'colour' ? 'Colour' : 'Spread'} className="flex min-h-0 flex-1 flex-col">
+                  {arm.railTab === 'colour' ? <RailColourTab projectId={projectId} /> : <RailSpreadTab projectId={projectId} />}
+                </div>
+              </ScopedEditorContextProvider>
+            )}
           </RailBodyFrame>
         )
       )}
@@ -254,12 +274,23 @@ function CountBadge({ count }: { count: number }) {
 }
 
 /**
- * `LAYERS n · FX n` and the chevron that takes the rail away — 40px, level with row B.
+ * The rail's 40px header — **a tab strip since editor-kit session 4**, level with row B: **Stack**
+ * (`LAYERS n · FX n`, the rail as it always was) · **Colour** · **Spread**, then the mode toggle and
+ * the chevron that takes the rail away. A second tab row under the header was declined: 40px of
+ * rail spent saying the counts twice. The busk sheet puts its strip on its one chrome row, and so
+ * does this.
  *
  * **Level with row B is the reason for every number on it.** Row B is a 40px line on a 12px gutter
  * with 8px between its controls, and this header's bottom border meets that row's across the
  * seam; it was `h-9 px-2.5 gap-2.5`, four pixels short and two pixels in, so the two borders
  * stepped where they met. The strip's chevrons below are `h-10` for the same reason.
+ *
+ * **The tabs are the docked arm's alone.** In push mode the strip carries `@max-[1200px]:hidden`
+ * — measured against the workspace, since the strip is its own `@container` and a query never
+ * matches the element that declares it — and the narrow arm draws the plain `LAYERS · FX` face in
+ * its place; overlay mode draws only that face. Both of those arms shut on the next press outside
+ * them, which a picker over the grid has to survive, so the popover is the form there. The strip
+ * also writes the tab back to Stack when that arm hides it (`RailTabs`).
  *
  * Two chevrons, one per arm, hidden by the same container query the frames use: the docked
  * rail's writes the collapsed preference, the overlay's only shuts the overlay. One button
@@ -271,6 +302,67 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
   const overlay = useSidePanelMode() === 'overlay'
   return (
     <div className={CHROME_ROW_CLASS}>
+      {overlay ? (
+        <>
+          <StackLabels layerCount={layerCount} fxCount={fxCount} />
+          <span className="flex-1" />
+        </>
+      ) : (
+        <>
+          <RailTabs layerCount={layerCount} fxCount={fxCount} />
+          <StackLabels layerCount={layerCount} fxCount={fxCount} className="@min-[1200px]:hidden" />
+          <span className="flex-1 @min-[1200px]:hidden" />
+        </>
+      )}
+      <SidePanelModeToggle className="shrink-0" />
+      {/* In overlay mode there is one arm, so one chevron, and it is the overlay's: the docked
+          arm's writes `collapsed`, which means nothing while the panel floats. In push mode the
+          arm is still the container query's, so both are drawn and each is hidden where it does
+          not belong — two buttons rather than one that reads the arm in JS, so neither flag is
+          ever written from the wrong arm (`RailArm`). */}
+      {overlay ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, 'shrink-0')}
+          aria-label="Close the rail"
+          title="Close the rail"
+          onClick={arm.closeOverlay}
+        >
+          <ChevronRight className="size-3.5" />
+        </Button>
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, 'shrink-0 @max-[1200px]:hidden')}
+            aria-label="Collapse the rail"
+            title="Collapse the rail to a strip"
+            onClick={arm.collapse}
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, 'shrink-0 @min-[1200px]:hidden')}
+            aria-label="Close the rail"
+            title="Close the rail"
+            onClick={arm.closeOverlay}
+          >
+            <ChevronRight className="size-3.5" />
+          </Button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The rail's face where there are no tabs — the overlay arm and overlay mode: `LAYERS n · FX n`. */
+function StackLabels({ layerCount, fxCount, className }: { layerCount: number; fxCount: number; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-2', className)}>
       <span className={LABEL_CLASS} title={`${layerCount} layer${layerCount === 1 ? '' : 's'}`}>
         <Layers className="size-3" />
         Layers
@@ -284,48 +376,90 @@ function RailHeader({ layerCount, fxCount }: { layerCount: number; fxCount: numb
         FX
         <CountBadge count={fxCount} />
       </span>
-      <span className="flex-1" />
-      <SidePanelModeToggle />
-      {/* In overlay mode there is one arm, so one chevron, and it is the overlay's: the docked
-          arm's writes `collapsed`, which means nothing while the panel floats. In push mode the
-          arm is still the container query's, so both are drawn and each is hidden where it does
-          not belong — two buttons rather than one that reads the arm in JS, so neither flag is
-          ever written from the wrong arm (`RailArm`). */}
-      {overlay ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className={SIDE_PANEL_HEADER_BUTTON_CLASS}
-          aria-label="Close the rail"
-          title="Close the rail"
-          onClick={arm.closeOverlay}
-        >
-          <ChevronRight className="size-3.5" />
-        </Button>
-      ) : (
-        <>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@max-[1200px]:hidden')}
-            aria-label="Collapse the rail"
-            title="Collapse the rail to a strip"
-            onClick={arm.collapse}
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(SIDE_PANEL_HEADER_BUTTON_CLASS, '@min-[1200px]:hidden')}
-            aria-label="Close the rail"
-            title="Close the rail"
-            onClick={arm.closeOverlay}
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
-        </>
-      )}
+    </span>
+  )
+}
+
+/** The rail's three tabs, in strip order. The glyphs are the busk sheet's for Colour and Spread. */
+export const RAIL_TABS: readonly { id: RailTab; label: string }[] = [
+  { id: 'stack', label: 'Stack' },
+  { id: 'colour', label: 'Colour' },
+  { id: 'spread', label: 'Spread' },
+]
+
+/**
+ * **Stack · Colour · Spread** — the docked header's tab strip (editor-kit plan session 4).
+ *
+ * **Its words fold by the busk sheet's rule** (`tabWordClass`, the panels' shared chrome): the
+ * strip's unpadded wrapper is the `@container`, every tab keeps its glyph, and below 400px of strip
+ * only the open tab keeps its word — which, the strip being the rail less its toggle and chevron,
+ * is every width the rail has (260–480). The Stack tab's words fold to **the strip's own
+ * glyph-and-count pairs** — the layers glyph and its count, the wave and its — so *Layers 3 · FX 2*
+ * is a face when open and two badges when not, and the counts are never lost. The group clips its
+ * own end rather than pushing the toggle and the chevron out of the panel, the busk strip's rule.
+ *
+ * **It resets the tab to Stack when the docked arm is not what is drawn.** The strip carries the
+ * push-mode narrow arm's `@max-[1200px]:hidden`, and that arm is CSS's to choose — so, as
+ * `RailHandleFrame` reads its own box to learn the phone arm has taken over, this reads its own:
+ * a zero box while a tab is open means the rail has become an overlay, which closes on the next
+ * press on the grid, so the tab goes back to Stack. `ResizeObserver` is guarded for jsdom, which
+ * lays nothing out and would otherwise reset every tab on arrival.
+ */
+function RailTabs({ layerCount, fxCount }: { layerCount: number; fxCount: number }) {
+  const { railTab, setRailTab } = useRailArm()
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (railTab === 'stack' || !el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (el.getBoundingClientRect().height === 0) setRailTab('stack')
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [railTab, setRailTab])
+
+  return (
+    <div ref={ref} data-rail-tabs className="@container min-w-0 flex-1 @max-[1200px]:hidden">
+      <div role="tablist" aria-label="Rail" className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+        {RAIL_TABS.map((tab) => {
+          const open = tab.id === railTab
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={open}
+              // The name is the label whatever the width: below 400 a closed tab's word is
+              // `display: none`, which would leave the name to the badges.
+              aria-label={tab.label}
+              title={tab.id === 'stack' ? `${layerCount} layer${layerCount === 1 ? '' : 's'} · ${fxCount} effect${fxCount === 1 ? '' : 's'} running` : undefined}
+              data-rail-tab-button={tab.id}
+              onClick={() => setRailTab(tab.id)}
+              className={cn(
+                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
+                open ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {tab.id === 'stack' ? (
+                <>
+                  <Layers className="size-3.5" />
+                  <span className={tabWordClass(open)}>Layers</span>
+                  <CountBadge count={layerCount} />
+                  <AudioWaveform className="size-3.5 text-violet-400" />
+                  <span className={cn(tabWordClass(open), 'text-violet-400')}>FX</span>
+                  <CountBadge count={fxCount} />
+                </>
+              ) : (
+                <>
+                  {tab.id === 'colour' ? <Palette className="size-3.5" /> : <Waves className="size-3.5" />}
+                  <span className={tabWordClass(open)}>{tab.label}</span>
+                </>
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -625,6 +759,16 @@ function RailStrip({
         onBand={onBand}
         className="text-violet-400"
       />
+      {/* A glyph per tab, after the counts (`RailTabs.dc.html`, the collapsed strip): a press
+          expands the rail onto that tab, the way the counts open it on a band. **Docked only**, as
+          the tabs are — hidden in the narrow arm and not drawn in overlay mode, where the popover
+          is the form. */}
+      {!overlay && (
+        <>
+          <StripTabCell tab="colour" glyph={<Palette className="size-3.5" />} label="Expand the rail on the Colour tab" />
+          <StripTabCell tab="spread" glyph={<Waves className="size-3.5" />} label="Expand the rail on the Spread tab" />
+        </>
+      )}
       <span className="flex-1" />
       <AddDoorsMenu
         onAdd={onAdd}
@@ -853,12 +997,14 @@ function StripCount({
   }
   return (
     <>
+      {/* Onto the Stack tab: the band is half of that tab's body, and the rail may have been
+          collapsed from another one. */}
       <CountButton
         glyph={glyph}
         count={count}
         title={title}
         label={`Expand the rail at the ${noun}`}
-        onClick={press(arm.expand)}
+        onClick={press(() => arm.openTab('stack'))}
         className={cn(className, '@max-[1200px]:hidden')}
       />
       <CountButton
@@ -870,6 +1016,24 @@ function StripCount({
         className={cn(className, '@min-[1200px]:hidden')}
       />
     </>
+  )
+}
+
+/** One tab's glyph on the collapsed strip: a 40px cell that expands the rail onto that tab. */
+function StripTabCell({ tab, glyph, label }: { tab: RailTab; glyph: ReactNode; label: string }) {
+  const { openTab } = useRailArm()
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(SIDE_PANEL_STRIP_CELL_CLASS, '@max-[1200px]:hidden')}
+      aria-label={label}
+      title={label}
+      data-rail-strip-tab={tab}
+      onClick={() => openTab(tab)}
+    >
+      {glyph}
+    </Button>
   )
 }
 

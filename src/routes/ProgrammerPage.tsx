@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Navigate, useParams } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { ShowHeader } from '@/components/ShowHeader'
@@ -6,6 +6,7 @@ import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
+import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
@@ -208,6 +209,11 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
   // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
+  // The marquee's store (editor-kit plan session 4): the grid publishes into it and the rail's
+  // Colour and Spread tabs read it, so it sits above both. A store rather than state here, because
+  // the marquee moves at pointer rate and this component is the memo barrier — a value held here
+  // would re-render the whole subtree per frame; the store re-renders only a subscribed tab.
+  const [marqueeStore] = useState(createMarqueeStore)
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
   // in that order are what the operator means: throw away the busk, load the cue again.
@@ -285,25 +291,27 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
       {/* Its template sibling, for the same reason and at the same height: a focused *template*
           layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
           the grid, the notices and the scope band all need to know what it holds. */}
-      <LookRowStoreProvider projectId={projectId}>
-        <FocusedTemplateLayerProvider projectId={projectId}>
-          <EditorContextProvider value={{ kind: 'live' }}>
-            <ProgrammerWorkspace
-              grid={
-                <ProgrammerGrid
-                  projectId={projectId}
-                  grouped={grouped}
-                  onGroupedChange={setGrouped}
-                  columnVisibility={columnVisibility}
-                  onColumnVisibilityChange={setColumnVisibility}
-                  leading={shortViewport ? rowA : null}
-                />
-              }
-              rail={<ProgrammerRail />}
-            />
-          </EditorContextProvider>
-        </FocusedTemplateLayerProvider>
-      </LookRowStoreProvider>
+      <MarqueeStoreContext.Provider value={marqueeStore}>
+        <LookRowStoreProvider projectId={projectId}>
+          <FocusedTemplateLayerProvider projectId={projectId}>
+            <EditorContextProvider value={{ kind: 'live' }}>
+              <ProgrammerWorkspace
+                grid={
+                  <ProgrammerGrid
+                    projectId={projectId}
+                    grouped={grouped}
+                    onGroupedChange={setGrouped}
+                    columnVisibility={columnVisibility}
+                    onColumnVisibilityChange={setColumnVisibility}
+                    leading={shortViewport ? rowA : null}
+                  />
+                }
+                rail={<ProgrammerRail />}
+              />
+            </EditorContextProvider>
+          </FocusedTemplateLayerProvider>
+        </LookRowStoreProvider>
+      </MarqueeStoreContext.Provider>
     </ProgrammerScopeProvider>
   )
 })

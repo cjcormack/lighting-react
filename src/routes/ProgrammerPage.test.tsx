@@ -73,6 +73,14 @@ vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
   }),
   ProgrammerAddEffectSheet: () => null,
 }))
+// The rail's two docked editors have their own tests (`RailColourTab.test.tsx`); here they only have
+// to mount and unmount around one grid.
+vi.mock('@/components/programmer/RailColourTab', () => ({
+  RailColourTab: () => <div data-testid="rail-colour" />,
+}))
+vi.mock('@/components/programmer/RailSpreadTab', () => ({
+  RailSpreadTab: () => <div data-testid="rail-spread" />,
+}))
 vi.mock('@/components/programmer/ProgrammerAddLayerSheet', () => ({
   ProgrammerAddLayerSheet: () => null,
 }))
@@ -219,12 +227,39 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('header')).toBeTruthy()
   })
 
-  it('has no tabs at all', () => {
+  it('puts no tab between values, layers and effects — the one strip is the rail header, resting on Stack', () => {
     // The three are readings of ONE live object. A switcher between them is the thing this view
-    // exists to delete.
+    // exists to delete. Editor-kit session 4 gave the *rail* a tab strip — Stack · Colour · Spread —
+    // and Stack is the layers and the effects together, beside the grid, as they always were: the
+    // strip adds two docked editors, it separates none of the three readings. Every arrival rests
+    // on Stack (call 10), so all three are on screen on arrival.
     draw()
-    expect(screen.queryAllByRole('tab')).toHaveLength(0)
-    expect(screen.queryByRole('tablist')).toBeNull()
+    const tablists = screen.getAllByRole('tablist')
+    expect(tablists).toHaveLength(1)
+    expect(tablists[0].getAttribute('aria-label')).toBe('Rail')
+    expect(screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))).toEqual(['Stack', 'Colour', 'Spread'])
+    expect(screen.getByRole('tab', { name: 'Stack' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByTestId('grid')).toBeTruthy()
+    expect(screen.getByTestId('layers')).toBeTruthy()
+    expect(screen.getByTestId('fx')).toBeTruthy()
+  })
+
+  it('mounts the value grid exactly once across a rail tab change', () => {
+    // The load-bearing rule, for the thing session 4 adds: the Colour and Spread tabs are the
+    // rail's, and switching to them must re-render the page around one grid, never remount it —
+    // the marquee they read lives in that grid, and so does the fixture selection Record scopes on.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Colour' }))
+    expect(screen.getByRole('tab', { name: 'Colour' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByTestId('rail-colour')).toBeTruthy()
+    expect(screen.queryByTestId('layers')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Spread' }))
+    expect(screen.getByTestId('rail-spread')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Stack' }))
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('layers')).toBeTruthy()
   })
 
   it('always names what is loaded, above the verbs that act on it', () => {

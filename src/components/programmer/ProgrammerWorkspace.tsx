@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -19,9 +20,11 @@ import {
   useSidePanelResize,
 } from '@/components/sheet/sidePanel'
 import { SidePanelResizeHandle } from '@/components/sheet/SidePanelResizeHandle'
+import type { SpreadSeed } from '@/components/editor/SpreadPanel'
 import { useSidePanelMode } from '@/lib/sidePanelMode'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { cn } from '@/lib/utils'
+import { RailTabClaimContext, type RailFocusRequest, type RailTab, type RailTabClaim } from './railTab'
 
 /**
  * The rail's docked width, in px: the stored one is clamped into this range on every read. The
@@ -81,6 +84,30 @@ export interface RailArm {
   closeOverlay: () => void
   openSheet: () => void
   closeSheet: () => void
+  /**
+   * The face the rail draws — Stack, Colour or Spread (editor-kit plan session 4). **Docked only**:
+   * this reads `'stack'` in overlay mode whatever was chosen, and `RailTabs` writes it back to
+   * `'stack'` when the push-mode narrow arm hides the strip — both arms shut on the next press
+   * outside them, which a picker over the grid has to survive. Collapsing resets it too, so a
+   * collapsed rail never holds a tab it is not drawing.
+   */
+  railTab: RailTab
+  /** A header tab's press. Writes the tab and nothing else. */
+  setRailTab: (tab: RailTab) => void
+  /**
+   * Open the rail onto a tab — the strip's palette and wave cells, and the grid's claims. Expands
+   * a collapsed rail as `expand` does, which is the docked arm's gesture: the strip cells that call
+   * it are drawn only where the rail docks.
+   */
+  openTab: (tab: RailTab) => void
+  /** A grid gesture a tab has claimed, for the tab to honour once and drop. See `RailTabClaim`. */
+  focusRequest: RailFocusRequest | null
+  consumeFocusRequest: () => void
+  /** The Colour tab's *Spread…* hand-over (`SpreadSeed`), dropped by the Spread tab once read. */
+  spreadSeed: SpreadSeed | null
+  consumeSpreadSeed: () => void
+  /** Open the Spread tab with From set — the claim's `spreadFrom`, and the Colour tab's footer. */
+  spreadFrom: (from: { r: number; g: number; b: number }) => void
 }
 
 /** The docked width and the drag that sets it. Read by the body frame alone — see `RailArm`. */
@@ -189,6 +216,17 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
   const [collapsed, setCollapsed] = usePersistentState<boolean>(COLLAPSED_KEY, false)
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // The rail's tab (editor-kit plan session 4) — plain state, **not persisted** (call 10): every
+  // arrival rests on Stack. The two one-shots beside it carry a grid gesture a tab claimed and the
+  // Colour tab's *Spread…* hand-over; each is dropped by the tab that reads it.
+  const [chosenTab, setChosenTab] = useState<RailTab>('stack')
+  const [focusRequest, setFocusRequest] = useState<RailFocusRequest | null>(null)
+  const [spreadSeed, setSpreadSeed] = useState<SpreadSeed | null>(null)
+  // The tabs are docked-only, and overlay mode is JS's to know — so the fact reads Stack there
+  // outright. Push mode's narrow arm is CSS's, and `RailTabs` writes the fact back when it sees
+  // that arm hide its strip.
+  const overlayMode = useSidePanelMode() === 'overlay'
+  const railTab: RailTab = overlayMode ? 'stack' : chosenTab
   // The drag is `useSidePanelResize`'s, shared with the busk view's side sheet — the four rules
   // that make it behave (window listeners, keyed on the boolean, `pointercancel`, the ref written
   // by the handlers) are stated once there rather than once per panel.
@@ -209,19 +247,57 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [overlayOpen])
 
+  const openTab = useCallback(
+    (tab: RailTab) => {
+      setChosenTab(tab)
+      setCollapsed(false)
+    },
+    [setCollapsed],
+  )
+  const spreadFrom = useCallback(
+    (from: { r: number; g: number; b: number }) => {
+      setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
+      openTab('spread')
+    },
+    [openTab],
+  )
+  const consumeFocusRequest = useCallback(() => setFocusRequest(null), [])
+  const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
+
   const arm = useMemo<RailArm>(
     () => ({
       collapsed,
       overlayOpen,
       sheetOpen,
-      collapse: () => setCollapsed(true),
+      collapse: () => {
+        setCollapsed(true)
+        setChosenTab('stack')
+      },
       expand: () => setCollapsed(false),
       openOverlay: () => setOverlayOpen(true),
       closeOverlay: () => setOverlayOpen(false),
       openSheet: () => setSheetOpen(true),
       closeSheet: () => setSheetOpen(false),
+      railTab,
+      setRailTab: setChosenTab,
+      openTab,
+      focusRequest,
+      consumeFocusRequest,
+      spreadSeed,
+      consumeSpreadSeed,
+      spreadFrom,
     }),
-    [collapsed, overlayOpen, sheetOpen, setCollapsed],
+    [collapsed, overlayOpen, sheetOpen, setCollapsed, railTab, openTab, focusRequest, consumeFocusRequest, spreadSeed, consumeSpreadSeed, spreadFrom],
+  )
+  // The grid's half, keyed on the drawn tab alone so a rail gesture never re-renders the grid.
+  const claim = useMemo<RailTabClaim>(
+    () => ({
+      tab: railTab,
+      focusColour: (seed: string) => setFocusRequest((prev) => ({ tab: 'colour', seed, key: (prev?.key ?? 0) + 1 })),
+      focusSpread: () => setFocusRequest((prev) => ({ tab: 'spread', seed: '', key: (prev?.key ?? 0) + 1 })),
+      spreadFrom,
+    }),
+    [railTab, spreadFrom],
   )
   const geometry = useMemo<RailGeometry>(
     () => ({ width, resizing, onResizeStart }),
@@ -229,33 +305,38 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
   )
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col">
-      {/* `relative` is the overlay's containing block. `select-none` while resizing keeps the
-          drag from painting a text selection across the grid it crosses. */}
-      {/* `@max-[704px]:flex-col` is the whole of the phone arm's layout: the same two children,
-          stacked, so the rail's strip frame lands *under* the grid as a full-width bar instead of
-          beside it as a column. Nothing is hoisted, nothing is portalled, and the grid element
-          never moves in the tree. */}
-      <div
-        className={cn(
-          'relative flex min-h-0 flex-1 @max-[704px]:flex-col',
-          resizing && 'cursor-col-resize select-none',
-        )}
-      >
-        {/* Capture, not bubble: a press on a cell that stops propagation must still close the
-            overlay, and the press itself goes on to land. In the wide arm `overlayOpen` is only
-            ever stale-true, and clearing it there changes nothing on screen. */}
+    // The claim wraps **both** children: the grid reads it to hand a claimed open to a tab, the
+    // rail to know which tab it is drawing. The marquee travels the other way, through
+    // `ProgrammerPage`'s marquee store.
+    <RailTabClaimContext.Provider value={claim}>
+      <div className="@container flex min-h-0 flex-1 flex-col">
+        {/* `relative` is the overlay's containing block. `select-none` while resizing keeps the
+            drag from painting a text selection across the grid it crosses. */}
+        {/* `@max-[704px]:flex-col` is the whole of the phone arm's layout: the same two children,
+            stacked, so the rail's strip frame lands *under* the grid as a full-width bar instead of
+            beside it as a column. Nothing is hoisted, nothing is portalled, and the grid element
+            never moves in the tree. */}
         <div
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
-          onPointerDownCapture={overlayOpen ? arm.closeOverlay : undefined}
+          className={cn(
+            'relative flex min-h-0 flex-1 @max-[704px]:flex-col',
+            resizing && 'cursor-col-resize select-none',
+          )}
         >
-          {grid}
+          {/* Capture, not bubble: a press on a cell that stops propagation must still close the
+              overlay, and the press itself goes on to land. In the wide arm `overlayOpen` is only
+              ever stale-true, and clearing it there changes nothing on screen. */}
+          <div
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            onPointerDownCapture={overlayOpen ? arm.closeOverlay : undefined}
+          >
+            {grid}
+          </div>
+          <RailArmContext.Provider value={arm}>
+            <RailGeometryContext.Provider value={geometry}>{rail}</RailGeometryContext.Provider>
+          </RailArmContext.Provider>
         </div>
-        <RailArmContext.Provider value={arm}>
-          <RailGeometryContext.Provider value={geometry}>{rail}</RailGeometryContext.Provider>
-        </RailArmContext.Provider>
       </div>
-    </div>
+    </RailTabClaimContext.Provider>
   )
 }
 

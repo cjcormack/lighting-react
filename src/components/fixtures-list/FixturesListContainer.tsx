@@ -14,6 +14,8 @@ import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useRailTabClaim } from '../programmer/railTab'
+import { usePublishMarquee, type MarqueeSnapshot } from './marqueeContext'
 import {
   cellActionCopy,
   cellKeyboardPermission,
@@ -63,7 +65,7 @@ import {
   usePublishSelectionTargets,
 } from './useListSelection'
 import type { SelectionScope } from '../../store/selectionSlice'
-import { applyPlannedWrite, useCellWriters } from './useCellWriters'
+import { applyPlannedWrite, useCellWriters, type CellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
 import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
@@ -73,6 +75,7 @@ import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { SpreadPopover, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
 import type { SpreadSeed } from '../editor/SpreadPanel'
+import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
@@ -86,6 +89,7 @@ import type {
   InfoRow,
   Row,
   RowId,
+  WriteTarget,
 } from './rowModel'
 import type { LocateTarget } from '../../store/locate'
 import type { Fixture } from '../../store/fixtures'
@@ -93,6 +97,14 @@ import type { GroupSummary } from '../../api/groupsApi'
 
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
+const EMPTY_TARGETS: readonly WriteTarget[] = []
+
+/** One pending throttled commit: the key it is deduped under, and how to land it when it is due. */
+interface PendingCommit {
+  key: string
+  commit: CellCommit
+  apply: (commit: CellCommit) => void
+}
 
 export interface FixturesListContainerProps {
   /** Group rows + members + "Ungrouped" (true), or a flat fixture list (false). */
@@ -592,7 +604,13 @@ export function FixturesListContainer({
    * expansion behind every per-column consumer — the commit, Backspace, the batch count and Spread
    * — so a spread and a typed value cannot reach different heads for one selection.
    */
-  const columnTargets = useMemo<SpreadColumn[]>(
+  //
+  // **Held by content, not by identity.** `rows` is rebuilt on every filter keystroke and every
+  // group or fixture expand, and `cellSelection` on every marquee frame, so the memo below mints a
+  // fresh list far more often than the heads change — and everything keyed on it (the per-column
+  // batches, the snapshot the rail's tabs subscribe to) would follow. `useContentStable` keeps the
+  // held list while the columns and their heads are the same.
+  const nextColumnTargets = useMemo<SpreadColumn[]>(
     () =>
       cellSelection.byColumn().map(({ col, rowIds }) => ({
         col,
@@ -600,6 +618,7 @@ export function FixturesListContainer({
       })),
     [cellSelection, rows],
   )
+  const columnTargets = useContentStable(nextColumnTargets, sameColumns)
 
   /**
    * One commit, every selected cell. Grouped BY COLUMN so each column is exactly one
@@ -616,12 +635,7 @@ export function FixturesListContainer({
   const commitToCells = useCallback(
     (commit: CellCommit): number => {
       let written = 0
-      for (const { col: c, targets } of columnTargets) {
-        for (const planned of planBatchWrites(targets, c, commit)) {
-          applyPlannedWrite(writers, planned)
-          written += 1
-        }
-      }
+      for (const { col: c, targets } of columnTargets) written += writeBatch(writers, targets, c, commit)
       // How many writes were planned. A popover's caller has no use for it; the typed field does,
       // because a value that fitted no selected column looks exactly like one that landed.
       return written
@@ -642,9 +656,7 @@ export function FixturesListContainer({
           ? selectedTargets
           : rowWriteTargets(row)
       // planBatchWrites clamps the commit to each target's own ranges.
-      for (const planned of planBatchWrites(targets, col, commit)) {
-        applyPlannedWrite(writers, planned)
-      }
+      writeBatch(writers, targets, col, commit)
     },
     [cellSelection, commitToCells, selectedTargets, selection, writers],
   )
@@ -733,10 +745,26 @@ export function FixturesListContainer({
   // bar's Set (`toggleCellEditor`, at the button, or closing what it opened). The rule is the sheet
   // kit's, shared with the patch list, the DMX sheet and the cue sheet; see the hook for why a
   // request is a one-shot and why an off-screen cell is scrolled to rather than opened.
+  // **A rail tab claims its own column's open gesture** (editor-kit plan session 4, call 9): with
+  // the programmer rail's Colour tab open, Enter, a typed character and Set over a marquee whose
+  // first editable cell is a Colour cell land in the tab — R focused, the character seeded — and
+  // no popover opens, since two colour editors over one marquee is the double the kit refuses.
+  // Every other column opens its popover as before. Null on the plain lists, which have no rail.
+  // The double click is the Colour cell's own door, and it asks the same claim (`ColourCell`).
+  const railClaim = useRailTabClaim()
+  const interceptOpen = useCallback(
+    (request: CellOpenRequest<ColumnKey>) => {
+      if (railClaim?.tab !== 'colour' || request.col !== 'colour') return false
+      railClaim.focusColour(request.seed)
+      return true
+    },
+    [railClaim],
+  )
   const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor } =
     useCellEditorRequests<ColumnKey>({
       firstEditableCell: firstEditableSelectedCell,
       onScrollTo: setScrollToRowId,
+      intercept: interceptOpen,
     })
 
   // ── A scope switch closes an open cell editor ────────────────────────────────────────────────
@@ -821,16 +849,21 @@ export function FixturesListContainer({
   // select-all colour drag would otherwise emit thousands of frames a second.
   // A commit for a different cell flushes the pending one first so nothing is
   // ever dropped, and the timer flushes on unmount.
+  //
+  // Two callers share the one throttle: a cell's editor (keyed by its row and column) and the
+  // programmer rail's tabs (keyed by the column alone — `commitColumn` below). Each pending commit
+  // carries how to land it, reading the *current* writer through a ref at landing time, so a
+  // commit held across a re-render still lands through this render's targets and scope.
   const commitNowRef = useRef(commitNow)
   commitNowRef.current = commitNow
-  const pendingCommitRef = useRef<{ row: Row; col: ColumnKey; commit: CellCommit } | null>(null)
+  const pendingCommitRef = useRef<PendingCommit | null>(null)
   const commitTimerRef = useRef<number | null>(null)
 
   const flushPendingCommit = useCallback(function flushPendingCommit() {
     const pending = pendingCommitRef.current
     pendingCommitRef.current = null
     if (pending) {
-      commitNowRef.current(pending.row, pending.col, pending.commit)
+      pending.apply(pending.commit)
       commitTimerRef.current = window.setTimeout(flushPendingCommit, 33)
     } else {
       commitTimerRef.current = null
@@ -845,20 +878,21 @@ export function FixturesListContainer({
       }
       const pending = pendingCommitRef.current
       pendingCommitRef.current = null
-      if (pending) commitNowRef.current(pending.row, pending.col, pending.commit)
+      if (pending) pending.apply(pending.commit)
     },
     [],
   )
 
-  const handleCellCommit = useCallback(
-    (row: Row, col: ColumnKey, commit: CellCommit) => {
+  const scheduleCommit = useCallback(
+    (key: string, next: CellCommit, apply: (commit: CellCommit) => void) => {
+      let commit = next
       const pending = pendingCommitRef.current
-      if (pending && (pending.row.id !== row.id || pending.col !== col)) {
+      if (pending && pending.key !== key) {
         pendingCommitRef.current = null
-        commitNowRef.current(pending.row, pending.col, pending.commit)
+        pending.apply(pending.commit)
       }
       if (commitTimerRef.current == null) {
-        commitNowRef.current(row, col, commit)
+        apply(commit)
         commitTimerRef.current = window.setTimeout(flushPendingCommit, 33)
       } else {
         // Position commits are per-axis; merge so a pan tick doesn't discard
@@ -867,10 +901,41 @@ export function FixturesListContainer({
         if (prev && prev.commit.kind === 'position' && commit.kind === 'position') {
           commit = mergePositionCommits(prev.commit, commit)
         }
-        pendingCommitRef.current = { row, col, commit }
+        pendingCommitRef.current = { key, commit, apply }
       }
     },
     [flushPendingCommit],
+  )
+
+  const handleCellCommit = useCallback(
+    (row: Row, col: ColumnKey, commit: CellCommit) =>
+      scheduleCommit(`cell\u0000${row.id}\u0000${col}`, commit, (c) => commitNowRef.current(row, col, c)),
+    [scheduleCommit],
+  )
+
+  /**
+   * A commit to one column of the selection, from outside the grid — the programmer rail's Colour
+   * tab. The marquee's cells in that column when there are some, the selected rows' heads when
+   * there are no cells, and nothing otherwise; planned the way a cell's commit is
+   * (`planBatchWrites`, per-target clamping and shape filtering) through this container's writers,
+   * which are the grid's scope-aware ones — Local, or the focused Look layer's draft.
+   */
+  const commitColumn = useCallback(
+    (col: ColumnKey, commit: CellCommit) => {
+      const column = columnTargets.find((c) => c.col === col)
+      const targets = column?.targets ?? (cellCount === 0 ? selectedTargets : EMPTY_TARGETS)
+      writeBatch(writers, targets, col, commit)
+    },
+    [columnTargets, cellCount, selectedTargets, writers],
+  )
+  const commitColumnRef = useRef(commitColumn)
+  commitColumnRef.current = commitColumn
+  // Stable for the mount, so the published snapshot's `commit` never moves: through the throttle,
+  // keyed by column, landing through whatever `commitColumn` is current when it lands.
+  const publishedCommit = useCallback(
+    (col: ColumnKey, commit: CellCommit) =>
+      scheduleCommit(`rail\u0000${col}`, commit, (c) => commitColumnRef.current(col, c)),
+    [scheduleCommit],
   )
 
   // The plain routes' whole-selection spread, memoised so `SpreadPopover`'s per-column plans are
@@ -880,10 +945,21 @@ export function FixturesListContainer({
   // The colour editor's *Spread…*: a one-shot the way `keyboardOpen` is one — the seed opens the
   // row C panel on Colour with *From* set to the editor's RGB (`SpreadSeed`), and the panel asks
   // for it to be dropped once read, so a later open by any other door is not re-seeded.
+  //
+  // With the rail's Spread tab open the hand-over goes there instead: the tab is row C's Spread
+  // while it is open (the same claim as the Colour tab's), so seeding the popover behind it would
+  // hand the colour to a panel the operator is not looking at.
   const [spreadSeed, setSpreadSeed] = useState<SpreadSeed | null>(null)
-  const onSpreadFromColour = useCallback((from: { r: number; g: number; b: number }) => {
-    setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
-  }, [])
+  const onSpreadFromColour = useCallback(
+    (from: { r: number; g: number; b: number }) => {
+      if (railClaim?.tab === 'spread') {
+        railClaim.spreadFrom(from)
+        return
+      }
+      setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
+    },
+    [railClaim],
+  )
   const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
   const routeProjectId = projectId != null ? Number(projectId) : undefined
 
@@ -914,6 +990,31 @@ export function FixturesListContainer({
     },
     [cellSelection, marqueeBatches, selection, selectedTargets],
   )
+
+  // ── The marquee, published for the programmer rail's tabs ─────────────────────────────────────
+  //
+  // What the cells' own editors are handed — the per-column batches, the columns' heads, the
+  // scope's gate and word — plus the rows' heads for a rows-only selection and the throttled
+  // column commit (editor-kit plan session 4). Into `ProgrammerPage`'s store; the plain lists
+  // mount none and this publishes into nothing. Memoised on what it holds, so a render that moved
+  // none of them publishes nothing: the permission is rebuilt from its two booleans because
+  // `cellKeyboardPermission` answers a fresh object per call.
+  // Held by content for `columnTargets`' reason: `selectedTargets` follows `rows`' identity.
+  const railRows = useContentStable(cellCount > 0 ? EMPTY_TARGETS : selectedTargets, sameTargets)
+  const permissionEntry = keys.entry
+  const permissionClear = keys.clear
+  const marqueeSnapshot = useMemo<MarqueeSnapshot>(
+    () => ({
+      batches: marqueeBatches,
+      columns: columnTargets,
+      rows: railRows,
+      permission: { entry: permissionEntry, clear: permissionClear },
+      scopeLabel,
+      commit: publishedCommit,
+    }),
+    [marqueeBatches, columnTargets, railRows, permissionEntry, permissionClear, scopeLabel, publishedCommit],
+  )
+  usePublishMarquee(marqueeSnapshot)
 
   // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
   // select the row, expand its group if needed, scroll it into view, then
@@ -1253,6 +1354,9 @@ export function FixturesListContainer({
             scopeLabel={scopeLabel}
             seed={spreadSeed}
             onSeedConsumed={consumeSpreadSeed}
+            // The rail's Spread tab, when it is open, is this verb's panel: the press focuses its
+            // From rather than opening a second Spread over the same marquee.
+            onClaimed={railClaim?.tab === 'spread' ? railClaim.focusSpread : undefined}
             className={PHONE_FOLDED_CLASS}
           />
         }
@@ -1380,6 +1484,52 @@ export function FixturesListContainer({
       <GroupDetailModal groupName={infoGroupName} onClose={() => setInfoGroupName(null)} />
     </div>
   )
+}
+
+/**
+ * One column's commit over some targets: planned (`planBatchWrites` — per-target clamping and the
+ * commit's shape filter) and applied through the writers. Answers how many writes it planned. The
+ * three commits here — a marquee's, a row selection's and the rail's column commit — all land
+ * through it.
+ */
+function writeBatch(writers: CellWriters, targets: readonly WriteTarget[], col: ColumnKey, commit: CellCommit): number {
+  let written = 0
+  for (const planned of planBatchWrites(targets, col, commit)) {
+    applyPlannedWrite(writers, planned)
+    written += 1
+  }
+  return written
+}
+
+/**
+ * `next`, unless it says what the held value already says — then the held one, so what is keyed on
+ * it does not move. React's derive-state-during-render idiom (the `cellRowIds` one above): a change
+ * is adopted in this render and stored for the next, with no effect and no ref written in a memo.
+ */
+function useContentStable<T>(next: T, same: (a: T, b: T) => boolean): T {
+  const [held, setHeld] = useState(next)
+  if (held === next || same(held, next)) return held
+  setHeld(next)
+  return next
+}
+
+/**
+ * Two target lists name the same heads with the same descriptors. An element row's target is a
+ * fresh object per expansion (`rowWriteTargets` stamps its parent), so this compares what a write
+ * reads rather than identity; a refetched patch hands new descriptor arrays and so reads as a change.
+ */
+function sameTargets(a: readonly WriteTarget[], b: readonly WriteTarget[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((t, i) => {
+      const u = b[i]
+      return t === u || (t.key === u.key && t.properties === u.properties && t.elements === u.elements && t.fixtureKey === u.fixtureKey && t.cellIndex === u.cellIndex)
+    })
+  )
+}
+
+function sameColumns(a: readonly SpreadColumn[], b: readonly SpreadColumn[]): boolean {
+  return a.length === b.length && a.every((c, i) => c.col === b[i].col && sameTargets(c.targets, b[i].targets))
 }
 
 function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {

@@ -12,13 +12,11 @@ import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER_SHORT } from '@/lib/fix
 import type { ColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { FixturesListContainer } from '@/components/fixtures-list/FixturesListContainer'
 import { SheetPage } from '@/components/sheet/SheetPage'
-import { EditorContextProvider } from '@/components/programmer/EditorContext'
+import { ScopedEditorContextProvider } from './ScopedEditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
 import { ProgrammerScopeBand } from './ProgrammerScopeBand'
 import { SelectionBar } from './SelectionBar'
-import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
-import type { EditorContextValue } from '@/components/programmer/EditorContext'
 
 /**
  * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
@@ -84,18 +82,12 @@ export function ProgrammerGrid({
    */
   leading?: ReactNode
 }) {
-  const scope = useProgrammerScope()
-  const store = useLookRowStore()
   // Derived from the scope, and provided **unconditionally** — only the value varies, so the tree
   // shape never changes and the container below never unmounts. Rendering a different provider
-  // (or a different grid) per scope is the exact hazard the doc comment above describes.
-  const editorContext: EditorContextValue =
-    scope?.kind === 'layer' && store
-      ? { kind: 'lookLayer', layerId: scope.layerId, lookId: store.lookId }
-      : { kind: 'live' }
-
+  // (or a different grid) per scope is the exact hazard the doc comment above describes. The
+  // derivation is `ScopedEditorContextProvider`'s, shared with the rail's Colour and Spread tabs.
   return (
-    <EditorContextProvider value={editorContext}>
+    <ScopedEditorContextProvider>
       <ProgrammerGridBody
         projectId={projectId}
         grouped={grouped}
@@ -104,7 +96,7 @@ export function ProgrammerGrid({
         onColumnVisibilityChange={onColumnVisibilityChange}
         leading={leading}
       />
-    </EditorContextProvider>
+    </ScopedEditorContextProvider>
   )
 }
 
