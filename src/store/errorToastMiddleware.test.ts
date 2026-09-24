@@ -122,6 +122,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./patches'),
       import('./programmerOps'),
       import('./speedMasters'),
+      import('./fxDefinitions'),
       import('./auth'),
       import('./users'),
       import('./passwordReset'),

@@ -67,15 +67,23 @@ export interface PartitionOption<V extends string> {
  * owns `looks.family` through `get/setStoredLookFamily`), so the same chips mount with local state
  * inside `TemplatePicker`'s portalled popover.
  *
- * **Below 400px of its own container the chips fold into a select.** The chips' own container, not
- * the viewport and not the row, because the popover has no row: a container query measures the
+ * **Below [fold] px of its own container the chips fold into a select.** The chips' own container,
+ * not the viewport and not the row, because the popover has no row: a container query measures the
  * nearest `@container` ancestor, and this component brings its own. On a library row the container
- * takes the row's slack (it is the spacer), so 400 is the width left after the filter and the create
- * verb. **Measured, not guessed** (2026-09-24, session 2): the template family's five chips with
- * their counts are 361px, so the first cut's 600 folded them into a select on the 1180×820 iPad
- * frame, where the row leaves them ~430 and they fit; 400 leaves room for two-digit counts. It is
- * one number for every library, so a library with more chips (the FX Library's six categories,
- * session 4) re-measures it and moves it up only if its own set needs it.
+ * takes the row's slack (it is the spacer), so the fold is the width left after the filter and the
+ * create verb. **Measured, not guessed**, in the app with `offsetWidth` on the chips' `nav`:
+ *
+ * - **400**, the default — the template family's five chips with their counts are 361–367px, so the
+ *   first cut's 600 folded them into a select on the 1180×820 iPad frame, where the row leaves them
+ *   ~430 and they fit (session 2, 2026-09-24).
+ * - **560** — the FX Library's six chips (*All* and five categories) are 483px (513 with a three-digit *All*), and the
+ *   Scripts chips with all six types present 542 in their short labels (session 4, 2026-09-24).
+ *   Either set would overflow its row between 400 and its own width, so they fold earlier — and
+ *   the templates keep 400 rather than folding on an iPad where they fit, which is why this is a
+ *   choice of two numbers and not one number moved up.
+ *
+ * Two literal class pairs rather than an interpolated width: Tailwind emits only classes it can
+ * read whole in the source, so a `@[${fold}px]` would match nothing.
  */
 export function PartitionChips<V extends string>({
   options,
@@ -84,6 +92,7 @@ export function PartitionChips<V extends string>({
   allLabel = 'All',
   allCount,
   label,
+  fold = 400,
   className,
 }: {
   options: readonly PartitionOption<V>[]
@@ -95,15 +104,18 @@ export function PartitionChips<V extends string>({
   allCount?: number
   /** What the chips partition by — the select's accessible name. */
   label: string
+  /** The container width below which the chips fold into a select — measured per chip set. */
+  fold?: PartitionFold
   className?: string
 }) {
+  const classes = FOLD_CLASSES[fold]
   const all: PartitionOption<V | 'ALL'> = { value: 'ALL', label: allLabel, count: allCount }
   const items: PartitionOption<V | 'ALL'>[] = [all, ...options]
   return (
     <div className={cn('@container min-w-0 flex-1', className)}>
       <nav
         aria-label={label}
-        className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @[400px]:inline-flex"
+        className={cn('hidden items-center gap-0.5 rounded-lg border bg-card p-0.5', classes.chips)}
       >
         {items.map((item) => {
           const active = item.value === value
@@ -129,7 +141,7 @@ export function PartitionChips<V extends string>({
           )
         })}
       </nav>
-      <div className="@[400px]:hidden">
+      <div className={classes.select}>
         <Select value={value} onValueChange={(next) => onChange(next as V | 'ALL')}>
           <SelectTrigger size="sm" aria-label={label} className="h-8 w-auto min-w-32 text-xs">
             <SelectValue />
@@ -146,4 +158,12 @@ export function PartitionChips<V extends string>({
       </div>
     </div>
   )
+}
+
+/** The two measured folds — see [PartitionChips]. */
+export type PartitionFold = 400 | 560
+
+const FOLD_CLASSES: Record<PartitionFold, { chips: string; select: string }> = {
+  400: { chips: '@[400px]:inline-flex', select: '@[400px]:hidden' },
+  560: { chips: '@[560px]:inline-flex', select: '@[560px]:hidden' },
 }

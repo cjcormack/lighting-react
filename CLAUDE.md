@@ -164,6 +164,9 @@ Two things to keep in step with the backend:
   Every surface supplies its own Run wired to `/{projectId}/scripts/run`, which runs against
   the live show; the widget's button was a second, less correct path to the same thing.
 
+The list is a sheet on the kit — type chips and dividers, a Check column filled by the bar's batch
+Compile, Run over one row — and `ScriptForm` is what a row opens; see §Library sheets.
+
 ### Scenes & Chases
 - **Scenes**: One-shot lighting configurations that run a script with specific settings
 - **Chases**: Animated lighting sequences (same component, different mode)
@@ -2388,12 +2391,12 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 
 ### Library sheets
 
-**The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — move onto the sheet
-kit, each on its existing route** (`lighting7/docs/plans/library-sheets-plan.md`; the boards are
-`library-sheets-design/`, the plan wins on behaviour and the boards on layout and copy). Session 1
-built the kit's library half and put **Speed Masters** on it; session 2 put **Looks and Templates**
-on it; session 3 made a generic value template's **Value** editable in the cell; Scripts and the FX
-Library (4) follow. The rules, which every one of the five keeps:
+**The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — are sheets on the
+sheet kit, each on the route it always had** (`lighting7/docs/plans/completed/library-sheets-plan.md`;
+the boards are `lighting7/docs/plans/library-sheets-design/`, where the plan won on behaviour and the
+boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
+it (1), **Looks and Templates** (2), a generic value template's **Value** edited in the cell (3), and
+**Scripts and the FX Library** (4). The rules, which every one of the five keeps:
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
   view key: a second view has to earn one. The record editors stay — they are what a row *opens*.
@@ -2454,11 +2457,20 @@ Library (4) follow. The rules, which every one of the five keeps:
   rows by the sheet's `rowName`. It changed what `write` receives on the existing sheets too: a snap
   cue's Curve and a head without a beam angle or gel no longer reach their writers.
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
-  generalised (it is gone) and still controlled, folding to a select below **400px** of its **own**
-  `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row. The
-  first cut said 600; measured in session 2, the template family's five chips with counts are
-  361px, and 600 folded them on the 1180×820 frame where the row leaves them ~430. One number for
-  every library: session 4's six FX categories re-measure it.
+  generalised (it is gone) and still controlled, folding to a select below its `fold` of its
+  **own** `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row.
+  **Two measured folds, chosen per chip set**: **400**, the default — the template family's five
+  chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
+  the row leaves them ~430 — and **560** for the FX Library (six categories, 483px; 513 with a
+  three-digit *All*) and Scripts (all six types in their short labels, 542). Session 2 wrote "one
+  number for every library, re-measured"; measured in session 4, one number moved to 560 would fold
+  the templates on an iPad where they fit, so the fold became a choice of two literal class pairs
+  (`FOLD_CLASSES` — Tailwind never emits a class built from `${}`).
+- **`usePartitionView.ts`** (session 4) — the partition as a view, never a route: a `?param=` plus
+  a remembered value, the first render reading the stored one and never writing it back on arrival,
+  a `?param=` arriving winning and being remembered, a change mirrored into the URL with `replace`.
+  The Scripts (`?type=`, `scripts.type`) and FX Library (`?category=`, `fxLibrary.category`) routes
+  take it; `routes/Templates.tsx` still owns `?family=` by hand, as it did first.
 - **`groupRows.ts`** interleaves the dividers; the caller mints the divider row, and a row in an
   undeclared partition is never dropped.
 - **`cells/NumberCell.tsx`** — `TextCell`'s shape with `EditorField` inside: a unit, a range that is
@@ -2606,6 +2618,88 @@ Templates sheet's Value column. What it is and what it learned:
   body scrolls under the viewport with Apply outside the scroller, `SpreadPanel`'s bound — Colour is
   ~565px of controls and Beam ~625 (the exclusions list), both taller than half an 820 frame. The
   footer's copy is the board's: *Value edits the intent — the desk resolves it per head*.
+
+**The FX Library sheet** (`components/fxLibrary/FxLibrarySheet.tsx`, on `routes/FxLibrary.tsx`) is
+Output · Mode · Timing · Params · Drives · Source under category chips and dividers; **every column
+is a read-out**, so nothing is in the marquee and there are no cell verbs. The route was 930 lines
+of one file; the sheet and the three sheets it opens — `EffectDetailSheet`, `EditFxDefinitionSheet`,
+`NewFxDefinitionSheet` — are `components/fxLibrary/` now, with the rules in `fxLibraryModel.ts`.
+
+- **Source is the definition list read against the library** (`fxSourceOf`): a row is **custom**
+  when some definition's `effectId` is the entry's id (`useFxDefinitionListQuery`, the first client
+  of `GET fx/definitions`, tagged `FxLibrary` so the `fxDefinitionListChanged` bridge in
+  `store/fixtureFx.ts` invalidates it on the library's frame); any other `USER` entry is
+  **script**-registered, and the rest are built-ins. The library entry alone cannot tell the two
+  `USER` kinds apart — both carry a `sourceDefinitionId`, which is a definition's row id for one and
+  the **script's** id for the other — and that was the plan's §1 bug: the old page fetched
+  `fx/definitions/<scriptId>` for a script's effect. **What a row opens follows the source**: a
+  custom row its definition's editor, a script's effect **its script** (`/scripts/:scriptId`, the
+  Scripts route's deep link), a built-in its read-only detail. A custom row is named by its
+  definition (`entryName`); everything else by its registry id as words.
+- **The library is the running show's, whatever the URL's project.** `GET fx/library` and
+  `GET fx/definitions` carry no project and `/fx/definitions` always writes to the running show,
+  and there is no copy route — so off the running project the sheet is the read-only scope with
+  **nothing** live, and every row opens the read-only detail rather than an editor for the running
+  show's record. Its reason is its own (`libraryPermission`'s third argument): the default
+  *…library — copy it here to edit* would promise a verb this sheet does not have.
+- **Rename is `PUT fx/definitions/{id} {name}`, on custom rows alone** — a built-in's name is the
+  desk's and a script's effect's is its script's, so `renameDisabled` refuses both, and the name
+  column's *Double-click to rename* hint is drawn only where the rename is (`LibraryNameColumn` asks
+  once, for both; the hint stood on refused rows until this session).
+- **Fork (D9) takes one built-in** and is refused over several, over a custom or script row, or on a
+  built-in that publishes no script, each with the reason; the detail sheet's footer carries the
+  same press. `forkRequest` copies the script, category, output type, mode, parameters,
+  `compatibleProperties` and `timingSource` into `POST /fx/definitions`, named *<name> (Custom)*,
+  and the route opens the new definition's editor. **The `effectId` is what must be unique**:
+  `FxRegistry.register` overwrites by id and deleting a definition unregisters its id, so a fork
+  sharing its source's id would replace the built-in and its delete would remove the built-in until
+  a restart. `uniqueEffectId` mints `<id>Custom`, `<id>Custom2`… against every library id **and**
+  every definition's (one whose script failed to compile is not registered but holds its id), under
+  the registry's own normalisation (case, spaces, underscores), and the name takes the same ordinal
+  — *Pulse (Custom 2)*. **New effect** mints through the same rule: it took `name` without spaces
+  as its id, so a new effect called *Pulse* replaced the built-in.
+- **A fork starts with `defaultStepTiming` false, and the editor says so.** The library entry does
+  not publish a built-in's default, so the fork cannot copy it; `EditFxDefinitionSheet` draws the
+  toggle (a PUT field it never exposed) with a note naming the built-in when Fork opened it.
+- **Delete takes custom rows only**, through `useFxDefinitionDelete` — the sheet's batch and the
+  editor's Delete — which skips built-ins and script-registered effects **by name** before anything
+  is sent, and is refused with the reason when the selection holds no custom row. The desk keeps no
+  record of what uses a definition, so there is no in-use dialog; `deleteFxDefinition` joined
+  `SILENT_ENDPOINTS`, because `useBatchDelete` toasts every refusal itself.
+
+**The Scripts sheet** (`components/scripts/ScriptSheet.tsx`, on `routes/ProjectScripts.tsx`) is
+Type · Lines · Check · Used by under type chips — *All* and one per type present, in short labels —
+and type dividers. `ScriptTypePanel` (the sidebar and its phone sheet) and `ScriptListContent` are
+deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read the type.
+
+- **Check is this tab's last Compile** (D8), a `Map<scriptId, ScriptCheck>` in the route, never
+  stored (`scriptCheck.ts`). The bar's Compile sends each script's **text** and type
+  (`POST …/scripts/compile` compiles a literal), **one at a time** in visible order — the rows read
+  *Queued*, then *Compiling…*, then ✓ or *2 errors · line 14* (the first error's message on the
+  title) as each answer lands. A result carries the text and type it compiled, and `checkFor`
+  answers only while the script still has them, so an edit reads *not checked* again with no
+  invalidation anywhere, and a rename keeps its check.
+- **A rename is `PUT {name, script, scriptType}` from the list's own copy of the row**: the route
+  replaces the whole row and `NewScript.scriptType` defaults to `GENERAL`, so a rename that left the
+  type out would silently turn a definition script into a general one.
+- **Used by** is the effects an `FX_DEFINITION` script registers — `effectsRegisteredBy`, the FX
+  Library's discriminator from the other side, so a custom definition whose row id happens to equal
+  a script's id is never credited to it. Anything else reads *—* until `FU-SCRIPT-USED-BY`: cue
+  hooks are only on full cue details. Off the running project it is *—* throughout, since another
+  project's script ids name nothing in the running show's library.
+- **Run takes one script** (by id, against the live show; the route shows `ScriptRunDialog`), and
+  Compile, Run, the rename and Delete are the running project's alone. Off it, *Copy to…* —
+  `CopyToProjectSheet` over `copyScript`, which keeps the type since session 0 — is the one live
+  verb, and a row still opens: `ScriptForm` has a read-only arm.
+- **Delete** is `useScriptDelete` — the sheet's batch and `ScriptForm`'s Delete, which lost its
+  `confirm()` for it. The desk has no in-use refusal for a script, so the one use this side can name
+  is held back unsent, a Look's busk pads' way: an `FX_DEFINITION` script whose effects are in the
+  library, listed with what it registers. Deleting it does not unregister them — they stay until the
+  desk restarts — so *Delete anyway* is the question; it sends plain (there is no `force`). Every
+  other script deletes on the plain pass. `deleteProjectScript` joined `SILENT_ENDPOINTS`.
+- **The form re-reads its script from the list by id**, as the Look and template routes do, so a
+  rename on the sheet reaches an open form, and a script deleted from another client closes it
+  rather than turning it into a create form.
 
 ### The editor kit
 

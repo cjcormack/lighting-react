@@ -8,7 +8,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ScriptType } from '@/store/scripts'
-import type { ProjectScriptDetail } from '@/api/projectApi'
 
 export const SCRIPT_TYPE_LABELS: Record<ScriptType, string> = {
   GENERAL: 'General',
@@ -44,22 +43,6 @@ export const SCRIPT_TYPE_ICONS: Record<ScriptType, LucideIcon> = {
   FX_CALC: Calculator,
   FX_CALC_STATEFUL: Database,
   FX_CALC_COMPOSITE: Layers,
-}
-
-export type ScriptUsage = {
-  icon: LucideIcon
-  tooltip: string
-}
-
-export function getScriptTypeUsage(scriptType: ScriptType): ScriptUsage | null {
-  switch (scriptType) {
-    case 'FX_DEFINITION':
-      return { icon: Sparkles, tooltip: 'FX Definition Script' }
-    case 'FX_APPLICATION':
-      return { icon: AudioWaveform, tooltip: 'FX Application Script' }
-    default:
-      return null // GENERAL and FX_CALC types use the regular usage-based icon
-  }
 }
 
 export const SCRIPT_TYPE_TEMPLATES: Record<ScriptType, string> = {
@@ -141,9 +124,4 @@ val combined = sine * (1 - mix) + triangle * mix
 context.setIntensity(((combined + 1) / 2).toFloat())
 
 `,
-}
-
-/** Get the display icon/tooltip for a script, preferring type-based for FX scripts. */
-export function getScriptDisplayUsage(script: ProjectScriptDetail): ScriptUsage {
-  return getScriptTypeUsage(script.scriptType) ?? { icon: Braces, tooltip: 'Not used' }
 }

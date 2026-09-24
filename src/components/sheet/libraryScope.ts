@@ -22,7 +22,15 @@ export interface LibraryScope {
  * its stored fields stay editable from any project, and only the two that write the live show's
  * clocks — BPM and TAP — are read-only off the current project, which that sheet says per column.
  */
-export function libraryPermission(isCurrentProject: boolean, projectName?: string | null): LibraryScope {
+export function libraryPermission(
+  isCurrentProject: boolean,
+  projectName?: string | null,
+  /**
+   * The sentence for a library with no copy route, where *copy it here* would promise a verb the
+   * sheet does not have — the FX Library, whose records are the running show's.
+   */
+  readOnlyReason?: string,
+): LibraryScope {
   if (isCurrentProject) {
     return {
       permission: { entry: true, clear: true },
@@ -34,7 +42,8 @@ export function libraryPermission(isCurrentProject: boolean, projectName?: strin
       readOnly: false,
     }
   }
-  const reason = `${projectName ? `${projectName}’s` : 'Another project’s'} library — copy it here to edit`
+  const reason =
+    readOnlyReason ?? `${projectName ? `${projectName}’s` : 'Another project’s'} library — copy it here to edit`
   return {
     permission: { entry: false, clear: false },
     copy: () => ({ setTitle: reason, clearTitle: reason }),

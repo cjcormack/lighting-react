@@ -42,7 +42,6 @@ import {
   useCompileProjectScriptMutation,
   useRunProjectScriptMutation,
   useSaveProjectScriptMutation,
-  useDeleteProjectScriptMutation,
 } from '@/store/projects'
 import CopyScriptDialog from '@/CopyScriptDialog'
 
@@ -54,6 +53,12 @@ interface ScriptFormProps {
   script: ProjectScriptDetail | null
   projectId: number
   isCurrentProject: boolean
+  /**
+   * Delete this script — the Scripts sheet's batch delete (`useScriptDelete`), so the editor and
+   * the bar ask one question and report one way (library-sheets plan D13). Absent draws no Delete.
+   */
+  onDelete?: (script: ProjectScriptDetail) => void
+  isDeleting?: boolean
 }
 
 export function ScriptForm({
@@ -62,6 +67,8 @@ export function ScriptForm({
   script,
   projectId,
   isCurrentProject,
+  onDelete,
+  isDeleting = false,
 }: ScriptFormProps) {
   const isCreate = script === null && isCurrentProject
   const canEdit = isCurrentProject && (script === null || script.canEdit !== false)
@@ -69,7 +76,6 @@ export function ScriptForm({
   // Mutations
   const [runCreate, { isLoading: isCreating }] = useCreateProjectScriptMutation()
   const [runSave, { isLoading: isSaving }] = useSaveProjectScriptMutation()
-  const [runDelete] = useDeleteProjectScriptMutation()
   const [
     runCompile,
     { data: compileResult, isUninitialized: hasNotCompiled, isLoading: isCompiling, reset: resetCompile },
@@ -182,19 +188,6 @@ export function ScriptForm({
     setEditName(script.name)
     setEditCode(script.script)
     setHasEdited(false)
-  }
-
-  const handleDelete = async () => {
-    if (!script) return
-    if (confirm(`Delete "${script.name}"?`)) {
-      try {
-        await runDelete({ projectId, scriptId: script.id }).unwrap()
-      } catch {
-        // Reported by errorToastMiddleware; leave the sheet open on a delete that didn't land.
-        return
-      }
-      onOpenChange(false)
-    }
   }
 
   // Compute dirty state: edit mode uses flag, create mode compares against defaults
@@ -400,13 +393,17 @@ export function ScriptForm({
                 {/* Edit mode: Delete on left, Reset+Save on right */}
                 {canEdit && script && (
                   <>
-                    <Button
-                      variant="destructive"
-                      disabled={script.canDelete === false}
-                      onClick={handleDelete}
-                    >
-                      Delete
-                    </Button>
+                    {onDelete ? (
+                      <Button
+                        variant="destructive"
+                        disabled={script.canDelete === false || isDeleting}
+                        onClick={() => onDelete(script)}
+                      >
+                        {isDeleting ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
                     <div className="flex gap-2">
                       <Button variant="outline" disabled={!hasEdited} onClick={handleReset}>
                         Reset

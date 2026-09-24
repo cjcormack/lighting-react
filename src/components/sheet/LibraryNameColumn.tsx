@@ -57,10 +57,13 @@ export function libraryNameColumn<Row extends SheetRow>({
     openLabel,
     render: (row, selected) => {
       const text = name(row)
+      // Asked once, so the hint and the popover cannot disagree: a row the scope or its source
+      // refuses the rename says nothing about double-clicking.
+      const renames = rename != null && !renameDisabled?.(row)
       const face = (
         <span
           className={cn('mx-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}
-          title={rename ? 'Double-click to rename' : undefined}
+          title={renames ? 'Double-click to rename' : undefined}
         >
           {text}
         </span>
@@ -71,14 +74,14 @@ export function libraryNameColumn<Row extends SheetRow>({
             <span className="relative shrink-0 font-mono text-xs font-bold text-muted-foreground">{prefix(row)}</span>
           )}
           <span className="relative flex min-w-0 flex-1 items-center">
-            {rename && !renameDisabled?.(row) ? (
+            {renames ? (
               <TextCell
                 {...firstColumnCellProps<string>({
                   noun,
                   value: text,
                   label: `${noun[0].toUpperCase()}${noun.slice(1)} name`,
                   onCommit: (next) => {
-                    if (next !== text) rename(row, next)
+                    if (next !== text) rename?.(row, next)
                   },
                 })}
                 face={face}

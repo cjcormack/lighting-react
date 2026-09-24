@@ -1,930 +1,313 @@
-import { useEffect, useMemo, useState } from "react"
-import { useParams, useSearchParams } from "react-router"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useEffectLibraryQuery, type EffectLibraryEntry } from '../store/fixtureFx'
+import { useCreateFxDefinitionMutation, useFxDefinitionListQuery } from '../store/fxDefinitions'
+import { Breadcrumbs } from '@/components/Breadcrumbs'
+import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
+import { LibraryRow, PartitionChips } from '../components/sheet/LibraryRow'
+import { SheetPage } from '../components/sheet/SheetPage'
+import { groupRows } from '../components/sheet/groupRows'
+import { usePartitionView } from '../components/sheet/usePartitionView'
+import { FxLibrarySheet, fxRowId, type FxMemberRow, type FxSheetRow } from '../components/fxLibrary/FxLibrarySheet'
+import { EffectDetailSheet } from '../components/fxLibrary/EffectDetailSheet'
+import { EditFxDefinitionSheet } from '../components/fxLibrary/EditFxDefinitionSheet'
+import { NewFxDefinitionSheet } from '../components/fxLibrary/NewFxDefinitionSheet'
+import { useFxDefinitionDelete } from '../components/fxLibrary/useFxDefinitionDelete'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetBody,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  useUnsavedChanges,
-} from "@/components/ui/sheet"
-import {
-  ChevronRight,
-  ChevronDown,
-  Loader2,
-  Plus,
-  Pencil,
-  Lock,
-  Trash2,
-  Wrench,
-  Play,
-} from "lucide-react"
-import {
-  useCurrentProjectQuery,
-  useProjectQuery,
-  useCompileProjectScriptMutation,
-  useRunProjectScriptMutation,
-} from "../store/projects"
-import {
-  useEffectLibraryQuery,
-  type EffectLibraryEntry,
-  type EffectParameterDef,
-} from "../store/fixtureFx"
-import {
-  useFxDefinitionQuery,
-  useCreateFxDefinitionMutation,
-  useUpdateFxDefinitionMutation,
-  useDeleteFxDefinitionMutation,
-} from "../store/fxDefinitions"
-import { Breadcrumbs } from "@/components/Breadcrumbs"
-import { LazyScriptEditor } from "@/components/scripts/LazyScriptEditor"
-import {
-  ScriptCompileDialog,
-  ScriptRunDialog,
-} from "@/components/scripts/ScriptResultDialogs"
-import type { FxCalcEditorType } from "../store/scripts"
-import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
-
-// ─── Redirect ─────────────────────────────────────────────────────────
+  FX_CATEGORY_LABELS,
+  FX_CATEGORY_ORDER,
+  definitionsByEffectId,
+  displayName,
+  entryName,
+  forkRequest,
+  fxSourceOf,
+  isFxCategory,
+  takenEffectIds,
+  type FxCategory,
+  type FxSource,
+} from '../components/fxLibrary/fxLibraryModel'
 
 export function FxLibraryRedirect() {
   return <CurrentProjectRedirect to="fx-library" />
 }
 
-// ─── Main route ───────────────────────────────────────────────────────
+/** What the right-hand sheet is showing. */
+type SheetMode =
+  | { type: 'closed' }
+  | { type: 'view'; entry: EffectLibraryEntry; source: FxSource }
+  | { type: 'edit'; definitionId: number; forkedFrom?: string }
+  | { type: 'new' }
 
+/** The URL and the remembered value spell a category as the registry does — `colour`. */
+function parseCategory(raw: string): FxCategory | null {
+  const lower = raw.toLowerCase()
+  return isFxCategory(lower) ? lower : null
+}
+
+function categorySlug(category: FxCategory): string {
+  return category
+}
+
+/**
+ * The FX Library as a **sheet** (library-sheets plan §3.2, session 4): the list shell's header, the
+ * library row (filter · category chips · *New effect*), the selection bar, `FxLibrarySheet` and the
+ * footer. It replaced a shadcn `Table` whose categories collapsed; the three sheets it opens —
+ * detail, edit, new — moved to `components/fxLibrary/` beside it (D1).
+ *
+ * **Chips filter, dividers group** (D3): *All* and the five categories, `?category=` deep-links and
+ * the choice is remembered under `fxLibrary.category`; under *All* the rows are grouped by category
+ * divider in `FX_CATEGORY_ORDER`, and the categories no longer collapse — the chips are how you
+ * narrow.
+ *
+ * **The library is the running show's, whatever the URL's project.** `GET fx/library` and
+ * `GET fx/definitions` have no project in them; that is why another project's page is the read-only
+ * scope with nothing live (D12) rather than a different library, and why every row there opens the
+ * read-only detail rather than an editor for the running show's record.
+ */
 export function ProjectFxLibrary() {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
-  const { data: project, isLoading } = useProjectQuery(projectIdNum)
+  const navigate = useNavigate()
+  const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
+  const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
+  const { data: libraryData, isLoading: libraryLoading } = useEffectLibraryQuery()
+  const { data: definitionData, isLoading: definitionsLoading } = useFxDefinitionListQuery()
+  const [createDefinition, { isLoading: forking }] = useCreateFxDefinitionMutation()
 
-  if (isLoading) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [category, changeCategory] = usePartitionView<FxCategory>({
+    param: 'category',
+    storageKey: 'fxLibrary.category',
+    parse: parseCategory,
+    slug: categorySlug,
+  })
+  const [filter, setFilter] = useState('')
+  const [sheetMode, setSheetMode] = useState<SheetMode>({ type: 'closed' })
+
+  const isCurrentProject = currentProject?.id === projectIdNum
+  const library = useMemo(() => libraryData ?? [], [libraryData])
+  const definitions = useMemo(() => definitionData ?? [], [definitionData])
+  const byEffectId = useMemo(() => definitionsByEffectId(definitions), [definitions])
+
+  // `?action=new` opens the create sheet and strips the param — the command-palette entry point.
+  useEffect(() => {
+    if (searchParams.get('action') === 'new' && isCurrentProject) {
+      setSheetMode({ type: 'new' })
+      const params = new URLSearchParams(searchParams)
+      params.delete('action')
+      setSearchParams(params, { replace: true })
+    }
+  }, [searchParams, isCurrentProject, setSearchParams])
+
+  /** Every member row, before the filters — the source and the name worked out once. */
+  const members = useMemo<FxMemberRow[]>(
+    () =>
+      library.map((entry) => {
+        const definition = byEffectId.get(entry.name)
+        return {
+          id: fxRowId(entry.name),
+          entry,
+          source: fxSourceOf(entry, byEffectId),
+          definition,
+          name: entryName(entry, definition),
+        }
+      }),
+    [byEffectId, library],
+  )
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of members) counts.set(row.entry.category, (counts.get(row.entry.category) ?? 0) + 1)
+    return counts
+  }, [members])
+
+  /** The rows the sheet draws: the category and the text filter, then — under *All* — the dividers. */
+  const sheetRows = useMemo<FxSheetRow[]>(() => {
+    const needle = filter.trim().toLowerCase()
+    const shown = members
+      .filter(
+        (row) =>
+          (category === 'ALL' || row.entry.category === category) &&
+          (needle === '' ||
+            row.name.toLowerCase().includes(needle) ||
+            row.entry.name.toLowerCase().includes(needle) ||
+            row.entry.compatibleProperties.some((p) => p.toLowerCase().includes(needle))),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+    if (category !== 'ALL') return shown
+    const perCategory = new Map<string, number>()
+    for (const row of shown) perCategory.set(row.entry.category, (perCategory.get(row.entry.category) ?? 0) + 1)
+    return groupRows<FxSheetRow, FxCategory>(shown, {
+      partition: (row) => row.entry?.category ?? '',
+      order: FX_CATEGORY_ORDER,
+      divider: (key) => ({
+        id: `category:${key || 'other'}`,
+        divider: `${isFxCategory(key) ? FX_CATEGORY_LABELS[key] : 'Other'} · ${perCategory.get(key) ?? 0}`,
+      }),
+      unlisted: 'other',
+    })
+  }, [category, filter, members])
+
+  const openRow = useCallback(
+    (row: FxMemberRow) => {
+      if (!isCurrentProject) {
+        setSheetMode({ type: 'view', entry: row.entry, source: row.source })
+        return
+      }
+      if (row.source === 'custom' && row.definition) {
+        setSheetMode({ type: 'edit', definitionId: row.definition.id })
+      } else if (row.source === 'script' && row.entry.sourceDefinitionId != null) {
+        // §1's first bug: a script's effect carries the **script's** id, so it opens the script.
+        navigate(`/projects/${projectIdNum}/scripts/${row.entry.sourceDefinitionId}`)
+      } else {
+        setSheetMode({ type: 'view', entry: row.entry, source: row.source })
+      }
+    },
+    [isCurrentProject, navigate, projectIdNum],
+  )
+
+  const fork = useCallback(
+    async (entry: EffectLibraryEntry) => {
+      if (!isCurrentProject || forking) return
+      try {
+        const created = await createDefinition(forkRequest(entry, library, definitions)).unwrap()
+        setSheetMode({ type: 'edit', definitionId: created.id, forkedFrom: displayName(entry.name) })
+      } catch {
+        // Reported by errorToastMiddleware — a 422 names the compile diagnostics.
+      }
+    },
+    [createDefinition, definitions, forking, isCurrentProject, library],
+  )
+
+  const { run: runDelete, busy: deleting } = useFxDefinitionDelete({
+    onDeleted: () => setSheetMode({ type: 'closed' }),
+  })
+
+  if (projectLoading || currentLoading) {
     return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty loading />
+      </SheetPage>
     )
   }
   if (!project) {
     return (
-      <Card className="m-4 p-4">
-        <p className="text-destructive">Project not found</p>
-      </Card>
+      <SheetPage>
+        <SheetPage.Header />
+        <SheetPage.Empty className="text-destructive">Project not found</SheetPage.Empty>
+      </SheetPage>
     )
   }
 
-  return (
-    <FxLibraryContent
-      projectName={project.name}
-      isCurrent={project.isCurrent}
-    />
-  )
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-const CATEGORY_ORDER = ["dimmer", "colour", "position", "controls", "composite"]
-const CATEGORY_LABELS: Record<string, string> = {
-  dimmer: "Dimmer",
-  colour: "Colour",
-  position: "Position",
-  controls: "Controls",
-  composite: "Composite",
-}
-
-const OUTPUT_TYPE_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
-  SLIDER: "secondary",
-  COLOUR: "outline",
-  POSITION: "default",
-}
-
-function effectModeToEditorType(effectMode?: string): FxCalcEditorType {
-  switch (effectMode) {
-    case "STATEFUL": return "FX_CALC_STATEFUL"
-    case "COMPOSITE": return "FX_CALC_COMPOSITE"
-    default: return "FX_CALC"
-  }
-}
-
-function displayName(name: string): string {
-  return name.replace(/([A-Z])/g, " $1").trim()
-}
-
-// ─── Content ──────────────────────────────────────────────────────────
-
-type SheetMode =
-  | { type: "closed" }
-  | { type: "view"; effect: EffectLibraryEntry }
-  | { type: "edit"; definitionId: number }
-  | { type: "new" }
-
-function FxLibraryContent({
-  projectName,
-  isCurrent,
-}: {
-  projectName: string
-  isCurrent: boolean
-}) {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { data: library, isLoading } = useEffectLibraryQuery()
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
-    new Set()
-  )
-  const [sheetMode, setSheetMode] = useState<SheetMode>({ type: "closed" })
-
-  // Open new sheet when navigated with ?action=new (e.g. from command palette)
-  useEffect(() => {
-    if (searchParams.get("action") === "new" && isCurrent) {
-      setSheetMode({ type: "new" })
-      setSearchParams({}, { replace: true })
-    }
-  }, [searchParams, isCurrent, setSearchParams])
-
-  const grouped = useMemo(() => {
-    if (!library) return []
-    const groups = new Map<string, EffectLibraryEntry[]>()
-    for (const entry of library) {
-      const cat = entry.category || "other"
-      if (!groups.has(cat)) groups.set(cat, [])
-      groups.get(cat)!.push(entry)
-    }
-    return [...groups.entries()].sort(([a], [b]) => {
-      const ai = CATEGORY_ORDER.indexOf(a)
-      const bi = CATEGORY_ORDER.indexOf(b)
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-    })
-  }, [library])
-
-  const toggleCategory = (cat: string) => {
-    setCollapsedCategories((prev) => {
-      const next = new Set(prev)
-      if (next.has(cat)) next.delete(cat)
-      else next.add(cat)
-      return next
-    })
-  }
-
-  const handleRowClick = (entry: EffectLibraryEntry) => {
-    if (entry.source === "USER" && entry.sourceDefinitionId && isCurrent) {
-      setSheetMode({ type: "edit", definitionId: entry.sourceDefinitionId })
-    } else {
-      setSheetMode({ type: "view", effect: entry })
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <Card className="m-4 p-4 flex items-center justify-center">
-        <Loader2 className="size-6 animate-spin" />
-      </Card>
-    )
-  }
+  const memberCount = sheetRows.filter((row) => row.divider == null).length
+  const yours = members.filter((row) => row.source !== 'builtIn').length
 
   return (
-    <>
-      {/* Fix #3: Sticky header using flex layout like Patches */}
-      <div className="flex flex-col h-full">
-        <div className="p-4 space-y-4">
-          <Breadcrumbs
-            projectName={projectName}
-            isActive={isCurrent}
-            currentPage="FX Library"
+    <SheetPage>
+      <SheetPage.Header>
+        <Breadcrumbs projectName={project.name} currentPage="FX Library" />
+      </SheetPage.Header>
+      <LibraryRow
+        filter={filter}
+        onFilterChange={setFilter}
+        filterLabel="Filter by name or what it drives"
+        chips={
+          <PartitionChips<FxCategory>
+            label="Category"
+            fold={560}
+            value={category}
+            onChange={changeCategory}
+            allCount={library.length}
+            options={FX_CATEGORY_ORDER.map((c) => ({
+              value: c,
+              label: FX_CATEGORY_LABELS[c],
+              count: categoryCounts.get(c) ?? 0,
+            }))}
           />
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">FX Library</h1>
-              <p className="text-sm text-muted-foreground">
-                Browse built-in effects and create custom FX scripts.
-              </p>
-            </div>
-            {isCurrent && (
-              <Button onClick={() => setSheetMode({ type: "new" })} size="sm" className="gap-1.5 shrink-0">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">New FX</span>
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[250px]">Name</TableHead>
-                <TableHead className="hidden md:table-cell">Properties</TableHead>
-                <TableHead className="w-[100px]">Source</TableHead>
-                <TableHead className="w-[60px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {grouped.map(([category, effects]) => {
-                const isCollapsed = collapsedCategories.has(category)
-                return (
-                  <CategoryGroup
-                    key={category}
-                    category={category}
-                    effects={effects}
-                    isCollapsed={isCollapsed}
-                    onToggle={() => toggleCategory(category)}
-                    onRowClick={handleRowClick}
-                    isCurrent={isCurrent}
-                  />
-                )
-              })}
-              {grouped.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    No effects available.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+        }
+        create={
+          isCurrentProject ? (
+            <Button size="sm" className="shrink-0 gap-1.5" onClick={() => setSheetMode({ type: 'new' })}>
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">New effect</span>
+            </Button>
+          ) : undefined
+        }
+      />
+      {libraryLoading || definitionsLoading ? (
+        <SheetPage.Empty loading />
+      ) : library.length === 0 ? (
+        <SheetPage.Empty>No effects available.</SheetPage.Empty>
+      ) : memberCount === 0 ? (
+        <SheetPage.Empty>No effects match.</SheetPage.Empty>
+      ) : (
+        <FxLibrarySheet
+          rows={sheetRows}
+          isCurrentProject={isCurrentProject}
+          projectName={project.name}
+          onOpen={openRow}
+          onFork={(entry) => void fork(entry)}
+          forking={forking}
+        />
+      )}
+      <SheetPage.Footer>
+        <span className="tabular-nums">
+          {library.length} effect{library.length === 1 ? '' : 's'} · {yours} yours
+          {category === 'ALL' && filter.trim() === '' ? '' : ` · showing ${memberCount}`}
+        </span>
+        <span className="ml-auto">
+          {isCurrentProject
+            ? 'Built-ins are read-only — Fork one to change it'
+            : 'Not the running project · the running show’s effects, read-only'}
+        </span>
+      </SheetPage.Footer>
 
       <Sheet
-        open={sheetMode.type !== "closed"}
+        open={sheetMode.type !== 'closed'}
         onOpenChange={(open) => {
-          if (!open) setSheetMode({ type: "closed" })
+          if (!open) setSheetMode({ type: 'closed' })
         }}
       >
-        {sheetMode.type === "view" && (
+        {sheetMode.type === 'view' && (
           <SheetContent side="right" className="flex flex-col sm:max-w-lg">
-            <EffectDetailSheet effect={sheetMode.effect} />
-          </SheetContent>
-        )}
-        {sheetMode.type === "edit" && (
-          <SheetContent side="right" className="flex flex-col sm:max-w-lg">
-            <EditFxDefinitionSheet
-              definitionId={sheetMode.definitionId}
-              onClose={() => setSheetMode({ type: "closed" })}
+            <EffectDetailSheet
+              effect={sheetMode.entry}
+              source={sheetMode.source}
+              onFork={
+                isCurrentProject && sheetMode.source === 'builtIn' && sheetMode.entry.script
+                  ? () => void fork(sheetMode.entry)
+                  : undefined
+              }
+              forking={forking}
             />
           </SheetContent>
         )}
-        {sheetMode.type === "new" && (
+        {sheetMode.type === 'edit' && (
+          <SheetContent side="right" className="flex flex-col sm:max-w-lg">
+            <EditFxDefinitionSheet
+              definitionId={sheetMode.definitionId}
+              forkedFrom={sheetMode.forkedFrom}
+              isDeleting={deleting}
+              onDelete={(definition) =>
+                void runDelete([{ name: definition.name, source: 'custom', definition }])
+              }
+            />
+          </SheetContent>
+        )}
+        {sheetMode.type === 'new' && (
           <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <NewFxDefinitionSheet
-              onCreated={(id) => setSheetMode({ type: "edit", definitionId: id })}
+              takenIds={takenEffectIds(library, definitions)}
+              onCreated={(id) => setSheetMode({ type: 'edit', definitionId: id })}
             />
           </SheetContent>
         )}
       </Sheet>
-    </>
-  )
-}
-
-// ─── Category group rows ──────────────────────────────────────────────
-
-function CategoryGroup({
-  category,
-  effects,
-  isCollapsed,
-  onToggle,
-  onRowClick,
-  isCurrent,
-}: {
-  category: string
-  effects: EffectLibraryEntry[]
-  isCollapsed: boolean
-  onToggle: () => void
-  onRowClick: (entry: EffectLibraryEntry) => void
-  isCurrent: boolean
-}) {
-  const label = CATEGORY_LABELS[category] ?? category
-  const Chevron = isCollapsed ? ChevronRight : ChevronDown
-
-  return (
-    <>
-      <TableRow className="bg-muted/50 cursor-pointer hover:bg-muted" onClick={onToggle}>
-        <TableCell colSpan={4} className="py-2">
-          <div className="flex items-center gap-2 font-medium">
-            <Chevron className="size-4" />
-            {label}
-            <Badge variant="secondary" className="text-xs">{effects.length}</Badge>
-          </div>
-        </TableCell>
-      </TableRow>
-      {!isCollapsed &&
-        effects.map((effect) => (
-          <EffectRow key={effect.name} effect={effect} onClick={() => onRowClick(effect)} isCurrent={isCurrent} />
-        ))}
-    </>
-  )
-}
-
-function EffectRow({
-  effect,
-  onClick,
-  isCurrent,
-}: {
-  effect: EffectLibraryEntry
-  onClick: () => void
-  isCurrent: boolean
-}) {
-  const isUser = effect.source === "USER"
-
-  return (
-    <TableRow className="cursor-pointer" onClick={onClick}>
-      <TableCell className="font-medium">{displayName(effect.name)}</TableCell>
-      <TableCell className="hidden md:table-cell">
-        <div className="flex flex-wrap gap-1">
-          {effect.compatibleProperties.map((prop) => (
-            <Badge key={prop} variant="outline" className="text-xs">{prop}</Badge>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant={isUser ? "default" : "secondary"} className="text-xs">
-          {isUser ? "Custom" : "Built-in"}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        {isUser && isCurrent ? (
-          <Pencil className="size-4 text-muted-foreground" />
-        ) : (
-          <Lock className="size-3.5 text-muted-foreground" />
-        )}
-      </TableCell>
-    </TableRow>
-  )
-}
-
-// ─── Effect detail (built-in or read-only user) ───────────────────────
-
-function EffectDetailSheet({ effect }: { effect: EffectLibraryEntry }) {
-  const name = displayName(effect.name)
-  const isUser = effect.source === "USER"
-  const editorType = effectModeToEditorType(effect.effectMode)
-
-  return (
-    <>
-      <SheetHeader className="space-y-2">
-        <SheetTitle className="flex items-center gap-2 flex-wrap">
-          {name}
-          <Badge variant={isUser ? "default" : "secondary"}>
-            {isUser ? "Custom" : "Built-in"}
-          </Badge>
-          <Badge variant={OUTPUT_TYPE_VARIANTS[effect.outputType] ?? "outline"}>
-            {effect.outputType.toLowerCase()}
-          </Badge>
-          <Badge variant="outline" className="capitalize">{effect.category}</Badge>
-          {effect.effectMode && effect.effectMode !== "STANDARD" && (
-            <Badge variant="outline" className="text-xs">{effect.effectMode.toLowerCase()}</Badge>
-          )}
-        </SheetTitle>
-        {effect.compatibleProperties.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Properties:</span>
-            {effect.compatibleProperties.map((prop) => (
-              <Badge key={prop} variant="outline" className="text-xs">{prop}</Badge>
-            ))}
-          </div>
-        )}
-      </SheetHeader>
-
-      <SheetBody>
-        {effect.parameters.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Parameters</p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Default</TableHead>
-                  <TableHead className="hidden sm:table-cell">Description</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {effect.parameters.map((param: EffectParameterDef) => (
-                  <TableRow key={param.name}>
-                    <TableCell className="font-mono text-sm">{param.name}</TableCell>
-                    <TableCell>{param.type}</TableCell>
-                    <TableCell className="font-mono text-sm">{param.defaultValue}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">{param.description}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-
-        {effect.script && (
-          <LazyScriptEditor
-            script={{ name, script: effect.script }}
-            id={`view-${effect.name}`}
-            scriptType={editorType}
-            readOnly
-          />
-        )}
-      </SheetBody>
-    </>
-  )
-}
-
-// ─── Edit FX definition ───────────────────────────────────────────────
-
-function EditFxDefinitionSheet({
-  definitionId,
-  onClose,
-}: {
-  definitionId: number
-  onClose: () => void
-}) {
-  const { data: currentProject } = useCurrentProjectQuery()
-  const { data: definition, isLoading, isFetching } = useFxDefinitionQuery(definitionId)
-
-  const [
-    runCompileMutation,
-    { data: compileResult, isUninitialized: hasNotCompiled, isLoading: isCompiling, reset: resetCompile },
-  ] = useCompileProjectScriptMutation()
-  const [
-    runRunMutation,
-    { data: runResult, isUninitialized: hasNotRun, isLoading: isTesting, reset: resetRun },
-  ] = useRunProjectScriptMutation()
-  const [runUpdateMutation, { isLoading: isSaving }] = useUpdateFxDefinitionMutation()
-  const [runDeleteMutation, { isLoading: isDeleting }] = useDeleteFxDefinitionMutation()
-
-  const [edits, setEdits] = useState<{
-    name?: string
-    script?: string
-  }>({})
-
-  useEffect(() => {
-    setEdits({})
-  }, [definitionId])
-
-  // `edits.script` holds whatever is in the editor, verbatim. The editor is a controlled component
-  // now, so a field that collapsed back to `undefined` whenever the text happened to trim equal to
-  // the saved script would revert the operator's typing — and their caret — under them. Whether
-  // that text counts as a *change* is asked here instead of at the point it is stored.
-  const hasChanged =
-    edits.name !== undefined ||
-    (edits.script !== undefined && edits.script.trim() !== definition?.script.trim())
-
-  // Before the early returns: hooks cannot be skipped, and the sheet must know about the edit
-  // whatever the query is doing.
-  useUnsavedChanges(hasChanged)
-
-  if (isLoading || isFetching) {
-    return (
-      <>
-        <SheetHeader><SheetTitle>Edit FX</SheetTitle></SheetHeader>
-        <div className="flex justify-center p-8"><Loader2 className="size-6 animate-spin" /></div>
-      </>
-    )
-  }
-
-  if (!definition) {
-    return (
-      <>
-        <SheetHeader><SheetTitle>Edit FX</SheetTitle></SheetHeader>
-        <p className="p-4 text-destructive">Definition not found.</p>
-      </>
-    )
-  }
-
-  const editorType = effectModeToEditorType(definition.effectMode)
-  const currentName = edits.name ?? definition.name
-  const currentScript = edits.script ?? definition.script
-
-  const canSave = hasChanged && currentName !== "" && currentScript !== ""
-
-  const handleCompile = () => {
-    if (!currentProject) return
-    runCompileMutation({
-      projectId: currentProject.id,
-      script: currentScript,
-      scriptType: editorType,
-    })
-  }
-
-  const handleTest = () => {
-    if (!currentProject) return
-    runRunMutation({
-      projectId: currentProject.id,
-      script: currentScript,
-      scriptType: editorType,
-    })
-  }
-
-  const handleSave = async () => {
-    await runUpdateMutation({
-      id: definitionId,
-      name: currentName,
-      script: currentScript,
-    })
-    setEdits({})
-  }
-
-  const handleDelete = async () => {
-    if (confirm(`Delete "${definition.name}"?`)) {
-      await runDeleteMutation(definitionId)
-      onClose()
-    }
-  }
-
-  return (
-    <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2">
-          Edit FX
-          <Badge variant="default">Custom</Badge>
-          {definition.effectMode !== "STANDARD" && (
-            <Badge variant="outline" className="text-xs">{definition.effectMode}</Badge>
-          )}
-        </SheetTitle>
-      </SheetHeader>
-
-      <ScriptCompileDialog
-        compileResult={compileResult}
-        hasNotCompiled={hasNotCompiled}
-        isCompiling={isCompiling}
-        resetCompile={resetCompile}
-      />
-      <ScriptRunDialog
-        runResult={runResult}
-        hasNotRun={hasNotRun}
-        isRunning={isTesting}
-        resetRun={resetRun}
-      />
-
-      <SheetBody>
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-fx-name">Name</Label>
-          <Input
-            id="edit-fx-name"
-            value={currentName}
-            onChange={(e) => setEdits({ ...edits, name: e.target.value !== definition.name ? e.target.value : undefined })}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label>Script</Label>
-            <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentScript === "" || isCompiling || !currentProject}
-                onClick={handleCompile}
-              >
-                <Wrench className="size-3.5" />
-                Compile
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentScript === "" || isTesting || !currentProject}
-                onClick={handleTest}
-              >
-                <Play className="size-3.5" />
-                Test
-              </Button>
-            </div>
-          </div>
-          <LazyScriptEditor
-            script={{ name: currentName, script: currentScript }}
-            id={definitionId}
-            scriptType={editorType}
-            onScriptChange={(code) => setEdits({ ...edits, script: code })}
-          />
-        </div>
-      </SheetBody>
-
-      <SheetFooter className="flex-row justify-between">
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={handleDelete}
-          disabled={isDeleting}
-        >
-          <Trash2 className="size-3.5 mr-1.5" />
-          {isDeleting ? "Deleting..." : "Delete"}
-        </Button>
-        <div className="flex gap-2">
-          {/* Through the sheet, not straight to `onClose`: only a close that Radix drives
-              reaches the unsaved-changes question. */}
-          <SheetClose asChild>
-            <Button variant="outline" disabled={isSaving}>Cancel</Button>
-          </SheetClose>
-          <Button disabled={!canSave || isSaving} onClick={handleSave}>
-            {isSaving ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </SheetFooter>
-    </>
-  )
-}
-
-// ─── New FX definition ────────────────────────────────────────────────
-
-const PARAM_TYPES = ["ubyte", "int", "double", "float", "boolean", "colour", "colourList", "easingCurve", "string"]
-
-const NEW_FX_TEMPLATE = `val min = params.ubyte("min")
-val max = params.ubyte("max")
-val sine = (sin(phase * 2 * PI) + 1.0) / 2.0
-val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
-    .toInt().coerceIn(0, 255).toUByte()
-FxOutput.Slider(value)
-`
-
-const NEW_FX_DEFAULTS = {
-  category: "dimmer",
-  outputType: "SLIDER",
-  effectMode: "STANDARD",
-  parameters: [
-    { name: "min", type: "ubyte", defaultValue: "0", description: "Minimum value" },
-    { name: "max", type: "ubyte", defaultValue: "255", description: "Maximum value" },
-  ] as EffectParameterDef[],
-}
-
-function NewFxDefinitionSheet({
-  onCreated,
-}: {
-  onCreated: (id: number) => void
-}) {
-  const { data: currentProject } = useCurrentProjectQuery()
-  const [runCreateMutation, { isLoading: isCreating }] = useCreateFxDefinitionMutation()
-  const [
-    runCompileMutation,
-    { data: compileResult, isUninitialized: hasNotCompiled, isLoading: isCompiling, reset: resetCompile },
-  ] = useCompileProjectScriptMutation()
-  const [
-    runRunMutation,
-    { data: runResult, isUninitialized: hasNotRun, isLoading: isRunning, reset: resetRun },
-  ] = useRunProjectScriptMutation()
-
-  const [name, setName] = useState("")
-  const [category, setCategory] = useState(NEW_FX_DEFAULTS.category)
-  const [outputType, setOutputType] = useState(NEW_FX_DEFAULTS.outputType)
-  const [effectMode, setEffectMode] = useState(NEW_FX_DEFAULTS.effectMode)
-  const [scriptCode, setScriptCode] = useState(NEW_FX_TEMPLATE)
-  const [parameters, setParameters] = useState<EffectParameterDef[]>(NEW_FX_DEFAULTS.parameters)
-
-  // Everything the form starts with is a default nobody chose, so anything moved off one is work
-  // worth asking about before Escape or a stray click outside takes the sheet away.
-  useUnsavedChanges(
-    name !== "" ||
-    category !== NEW_FX_DEFAULTS.category ||
-    outputType !== NEW_FX_DEFAULTS.outputType ||
-    effectMode !== NEW_FX_DEFAULTS.effectMode ||
-    scriptCode !== NEW_FX_TEMPLATE ||
-    JSON.stringify(parameters) !== JSON.stringify(NEW_FX_DEFAULTS.parameters)
-  )
-
-  const editorType = effectModeToEditorType(effectMode)
-
-  // Keyed off `outputType`, not `category`: the two are independent selects, and it is the output
-  // type that decides which properties can actually take the effect's output. Deriving from the
-  // category let Category = Position + the default Output Type = Slider (or Category = Colour with
-  // any other output type) write a list the effect could never drive — the backend now rejects
-  // that with a 400 naming `compatibleProperties`, a field this form doesn't expose.
-  //
-  // `position` rather than `["pan", "tilt"]`: a POSITION effect emits both axes at once, and an
-  // axis by name resolves to a slider target that discards the pair — no light, no error. That
-  // was backend sweep item A11, which narrowed the seven built-in position effects the same way.
-  const compatibleProperties = (() => {
-    switch (outputType) {
-      case "COLOUR": return ["rgbColour"]
-      case "POSITION": return ["position"]
-      default: return ["dimmer"]
-    }
-  })()
-
-  const handleCreate = async () => {
-    try {
-      const result = await runCreateMutation({
-        effectId: name.replace(/\s+/g, ""),
-        name,
-        category,
-        outputType,
-        effectMode,
-        parameters,
-        compatibleProperties,
-        script: scriptCode,
-      }).unwrap()
-      onCreated(result.id)
-    } catch {
-      // Error handling could be improved
-    }
-  }
-
-  const addParameter = () => {
-    setParameters([...parameters, { name: "", type: "ubyte", defaultValue: "0", description: "" }])
-  }
-
-  const removeParameter = (index: number) => {
-    setParameters(parameters.filter((_, i) => i !== index))
-  }
-
-  const updateParameter = (index: number, field: keyof EffectParameterDef, value: string) => {
-    setParameters(parameters.map((p, i) => i === index ? { ...p, [field]: value } : p))
-  }
-
-  const canCreate = name !== "" && scriptCode !== ""
-
-  return (
-    <>
-      <ScriptCompileDialog
-        compileResult={compileResult}
-        hasNotCompiled={hasNotCompiled}
-        isCompiling={isCompiling}
-        resetCompile={resetCompile}
-      />
-      <ScriptRunDialog
-        runResult={runResult}
-        hasNotRun={hasNotRun}
-        isRunning={isRunning}
-        resetRun={resetRun}
-      />
-
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2">
-          New FX
-          <Badge variant="default">Custom</Badge>
-        </SheetTitle>
-      </SheetHeader>
-
-      <SheetBody>
-        {/* Metadata */}
-        <div className="space-y-1.5">
-          <Label htmlFor="new-fx-name">Name</Label>
-          <Input
-            id="new-fx-name"
-            placeholder="My Custom Effect"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Category</Label>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dimmer">Dimmer</SelectItem>
-              <SelectItem value="colour">Colour</SelectItem>
-              <SelectItem value="position">Position</SelectItem>
-              <SelectItem value="composite">Composite</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Output Type</Label>
-          <Select value={outputType} onValueChange={setOutputType}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SLIDER">Slider</SelectItem>
-              <SelectItem value="COLOUR">Colour</SelectItem>
-              <SelectItem value="POSITION">Position</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Mode</Label>
-          <Select value={effectMode} onValueChange={setEffectMode}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="STANDARD">Standard</SelectItem>
-              <SelectItem value="STATEFUL">Stateful</SelectItem>
-              <SelectItem value="COMPOSITE">Composite</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Parameters */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Parameters</Label>
-            <Button variant="outline" size="sm" onClick={addParameter}>
-              <Plus className="size-3.5" />
-              Add
-            </Button>
-          </div>
-          {parameters.length === 0 && (
-            <p className="text-sm text-muted-foreground">No parameters defined.</p>
-          )}
-          {parameters.map((param, i) => (
-            <div key={i} className="grid grid-cols-[1fr_auto_1fr_1fr_auto] gap-2 items-end">
-              <div>
-                {i === 0 && <Label className="text-xs text-muted-foreground">Name</Label>}
-                <Input
-                  value={param.name}
-                  onChange={(e) => updateParameter(i, "name", e.target.value)}
-                  placeholder="name"
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                {i === 0 && <Label className="text-xs text-muted-foreground">Type</Label>}
-                <Select value={param.type} onValueChange={(v) => updateParameter(i, "type", v)}>
-                  <SelectTrigger className="h-8 text-sm w-[100px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PARAM_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                {i === 0 && <Label className="text-xs text-muted-foreground">Default</Label>}
-                <Input
-                  value={param.defaultValue}
-                  onChange={(e) => updateParameter(i, "defaultValue", e.target.value)}
-                  placeholder="0"
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                {i === 0 && <Label className="text-xs text-muted-foreground">Description</Label>}
-                <Input
-                  value={param.description}
-                  onChange={(e) => updateParameter(i, "description", e.target.value)}
-                  placeholder="optional"
-                  className="h-8 text-sm"
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => removeParameter(i)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        {/* Script */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label>Script</Label>
-            <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={scriptCode === "" || isCompiling || !currentProject}
-                onClick={() => runCompileMutation({ projectId: currentProject!.id, script: scriptCode, scriptType: editorType })}
-              >
-                <Wrench className="size-3.5" />
-                Compile
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={scriptCode === "" || isRunning || !currentProject}
-                onClick={() => runRunMutation({ projectId: currentProject!.id, script: scriptCode, scriptType: editorType })}
-              >
-                <Play className="size-3.5" />
-                Test
-              </Button>
-            </div>
-          </div>
-          <LazyScriptEditor
-            script={{ name, script: scriptCode }}
-            id="new-fx"
-            scriptType={editorType}
-            onScriptChange={setScriptCode}
-          />
-        </div>
-      </SheetBody>
-
-      <SheetFooter className="flex-row justify-end gap-2">
-        <SheetClose asChild>
-          <Button variant="outline">Cancel</Button>
-        </SheetClose>
-        <Button disabled={!canCreate || isCreating} onClick={handleCreate}>
-          {isCreating ? "Creating..." : "Create"}
-        </Button>
-      </SheetFooter>
-    </>
+    </SheetPage>
   )
 }

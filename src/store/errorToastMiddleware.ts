@@ -23,7 +23,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // caller, the Look detail sheet's Duplicate (`duplicateOne` in routes/Looks.tsx), by a toast too.
   'copyLook', // components/looks/LookSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx), routes/Looks.tsx duplicateOne
   'copyTemplate', // components/templates/TemplateSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx)
-  'copyScript', // src/CopyScriptDialog.tsx
+  'copyScript', // src/CopyScriptDialog.tsx, and components/scripts/ScriptSheet.tsx (Copy to… through sheet/CopyToProjectSheet.tsx)
   'cloneProject', // src/CloneProjectDialog.tsx
   'importProject', // src/ImportProjectDialog.tsx
   'exportProject', // src/ExportProjectDialog.tsx
@@ -70,6 +70,13 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // client (master 1 is skipped by name before anything is sent). Every other delete failure is
   // toasted by `useBatchDelete` itself, which both callers go through (library-sheets plan D13).
   'deleteSpeedMaster', // src/components/speedMasters/useSpeedMasterDelete.tsx — the sheet and SpeedMasterDetailSheet
+  // The Scripts and FX Library deletes (library-sheets plan D13, D14). Neither desk route has an
+  // in-use refusal — a script's registered effects are held back client-side, unsent — so every
+  // failure is a refusal `useBatchDelete` toasts itself, under one id per sheet; the middleware
+  // would say it a second time, generically. Each hook is the sheet's batch **and** its editor's
+  // Delete (`ScriptForm`, `EditFxDefinitionSheet`), so a third caller must report its own.
+  'deleteProjectScript', // src/components/scripts/useScriptDelete.tsx — ScriptSheet and routes/ProjectScripts.tsx (ScriptForm)
+  'deleteFxDefinition', // src/components/fxLibrary/useFxDefinitionDelete.ts — FxLibrarySheet and routes/FxLibrary.tsx (EditFxDefinitionSheet)
   // Two call sites, both reporting their own refusals: the detail sheet renders a duplicate name
   // (409) inline, and the Speed Masters sheet's cells toast every refused write by code, keyed per
   // column (`reportSheetWriteFailure`, library-sheets plan D14). A third caller must do one or the other.

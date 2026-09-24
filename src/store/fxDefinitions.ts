@@ -47,9 +47,16 @@ export interface UpdateFxDefinitionRequest {
 
 export const fxDefinitionsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
-    // The definition *list* is not read here: every consumer wants the whole effect
-    // vocabulary, built-ins included, which is `effectLibrary` in `store/fixtureFx.ts`. That
-    // query carries the `FxLibrary` tag the `fxDefinitionListChanged` bridge invalidates.
+    // The running show's definitions — the `fx_definitions` rows, not the effect vocabulary (that
+    // is `effectLibrary` in `store/fixtureFx.ts`, built-ins included). The FX Library sheet reads it
+    // for one fact the library entry does not carry: which `USER` entries are **custom** (a
+    // definition's `effectId` is the entry's id) and which a script registered (library-sheets plan
+    // §3.2). Tagged `FxLibrary`, so the `fxDefinitionListChanged` bridge beside `effectLibrary`
+    // invalidates it on the same frame, and so do the three definition writes below.
+    fxDefinitionList: build.query<FxDefinition[], void>({
+      query: () => 'fx/definitions',
+      providesTags: [{ type: 'FxLibrary', id: 'DEFINITIONS' }],
+    }),
 
     fxDefinition: build.query<FxDefinition, number>({
       query: (id) => `fx/definitions/${id}`,
@@ -90,6 +97,7 @@ export const fxDefinitionsApi = restApi.injectEndpoints({
 })
 
 export const {
+  useFxDefinitionListQuery,
   useFxDefinitionQuery,
   useCreateFxDefinitionMutation,
   useUpdateFxDefinitionMutation,
