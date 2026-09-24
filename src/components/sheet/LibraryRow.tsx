@@ -62,17 +62,20 @@ export interface PartitionOption<V extends string> {
 
 /**
  * The partition chips (library-sheets plan D3): *All* plus one per partition, each with its count —
- * `LookFamilyFilterBar` generalised, and **controlled** as that is: a value and the counts in, a
- * change out. The `?param=` and the remembered value are the **route's** (as `routes/Templates.tsx`
+ * what `LookFamilyFilterBar` was, generalised (it is gone — `/templates` and `TemplatePicker` both
+ * mount these), and **controlled** as that was: a value and the counts in, a change out. The `?param=` and the remembered value are the **route's** (as `routes/Templates.tsx`
  * owns `looks.family` through `get/setStoredLookFamily`), so the same chips mount with local state
  * inside `TemplatePicker`'s portalled popover.
  *
- * **Below 600px of its own container the chips fold into a select.** The chips' own container, not
+ * **Below 400px of its own container the chips fold into a select.** The chips' own container, not
  * the viewport and not the row, because the popover has no row: a container query measures the
  * nearest `@container` ancestor, and this component brings its own. On a library row the container
- * takes the row's slack (it is the spacer), so 600 is the width left after the filter and the create
- * verb. The number is a first cut, to be re-measured in the app when the first sheet mounts the
- * chips (plan §10: the rules are the decision, the numbers are not).
+ * takes the row's slack (it is the spacer), so 400 is the width left after the filter and the create
+ * verb. **Measured, not guessed** (2026-09-24, session 2): the template family's five chips with
+ * their counts are 361px, so the first cut's 600 folded them into a select on the 1180×820 iPad
+ * frame, where the row leaves them ~430 and they fit; 400 leaves room for two-digit counts. It is
+ * one number for every library, so a library with more chips (the FX Library's six categories,
+ * session 4) re-measures it and moves it up only if its own set needs it.
  */
 export function PartitionChips<V extends string>({
   options,
@@ -100,7 +103,7 @@ export function PartitionChips<V extends string>({
     <div className={cn('@container min-w-0 flex-1', className)}>
       <nav
         aria-label={label}
-        className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @[600px]:inline-flex"
+        className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @[400px]:inline-flex"
       >
         {items.map((item) => {
           const active = item.value === value
@@ -126,7 +129,7 @@ export function PartitionChips<V extends string>({
           )
         })}
       </nav>
-      <div className="@[600px]:hidden">
+      <div className="@[400px]:hidden">
         <Select value={value} onValueChange={(next) => onChange(next as V | 'ALL')}>
           <SelectTrigger size="sm" aria-label={label} className="h-8 w-auto min-w-32 text-xs">
             <SelectValue />

@@ -478,7 +478,11 @@ the old automatic layout is the pad *face*: an effect pad is a pad like any othe
 same presence ladder, same long-press — and only its wave glyph says what it holds. The paragraphs
 below describe the pad face only.
 
-**`/templates` is a flat list ordered by name, and there is nothing to drag.** A template carried an
+**`/templates` is a list ordered by name, grouped by family under *All*, and there is nothing to
+drag.** Since the library sheets' session 2 it is a sheet (§Library sheets): under *All* the rows sit
+under family dividers — Intensity · Colour · Position · Beam, `TEMPLATE_FAMILY_ORDER` — and within
+each, as in a filtered view, they are the server's name order. The dividers are a grouping of that
+order, not an order of their own. A template carried an
 operator-set position and could sit in a *group* whose pads released each other; both went with the
 automatic layout, because both were things the busk page does better — order is a pad's place in a
 bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
@@ -491,17 +495,20 @@ recently *pressed* and name order is only the fallback for a library nothing has
 
 The **family filter** stays, and is the page's only partition: a template is in exactly one family,
 so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
-from Cmd+K. The footer says how many of the whole library the bank is showing.
+from Cmd+K. It is the library row's `PartitionChips` now, with counts (`LookFamilyFilterBar` is
+gone), and `TemplatePicker` mounts the same chips with state of its own. The footer says how many of
+the whole library the sheet is showing.
 
 A colour pad carries a **swatch**, but only when the
 template is generic and single-row — `templateSwatch` in `components/busking/padFace.ts` makes
 the same two exclusions `isOfferable` makes in `FxColourTemplates.tsx`, and for the same reason:
 `rows[0]` under a name covering several rows states one of them as the whole thing. An effect
 template has no rows, so it draws the wave in the swatch's place and an `EffectPadDetail` line
-(`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller,
-for `EffectShape`'s reason in `TemplateListRow`: the master's label is a live value, hooks cannot be
-conditional, and a hook in the loop would make every value pad in the library subscribe to the
-master bank.
+(`Colour Pulse · ½ · M2`). That detail is a **component** and not a string built by the caller:
+the master's label is a live value, hooks cannot be conditional, and a hook in the loop would make
+every value pad in the library subscribe to the master bank. (The template sheet's Master column
+answers the same question the other way — it names masters from the project's *stored* bank,
+fetched once by the route, so no row subscribes to anything.)
 
 ### The busk layout
 
@@ -1718,15 +1725,16 @@ template and *filters* them for a Look, and the family mask is the server's.
 **Five doors pick something up.** A busk pad's hold now opens a **menu** — *Pick up* first, *View*
 second — where it used to navigate straight to the library, because the hand needed a door there and
 a hold cannot mean two things (`CueSlotCell` does the same synthetic-`contextmenu` trick, which
-leaves right-click working on a mouse for free). The `/looks` and `/templates` rows carry it at the
-top of their row menus, above the edit verbs and only for the project the desk is on — the hand is
-project-scoped server-side, so a pick-up from another project's library resolves nothing.
+leaves right-click working on a mouse for free). On `/looks` and `/templates` it is a **bar verb over
+one row** (library-sheets plan D11): the row menus that carried it are gone with the rows, *Pick up*
+sits on the selection bar beside Duplicate and Copy to…, disabled over several rows with the reason,
+and it is drawn only for the project the desk is on — the hand is project-scoped server-side, so a
+pick-up from another project's library resolves nothing.
 `LookStack`'s dense row popover picks up the layer's **referent** and leaves the layer alone; it is
 not a `LayerHandlers` member, because those seven are index-based to address *this host's* layer
 while a pick-up names a library record the row already carries. And the programmer's template chip
 offers it on **right-click only**: the chip's hold is already ⌥click's touch twin (§"The two apply
-gestures"), so on touch the routes are the library row and a pad's hold menu, both of which have a
-free hold.
+gestures"), so on touch the routes are the library sheet's bar verb and a pad's hold menu.
 
 **That chip is a `Popover` opened from `onContextMenu`, and must not become a `ContextMenu`.**
 Radix's `ContextMenuTrigger` arms a long-press timer of its **own** (~700ms) for `touch`/`pen`,
@@ -2379,8 +2387,8 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 **The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — move onto the sheet
 kit, each on its existing route** (`lighting7/docs/plans/library-sheets-plan.md`; the boards are
 `library-sheets-design/`, the plan wins on behaviour and the boards on layout and copy). Session 1
-built the kit's library half and put **Speed Masters** on it; Looks and Templates (session 2),
-template values in the cell (3) and Scripts and the FX Library (4) follow. The rules, which every one
+built the kit's library half and put **Speed Masters** on it; session 2 put **Looks and Templates**
+on it; template values in the cell (3) and Scripts and the FX Library (4) follow. The rules, which every one
 of the five keeps:
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
@@ -2442,9 +2450,11 @@ of the five keeps:
   rows by the sheet's `rowName`. It changed what `write` receives on the existing sheets too: a snap
   cue's Curve and a head without a beam angle or gel no longer reach their writers.
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
-  generalised and still controlled, folding to a select below 600px of its **own** `@container` —
-  so it works inside `TemplatePicker`'s portalled popover, which has no row. Nothing mounts the
-  chips yet; 600 is re-measured when session 2 does.
+  generalised (it is gone) and still controlled, folding to a select below **400px** of its **own**
+  `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row. The
+  first cut said 600; measured in session 2, the template family's five chips with counts are
+  361px, and 600 folded them on the 1180×820 frame where the row leaves them ~430. One number for
+  every library: session 4's six FX categories re-measure it.
 - **`groupRows.ts`** interleaves the dividers; the caller mints the divider row, and a row in an
   undeclared partition is never dropped.
 - **`cells/NumberCell.tsx`** — `TextCell`'s shape with `EditorField` inside: a unit, a range that is
@@ -2460,6 +2470,22 @@ of the five keeps:
 - **`libraryScope.ts`** — `libraryPermission(isCurrentProject, projectName)`: the permission, the
   bar's words and the reason.
 - **`reportSheetWriteFailure.ts`** — D14's toast, `rigWriteFailureMessage`'s pattern.
+- **`LibraryVerb.tsx`** (session 2) — a row verb on the bar, its disabled title the *reason*, and
+  `oneRecordReason` for Include and Pick up over several rows. Its word folds below **1100px of
+  bar** (`ROW_VERB_WORD_CLASS` in `toolbarFolds.ts`), ungated by a strip and earlier than Set and
+  Clear: measured on the template sheet, Set · Clear · Spread, four row verbs and Deselect are
+  769px worded — ~1090 with the counts and hints — and the 1180×820 frame gives the bar 940, so
+  Delete and Deselect were clipped.
+- **`CopyToProjectSheet.tsx`** (session 2) — *Copy to…* over a selection: one request per record,
+  the target defaulting to the running project when the library shown is another's, a new name
+  offered only for one record, and a record that fails named in the sheet's alert and **kept** for
+  a retry while the ones that landed drop out. It replaced `CopyLookDialog`.
+- **`useDuplicateBatch.ts`** and **`LibraryReadOuts.tsx`** (session 2) — Duplicate over a selection,
+  one copy-route call per record, a refusal toasted once under the sheet's key; and `CountReadOut`
+  (a faint em-dash at zero) and `ReadOnlyNote` (the scope's lock and reason on the bar).
+- **`lib/duplicateName.ts`** (session 2) — Duplicate's `(Copy)`, `(Copy 2)` …, against the
+  library's names **and the ones the batch has already minted** (it adds to the set it is given),
+  since the list has not refetched between two copies of one batch.
 
 **The Speed Masters sheet** (`components/speedMasters/SpeedMasterSheet.tsx`, on
 `routes/SpeedMasters.tsx`) is beat · BPM · Tap · Start · Follows · Ratio · Usage · Used by · Notes.
@@ -2480,6 +2506,51 @@ Four things about it are easy to get wrong:
   one master's per project, and the desk would accept the first and 409 the rest.
 - **Off the current project the live bank is not read at all** — no beat, the stored tempo shown —
   because a cloned project's masters can share uuids with the running ones.
+
+**The Looks sheet** (`components/looks/LookSheet.tsx`) is Families · Preview · Contents · Notes · Cue
+layers · Busk pages; **the Templates sheet** (`components/templates/TemplateSheet.tsx`) is Holds ·
+Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the route under family dividers
+(§Looks, templates and layers). Session 2's facts:
+
+- **A record with busk pads is held for the batch delete's question, unsent.** Pads are a hint the
+  desk does not refuse on — `layerCount` alone gates the delete — but they go silently with the
+  record, and the confirm the sheets replaced (*"It has pads on 2 busk pages; those go with it"*)
+  was the only warning an operator ever got. So `useLookDelete` and `useTemplateDelete` answer
+  `inUse` for one on the plain pass **without sending**, and the dialog lists it beside the desk's
+  refusals, as the Kit board draws *Ballyhoo · on 3 busk pages*. **Its *Delete anyway* is sent
+  plain, never forced** — pads were the only use the dialog could name, and the desk skips its
+  usage check on `force`, so forcing would take a cue layer, an effect reference or a running layer
+  with it unsaid. If the desk then answers in use, the dialog reopens with its answer
+  (`useBatchDelete`'s force pass reopens on an in-use outcome, handing `remove` the record's earlier
+  answer as `previous`), and only that answer's *Delete anyway* forces.
+  Both hooks are also the detail sheets' deletes — `LookDetailSheet` and `TemplateEditor`'s
+  Delete — so a single delete asks the same question in the same dialog.
+- **The template in-use line names all three uses the desk counts**, because each fails
+  differently under force: cue layers go with it, effect parameters naming it (`fxReferenceCount`)
+  are not rewritten and an unresolved colour runs **white**, and programmer layers applying it now
+  (`runningCount`) stop at once.
+- **Another project's library is read-only on the server too.** Both libraries' PUT and DELETE are
+  `withCurrentProject` (a DELETE there answers *Cannot modify - not current project*), only the copy
+  route is `withProject` on its source — so off the current project the rename, Notes, Fade and
+  Master are inert, **no row opens** (the detail sheet and the editor edit exactly what the scope
+  refuses), Pick up is not drawn, and Include, Duplicate and Delete are disabled with the reason.
+  It also means a test record copied *into* another project cannot be deleted from here.
+- **Fade is seconds, on value templates only.** A null fade — *default (none)*, which a press
+  applies at 0 — draws the em-dash and opens its editor at 0; Clear writes null with
+  `fadeDurationMsPresent: true`; Spread is the kit's `duration` plan. Set and Spread compare a null
+  fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
+  An effect template's Fade is `undefined`: blank, and named when a marquee sweeps it up.
+- **Master is one field of `PUT {effect}`, and which field is the effect's timing.**
+  `speedMasterUuid` on a `BEAT` effect, `rateSpeedMasterUuid` on a `WALL_CLOCK` one; the body is
+  the whole effect with that field changed, since the PUT replaces the effect half — and it
+  **recreates the effect**, so a running instance restarts (the cell's title says so). A beat
+  effect's null is master 1, compared canonically and written back as null — and it reads as master 1
+  even before the bank has loaded (a `master-1` stand-in, never on the wire), or a marquee over it
+  would skip a row that takes a master; a wall-clock effect's null is **unscaled**, which it alone
+  offers. An effect whose type no longer resolves has no
+  `timingSource`, so which field to write is unknown: its Master is blank and skipped.
+- **Value reads `rows ?? []`** and never resolves (`templateIntent.ts`'s rule): the swatch and
+  `describeTemplateRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
 
 ### The editor kit
 
@@ -4430,9 +4501,10 @@ path may quietly change where it lands.
   are separate entities (see §Looks, templates and layers). `/looks` has **no family
   filter at all**: a Look's families are *derived* from its rows, so one covering
   colour and position belongs to two banks at once and filtering by one would hide
-  most of the library from most filters. `/templates` has the sticky filter
-  (`LookFamilyFilterBar`, kept under its old name — a private storage key nobody reads
-  by name), and there a family **is** an exact partition: a template holds exactly one.
+  most of the library from most filters. `/templates` has the sticky filter — the
+  library row's `PartitionChips` since the library sheets, remembered under
+  `looks.family`, kept under its old name as a private storage key nobody reads by
+  name — and there a family **is** an exact partition: a template holds exactly one.
   `useTemplateFamilyNavItems()` gives Cmd+K four deep links as `?family=` query params
   on the one route, with `pathMatch` the bare `/templates` so the sidebar highlights its
   single row whichever family you arrived in — asserted in `navigation.test.ts`, which

@@ -234,7 +234,7 @@ describe('TemplatePicker', () => {
 
   it('offers the family segments instead where only rows are selected', () => {
     render(picker({ cells: [], askedFamilies: null }))
-    // The segments are `LookFamilyFilterBar`'s, and picking one narrows every section.
+    // The segments are the library's `PartitionChips`, and picking one narrows every section.
     fireEvent.click(within(panel()).getByText('Position'))
     expect(sectionPads('Per fixture')).toEqual(['Front Focus'])
     expect(within(panel()).queryByText('Effects')).not.toBeInTheDocument()

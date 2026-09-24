@@ -4,6 +4,8 @@ import { store } from './index'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type {
   ApplyTemplateRequest,
+  CopyTemplateRequest,
+  CopyTemplateResponse,
   ApplyTemplateResponse,
   TemplateInput,
   TemplateResolveRequest,
@@ -150,6 +152,25 @@ export const templatesApi = restApi.injectEndpoints({
     }),
 
     /**
+     * Copy a template — into this project (the sheet's Duplicate, with a `(Copy n)` name) or another
+     * (*Copy to…*). lighting7's route since the library-sheets plan's session 0, on `copyLook`'s
+     * model: a fresh uuid and fresh row uuids, `lastPressedAt` cleared, a name clash a 409.
+     *
+     * The copy lands in the **target** project's library, so only that list is invalidated. Unlike
+     * `copyLook` there is no `Fixture` / `GroupList` beside it: those carry Look compatibility, and a
+     * template has none (capability-only, D6). The server also fires `templateListChanged`, which
+     * the bridge turns into the same invalidation for every other window.
+     */
+    copyTemplate: build.mutation<CopyTemplateResponse, { projectId: number; templateId: number } & CopyTemplateRequest>({
+      query: ({ projectId, templateId, ...body }) => ({
+        url: `projects/${projectId}/templates/${templateId}/copy`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (result) => (result == null ? [] : [{ type: 'TemplateList', id: result.targetProjectId }]),
+    }),
+
+    /**
      * The editor's "resolves to" panel — the **same** resolver the cook runs, asked about a draft.
      *
      * A mutation rather than a query despite being a read, because the question is "resolve *this*
@@ -277,6 +298,7 @@ export const {
   useCreateTemplateMutation,
   useSaveTemplateMutation,
   useDeleteTemplateMutation,
+  useCopyTemplateMutation,
   useResolveTemplateMutation,
   useApplyTemplateMutation,
   useToggleTemplateMutation,

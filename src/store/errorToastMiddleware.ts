@@ -17,7 +17,12 @@ import { formatError } from '../lib/formatError'
  */
 export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Inline <Alert variant="destructive"> rendered from the mutation's own `error` state
-  'copyLook', // src/components/looks/CopyLookDialog.tsx
+  // The library sheets' copy routes (library-sheets plan D14), and every caller reports its own
+  // refusal: *Copy to…* through `CopyToProjectSheet`, which names each record that failed in its
+  // alert and keeps it for a retry; the sheets' Duplicate by a keyed toast; and `copyLook`'s third
+  // caller, the Look detail sheet's Duplicate (`duplicateOne` in routes/Looks.tsx), by a toast too.
+  'copyLook', // components/looks/LookSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx), routes/Looks.tsx duplicateOne
+  'copyTemplate', // components/templates/TemplateSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx)
   'copyScript', // src/CopyScriptDialog.tsx
   'cloneProject', // src/CloneProjectDialog.tsx
   'importProject', // src/ImportProjectDialog.tsx
@@ -37,11 +42,14 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // "delete anyway" confirmation, which names the cues that lose a layer. A duplicate-name 409 on
   // create/save is likewise rendered beside the field the operator has to change.
   //
-  // NB: `deleteLook` has three call sites and only the 409 is a flow step — every *other* failure
-  // has to be reported by hand, or a delete that quietly did nothing looks like a success. All
-  // three do (LookDetailSheet inline, Looks.tsx and BuskingView by toast); a fourth must too.
-  'deleteLook', // src/components/looks/LookDetailSheet.tsx, routes/Looks.tsx, busking/BuskingView.tsx
-  'saveLook', // ...same sheet, and LookRowStore's layer-scope write
+  // NB: `deleteLook` has one call site, `useLookDelete` — the Look sheet's batch and the detail
+  // sheet's single delete both go through it (library-sheets plan D13) — and only the 409 is a flow
+  // step: every *other* failure is toasted by `useBatchDelete`, or a delete that quietly did
+  // nothing would look like a success. A second caller must report its own.
+  'deleteLook', // src/components/looks/useLookDelete.tsx — LookSheet and LookDetailSheet
+  // LookDetailSheet renders a clash inline; the Look sheet's name and Notes cells toast by column
+  // (`reportSheetWriteFailure`, D14); LookRowStore's layer-scope write reports its own.
+  'saveLook', // components/looks/LookDetailSheet.tsx, components/looks/LookSheet.tsx, programmer/LookRowStore.tsx
   // `createLook` stood here. It went with the endpoint in session 3: a Look is recorded now, never
   // hand-authored, so no client sends `POST /looks`. `errorToastMiddleware.test.ts` is what caught
   // the stale name — it asserts every entry names an endpoint that exists.
@@ -49,10 +57,11 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // The template trio, for exactly the reasons above one entity along. `TEMPLATE_IN_USE` opens the
   // same "delete anyway" guard; a duplicate name and each of the four write-boundary rules (one
   // family, closed vocabulary, right intent shape, no group rows) are 400s the editor renders beside
-  // the field. `routes/Templates.tsx` toasts anything else on delete, as its Look counterpart does.
-  'deleteTemplate', // src/routes/Templates.tsx
+  // the field. `useTemplateDelete` — the sheet's batch and the editor's Delete — toasts anything
+  // else on delete (D13), and the template sheet's cells toast a refused write by column (D14).
+  'deleteTemplate', // src/components/templates/useTemplateDelete.tsx — TemplateSheet and routes/Templates.tsx (TemplateEditor)
   'createTemplate', // src/components/templates/TemplateEditor.tsx — inline alert
-  'saveTemplate', // ...same editor
+  'saveTemplate', // ...same editor (via routes/Templates.tsx), and components/templates/TemplateSheet.tsx
   // Silent too: its sheet stays open on failure and renders the error inline (the strip's chip is
   // what opens it), so a toast beside that alert would say the same thing twice.
   'createTemplateFromProgrammer', // src/components/programmer/NewTemplateFromSelectionSheet.tsx

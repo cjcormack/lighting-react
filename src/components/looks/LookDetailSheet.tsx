@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CopyPlus, Download, Loader2, TriangleAlert, XCircle } from 'lucide-react'
+import { CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import {
   Sheet,
@@ -19,10 +19,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { useDeleteLookMutation, useLookQuery, useSaveLookMutation } from '@/store/looks'
+import { useLookQuery, useSaveLookMutation } from '@/store/looks'
 import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
-import type { LookInUseError, LookSummary } from '@/api/looksApi'
+import type { LookSummary } from '@/api/looksApi'
+import { useLookDelete } from './useLookDelete'
 
 export interface LookDetailSheetProps {
   open: boolean
@@ -72,12 +73,16 @@ export function LookDetailSheet({
     { skip: !open || lookId === 0 },
   )
   const [saveLook, { isLoading: isSaving, error: saveError }] = useSaveLookMutation()
-  const [deleteLook, { isLoading: isDeleting, error: deleteError }] = useDeleteLookMutation()
+  // The sheet's batch delete over one Look (library-sheets plan D13): the same question, in the same
+  // dialog, as a Delete over a selection — and it reports its own refusals.
+  const { run: runDelete, busy: isDeleting, dialog: deleteDialog } = useLookDelete({
+    projectId,
+    onDeleted: () => onOpenChange(false),
+  })
   const { include, isLoading: isIncluding } = useInclude(projectId)
 
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
-  const [inUse, setInUse] = useState<LookInUseError | null>(null)
 
   // Seed the form once per Look, tracked by id in a ref rather than by dependencies.
   //
@@ -95,7 +100,6 @@ export function LookDetailSheet({
     seededLookIdRef.current = look.id
     setName(look.name)
     setNotes(look.notes ?? '')
-    setInUse(null)
   }, [look])
 
   const rowsByTarget = useMemo(() => {
@@ -135,24 +139,6 @@ export function LookDetailSheet({
       .catch(() => {
         // Rendered inline below.
       })
-  }
-
-  const remove = async (force: boolean) => {
-    try {
-      await deleteLook({ projectId, lookId: look.id, force }).unwrap()
-      onOpenChange(false)
-    } catch (err) {
-      // 409: layers or rows still reference it. Deleting anyway is allowed but leaves those cues
-      // short a layer, so the operator gets the count before they decide.
-      const body = (err as { data?: LookInUseError })?.data
-      if (body?.code === 'LOOK_IN_USE') {
-        setInUse(body)
-        return
-      }
-      // Anything else falls through to the alert below: `deleteLook` is in `SILENT_ENDPOINTS` for
-      // the 409's sake, so nothing else reports a delete that failed for another reason.
-      setInUse(null)
-    }
   }
 
   return (
@@ -202,10 +188,10 @@ export function LookDetailSheet({
             />
           </div>
 
-          {(saveError ?? deleteError) != null && (
+          {saveError != null && (
             <Alert variant="destructive">
               <XCircle className="size-4" />
-              <AlertDescription>{formatError(saveError ?? deleteError)}</AlertDescription>
+              <AlertDescription>{formatError(saveError)}</AlertDescription>
             </Alert>
           )}
 
@@ -268,28 +254,10 @@ export function LookDetailSheet({
             )}
           </div>
 
-          {inUse && (
-            <Alert variant="destructive">
-              <TriangleAlert className="size-4" />
-              <AlertDescription className="space-y-2">
-                <p>
-                  {inUse.error} Deleting it anyway drops {inUse.layerCount} cue layer
-                  {inUse.layerCount === 1 ? '' : 's'}. Those cues will fire without this
-                  look&rsquo;s contribution.
-                </p>
-                {inUse.cueNames.length > 0 && (
-                  <p className="text-xs">Affected cues: {inUse.cueNames.join(', ')}</p>
-                )}
-                <Button size="sm" variant="destructive" onClick={() => remove(true)}>
-                  Delete anyway
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
         </SheetBody>
 
         <SheetFooter className="flex-row justify-between">
-          <Button variant="destructive" onClick={() => remove(false)} disabled={isDeleting}>
+          <Button variant="destructive" onClick={() => void runDelete([look])} disabled={isDeleting}>
             {isDeleting && <Loader2 className="size-4 animate-spin" />}
             Delete
           </Button>
@@ -306,6 +274,7 @@ export function LookDetailSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+      {deleteDialog}
     </Sheet>
   )
 }

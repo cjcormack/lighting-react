@@ -12,6 +12,14 @@ export type AttributeFamily = 'INTENSITY' | 'POSITION' | 'COLOUR' | 'BEAM'
 
 export const ATTRIBUTE_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'POSITION', 'COLOUR', 'BEAM']
 
+/**
+ * The template library's family chips, and its dividers under *All* — Intensity · Colour · Position
+ * · Beam (library-sheets plan §3.2), the order an operator builds a state in rather than
+ * [ATTRIBUTE_FAMILIES]' declaration order. Shared by `/templates` and `TemplatePicker`, which mount
+ * the same `PartitionChips`.
+ */
+export const TEMPLATE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
+
 /** Operator-facing labels. Plural names the *bank*, which is what the library's filter shows. */
 export const FAMILY_LABELS: Record<AttributeFamily, { singular: string; plural: string }> = {
   INTENSITY: { singular: 'Intensity', plural: 'Intensities' },

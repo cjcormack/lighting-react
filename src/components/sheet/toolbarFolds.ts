@@ -69,3 +69,17 @@ export const MID_FOLDED_CLASS = '@max-[800px]:hidden'
 
 /** [MID_FOLDED_CLASS] gated on the bar carrying a strip — Locate and Highlight's fold. */
 export const STRIP_MID_FOLDED_CLASS = 'group-data-[strip]/bar:@max-[800px]:hidden'
+
+/**
+ * When a library sheet's **row verbs** — Include, Pick up, Duplicate, Copy to…, Delete — keep their
+ * words (library-sheets plan D11). Below 1100px of the bar they are icons, with the verb on each
+ * one's `aria-label` and its title.
+ *
+ * Earlier than [WORD_CLASS], and ungated by a strip, because the row verbs are the widest thing a
+ * library bar carries: measured on the template sheet on 2026-09-24, Set · Clear · Spread, four row
+ * verbs and Deselect are 769px worded, which with the counts and the key hints is ~1090 — and the
+ * 1180×820 iPad frame gives the bar 940 with the sidebar open, so the last two verbs were clipped.
+ * Folding the row verbs' words saves ~260 of it. Set, Clear and Spread keep theirs: they are the
+ * gestures a phone has no key for (`CellSelectionActions`), and they are what a marquee is for.
+ */
+export const ROW_VERB_WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'

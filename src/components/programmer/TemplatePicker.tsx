@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { LookFamilyFilterBar, type LookFamilyFilter } from '@/components/ViewSwitcher'
+import type { LookFamilyFilter } from '@/components/ViewSwitcher'
+import { PartitionChips } from '@/components/sheet/LibraryRow'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EffectPadDetail } from '@/components/busking/EffectPadDetail'
 import {
@@ -20,7 +21,7 @@ import { templateLayerPresence } from '@/components/busking/lookPresence'
 import { useEditorForm } from '@/components/editor/EditorSurface'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
-import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, TEMPLATE_FAMILY_ORDER, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { recentTemplates } from '@/lib/templateRecents'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
@@ -251,7 +252,20 @@ export function TemplatePicker({
             />
           </div>
           {rowsOnly ? (
-            <LookFamilyFilterBar current={family} onChange={setFamily} />
+            // The library's own chips, with state of their own here: the route's `looks.family` is the
+            // library's remembered view, and this panel's filter belongs to one opening. They fold to
+            // a select on their own container, which is what makes them work in a portalled popover.
+            <PartitionChips<AttributeFamily>
+              label="Family"
+              value={family}
+              onChange={setFamily}
+              allCount={offerable.length}
+              options={TEMPLATE_FAMILY_ORDER.map((f) => ({
+                value: f,
+                label: FAMILY_LABELS[f].singular,
+                count: offerable.filter((t) => t.family === f).length,
+              }))}
+            />
           ) : (
             <span className="flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
               {scopeLabel != null && (

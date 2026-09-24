@@ -26,8 +26,13 @@ export interface BatchDeleteState<Item, S> {
 }
 
 export interface UseBatchDeleteOptions<Item, S> {
-  /** One delete — plain, or forced — answered as an outcome, never thrown. */
-  remove: (item: Item, force: boolean) => Promise<DeleteOutcome<S>>
+  /**
+   * One delete — plain, or forced — answered as an outcome, never thrown. On the forced pass
+   * [previous] is what that record answered last time, so an entity whose plain pass held a record
+   * back **without sending** (a Look's busk pads, which the desk does not refuse on) can send it
+   * plain now and learn what else uses it, rather than forcing past uses nobody was told about.
+   */
+  remove: (item: Item, force: boolean, previous?: S) => Promise<DeleteOutcome<S>>
   name: (item: Item) => string
   /**
    * A record this batch must not send at all, with the reason — master 1, a built-in effect
@@ -131,27 +136,36 @@ export function useBatchDelete<Item, S>({
     [name, noun, onDeleted, remove, report, skip, toastKey],
   )
 
-  /** *Delete anyway*: force the in-use ones, and only those. */
+  /**
+   * *Delete anyway*: force the in-use ones, and only those.
+   *
+   * A record may answer **in use again** — one [remove] held back unsent and has now sent plain,
+   * learning uses the first question could not name. Those reopen the dialog, listing what the desk
+   * said, so nothing is forced past a use the operator was never shown; the next *Delete anyway*
+   * forces them with that answer as [remove]'s `previous`.
+   */
   const force = useCallback(async () => {
     if (state == null || busyRef.current) return
     busyRef.current = true
     setBusy(true)
     const deleted: Item[] = []
+    const again: InUseEntry<Item, S>[] = []
     const refused: { item: Item; reason: string }[] = []
     try {
-      for (const { item } of state.inUse) {
-        const outcome = await settle(remove(item, true))
+      for (const { item, summary } of state.inUse) {
+        const outcome = await settle(remove(item, true, summary))
         if (outcome.kind === 'ok') deleted.push(item)
-        else refused.push({ item, reason: outcome.kind === 'refused' ? outcome.reason : 'still in use' })
+        else if (outcome.kind === 'inUse') again.push({ item, summary: outcome.summary })
+        else refused.push({ item, reason: outcome.reason })
       }
     } finally {
       busyRef.current = false
       setBusy(false)
     }
-    setState(null)
+    setState(again.length > 0 ? { total: state.total, deleted: [...state.deleted, ...deleted.map(name)], inUse: again } : null)
     report(refused)
     if (deleted.length > 0) onDeleted?.(deleted)
-  }, [onDeleted, remove, report, state])
+  }, [name, onDeleted, remove, report, state])
 
   /** *Keep them*: close the dialog, and hand the in-use records back to the sheet. */
   const keep = useCallback(() => {

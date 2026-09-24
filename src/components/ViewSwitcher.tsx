@@ -1,25 +1,15 @@
 import { type ReactNode } from 'react'
 import {
-  Aperture,
   AudioWaveform,
   BookOpenText,
-  Layers,
   LayoutGrid,
-  Move,
-  Palette,
   SlidersVertical,
-  Sun,
   TableProperties,
   Theater,
 } from 'lucide-react'
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
-import {
-  ATTRIBUTE_FAMILIES,
-  FAMILY_LABELS,
-  parseFamilySlug,
-  type AttributeFamily,
-} from '@/lib/attributeFamily'
+import { parseFamilySlug, type AttributeFamily } from '@/lib/attributeFamily'
 
 export type ShowView = 'programmer' | 'show' | 'prompt-book' | 'busk'
 
@@ -31,15 +21,16 @@ const ITEM = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs fo
  * Every switcher in this file therefore REQUIRES a `@container` ancestor — see `Breadcrumbs.tsx`
  * for the same contract. An unnamed `@[NNpx]:` with no container above it never matches, so a host
  * that forgets it loses its labels permanently and silently, and no test can see that. The hosts
- * are `ShowHeader`, `Fixtures`, `FixturesList`, `Groups`, `GroupsList` and `Looks`.
+ * are `ShowHeader`, `Fixtures`, `FixturesList`, `Groups` and `GroupsList`. (The template library's
+ * family filter lived here too, with a five-pill threshold; it is `PartitionChips` now, in
+ * `sheet/LibraryRow.tsx`, and folds to a select on its own container.)
  *
  * These used to be one viewport `sm:`, which was wrong twice over: the app sidebar insets the
  * content region, so viewport width is not the width these sit in; and one number cannot serve a
- * two-pill switcher and a five-pill one. Written out per switcher rather than computed, because a
+ * two-pill switcher and a four-pill one. Written out per switcher rather than computed, because a
  * template literal produces no CSS — the scanner only reads whole class strings.
  */
 const LABEL_AT_560 = 'hidden @[560px]:inline' // Cards · List / Cards · Table — two pills
-const LABEL_AT_720 = 'hidden @[720px]:inline' // Look families — five pills
 /**
  * Four pills in a header that also carries a breadcrumb trail (~220-320px above 640), the save
  * indicator, per-page actions, Start/Stop and the live dot: roughly 570px is spoken for before any
@@ -332,86 +323,6 @@ export function getStoredLookFamily(): LookFamilyFilter {
   } catch {
     return 'ALL'
   }
-}
-
-/**
- * The **template** library's attribute-family filter.
- *
- * Buttons rather than links, unlike every other switcher in this file. It arrived on `/looks`, where
- * the argument was that a Look spanning colour and position could not live in one of four routes —
- * and session 3 moved it here, where the argument is stronger the other way: a template is in
- * exactly one family, so this really is an exact partition of the library. `/looks` has no filter at
- * all now, because a Look spans families by nature and filtering by one would hide most of them from
- * most filters. Cmd+K still deep-links via `?family=`, which the library reads on arrival.
- */
-export function LookFamilyFilterBar({
-  current,
-  onChange,
-}: {
-  current: LookFamilyFilter
-  onChange: (family: LookFamilyFilter) => void
-}) {
-  return (
-    <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
-      <FilterSegment
-        labelClass={LABEL_AT_720}
-        active={current === 'ALL'}
-        label="All"
-        icon={<Layers className="size-3.5" />}
-        onClick={() => onChange('ALL')}
-      />
-      {ATTRIBUTE_FAMILIES.map((family) => {
-        const Icon = FAMILY_ICONS[family]
-        return (
-          <FilterSegment
-            key={family}
-            labelClass={LABEL_AT_720}
-            active={current === family}
-            label={FAMILY_LABELS[family].singular}
-            icon={<Icon className="size-3.5" />}
-            onClick={() => onChange(family)}
-          />
-        )
-      })}
-    </nav>
-  )
-}
-
-const FAMILY_ICONS: Record<AttributeFamily, typeof Sun> = {
-  INTENSITY: Sun,
-  POSITION: Move,
-  COLOUR: Palette,
-  BEAM: Aperture,
-}
-
-function FilterSegment({
-  active,
-  label,
-  icon,
-  onClick,
-  labelClass = LABEL_AT_560,
-}: {
-  active: boolean
-  label: string
-  icon: ReactNode
-  onClick: () => void
-  labelClass?: string
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      onClick={onClick}
-      className={cn(
-        ITEM,
-        active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {icon}
-      <span className={labelClass}>{label}</span>
-    </button>
-  )
 }
 
 function Segment({

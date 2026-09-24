@@ -217,6 +217,21 @@ export interface TemplateTarget {
   key: string
 }
 
+/** `POST …/templates/{id}/copy` — `CopyLookRequest`'s shape (library-sheets plan D10). */
+export interface CopyTemplateRequest {
+  targetProjectId: number
+  /** Blank or absent keeps the source's name. */
+  newName?: string
+}
+
+export interface CopyTemplateResponse {
+  templateId: number
+  templateName: string
+  targetProjectId: number
+  targetProjectName: string
+  message: string
+}
+
 /** 409 body when a template is still applied by a layer. Rendered inline; offers "delete anyway". */
 export interface TemplateInUseError {
   error: string

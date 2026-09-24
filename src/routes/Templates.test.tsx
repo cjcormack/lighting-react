@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TemplateSummary } from '@/api/templatesApi'
 
 /**
- * The template library's two structural claims: the **sticky family filter** is the page's only
- * partition, and **`?family=` deep-links** into it.
+ * The template library's structural claims: the **family chips** are the page's only partition — a
+ * sticky view, deep-linked by `?family=` — and under *All* the sheet is **grouped by family
+ * dividers** (library-sheets plan D3), name-ordered within each and in the plan's family order.
  *
- * Both moved here from `/looks` in session 3 along with the argument for them, so these are the
- * assertions that used to belong to that page — and they matter more here, because on `/templates` a
- * family really is an exact partition of the library.
+ * The chips moved here from `/looks` in session 3 along with the argument for them: on `/templates` a
+ * family really is an exact partition of the library. The sheet's own columns and verbs are
+ * `TemplateSheet.test.tsx`'s.
  */
 let templates: TemplateSummary[] = []
 
@@ -18,11 +19,24 @@ vi.mock('@/store/templates', () => ({
   useTemplateListQuery: () => ({ data: templates, isLoading: false }),
   useCreateTemplateMutation: () => [vi.fn(), { isLoading: false }],
   useSaveTemplateMutation: () => [vi.fn(), { isLoading: false }],
-  useDeleteTemplateMutation: () => [vi.fn(), { isLoading: false }],
+  useDeleteTemplateMutation: () => [vi.fn()],
+  useCopyTemplateMutation: () => [vi.fn()],
 }))
+vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/hand', () => ({ handPickUp: () => true }))
 vi.mock('@/store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
-  useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
+  useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet', isCurrent: true }, isLoading: false }),
+  useProjectListQuery: () => ({ data: [{ id: 1, name: 'Hamlet', isCurrent: true }] }),
+}))
+vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
+    getTotalSize: () => count * estimateSize(),
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * estimateSize(), size: estimateSize() })),
+    scrollToIndex: () => {},
+  }),
 }))
 vi.mock('@/components/templates/TemplateEditor', () => ({
   TemplateEditor: ({ open }: { open: boolean }) => (open ? <div data-testid="editor" /> : null),
@@ -89,50 +103,82 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+/** The sheet's rows, dividers included, in order — a divider by its label, a member by its name. */
+function sheetRows(): string[] {
+  return [...document.querySelectorAll('[data-row-id]')].map((el) =>
+    el.getAttribute('data-row-id')!.startsWith('family:')
+      ? `— ${el.textContent}`
+      : (el.querySelector('[data-first-column]')?.textContent ?? ''),
+  )
+}
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    },
+  )
+})
+afterEach(() => vi.unstubAllGlobals())
+
 describe('ProjectTemplates', () => {
-  it('lists every template unfiltered', () => {
+  it('groups every template under family dividers under All, in the plan’s order', () => {
+    templates = [...templates, template({ id: 4, uuid: 'u4', name: 'Deep Blue' })]
     renderAt('/projects/1/templates')
-    expect(screen.getByText('Amber Key')).toBeInTheDocument()
-    expect(screen.getByText('Half Up')).toBeInTheDocument()
-    expect(screen.getByText('Downstage Centre')).toBeInTheDocument()
+    // Intensity · Colour · Position · Beam — not `ATTRIBUTE_FAMILIES`' declaration order — and the
+    // server's name order within each. No stored order either way.
+    expect(sheetRows()).toEqual([
+      '— Intensity · 1',
+      'Half Up',
+      '— Colour · 2',
+      'Amber Key',
+      'Deep Blue',
+      '— Position · 1',
+      'Downstage Centre',
+    ])
   })
 
-  it('lands filtered from a ?family= deep link', () => {
+  it('lands filtered from a ?family= deep link, with no dividers', () => {
     // Cmd+K's four per-family entries are query params on this one route, so arriving by link has to
     // filter — `navigation.test.ts` pins the links themselves.
     renderAt('/projects/1/templates?family=colour')
-    expect(screen.getByText('Amber Key')).toBeInTheDocument()
-    expect(screen.queryByText('Half Up')).not.toBeInTheDocument()
+    expect(sheetRows()).toEqual(['Amber Key'])
   })
 
   it('partitions exactly — every template is in one family and no other', () => {
     renderAt('/projects/1/templates?family=position')
-    expect(screen.getByText('Downstage Centre')).toBeInTheDocument()
-    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
-    expect(screen.queryByText('Half Up')).not.toBeInTheDocument()
+    expect(sheetRows()).toEqual(['Downstage Centre'])
   })
 
-  it('filters on a click and remembers the choice for next time', () => {
+  it('filters on a chip and remembers the choice for next time; All brings the dividers back', () => {
     const { unmount } = renderAt('/projects/1/templates')
-    // By role, not by text: "Intensity" is also the family badge on the row below, so `getByText`
-    // is ambiguous. The filter is a button and carries the label as its accessible name.
-    fireEvent.click(screen.getByRole('button', { name: 'Intensity' }))
-    expect(screen.getByText('Half Up')).toBeInTheDocument()
-    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Intensity/ }))
+    expect(sheetRows()).toEqual(['Half Up'])
     unmount()
 
     // Sticky, so the sidebar's single row lands where you left it.
     renderAt('/projects/1/templates')
-    expect(screen.getByText('Half Up')).toBeInTheDocument()
-    expect(screen.queryByText('Amber Key')).not.toBeInTheDocument()
+    expect(sheetRows()).toEqual(['Half Up'])
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+    expect(sheetRows()[0]).toBe('— Intensity · 1')
+  })
+
+  it('counts each family on its chip', () => {
+    renderAt('/projects/1/templates')
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveTextContent('All3')
+    expect(screen.getByRole('button', { name: /^Colour/ })).toHaveTextContent('Colour1')
+    expect(screen.getByRole('button', { name: /^Beam/ })).toHaveTextContent('Beam0')
   })
 
   it('says which shape each template is, because applying them differs', () => {
     // A per-fixture template applied to a head it holds no entry for asserts nothing for that head,
-    // so the row has to say which it is.
+    // so the Value column has to say which it is.
     renderAt('/projects/1/templates')
-    expect(screen.getByText(/Generic · any fixture with colour/)).toBeInTheDocument()
-    expect(screen.getByText(/Per fixture · 2 heads/)).toBeInTheDocument()
+    expect(screen.getByText('2 heads · per fixture')).toBeInTheDocument()
+    expect(screen.getByText(/^#FF9D4A · /)).toBeInTheDocument()
   })
 
   it('offers New template — a template is authored, not captured', () => {
@@ -154,31 +200,10 @@ describe('ProjectTemplates', () => {
     expect(screen.getByText(/No templates yet/)).toBeInTheDocument()
   })
 
-
-  describe('the "on n pages" hint', () => {
-    it('says how many busk pages hold a pad, and says nothing at zero', () => {
-      templates = [template({ buskPageCount: 0 }), template({ id: 2, uuid: 'u2', name: 'Half Up', buskPageCount: 1 }), template({ id: 3, uuid: 'u3', name: 'Wash', buskPageCount: 2 })]
-      renderAt('/projects/1/templates')
-
-      expect(screen.getByText('on 1 page')).toBeInTheDocument()
-      expect(screen.getByText('on 2 pages')).toBeInTheDocument()
-      expect(screen.queryByText('on 0 pages')).not.toBeInTheDocument()
-    })
-
-    it('warns in the delete confirm, because the pads go silently and without a second ask', () => {
-      // A pad is an enrichment, not a use: it does not gate the delete and there is no 409 for it,
-      // so this sentence is the only warning an operator ever gets.
-      templates = [template({ buskPageCount: 2 })]
-      renderAt('/projects/1/templates')
-
-      fireEvent.pointerDown(screen.getAllByRole('button').find((b) => b.querySelector('svg.lucide-ellipsis'))!, {
-        button: 0,
-        ctrlKey: false,
-        pointerType: 'mouse',
-      })
-      fireEvent.click(screen.getByRole('menuitem', { name: /Delete/ }))
-
-      expect(screen.getByText(/It has pads on 2 busk pages; those go with it\./)).toBeInTheDocument()
-    })
+  it('narrows by the library row’s filter, on name or notes', () => {
+    templates = [...templates, template({ id: 4, uuid: 'u4', name: 'Wash', notes: 'amber-ish' })]
+    renderAt('/projects/1/templates')
+    fireEvent.change(screen.getByLabelText('Filter by name or notes'), { target: { value: 'amber' } })
+    expect(sheetRows()).toEqual(['— Colour · 2', 'Amber Key', 'Wash'])
   })
 })
