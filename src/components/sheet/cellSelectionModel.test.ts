@@ -161,19 +161,41 @@ describe('cellArrowStep', () => {
     }
   })
 
-  it('extends a run of addresses with Shift, full rows included, and shrinks it back', () => {
-    let s = step(16, cursorAt(16, 5), 'down', true)
-    expect(s).toMatchObject({ anchor: 5, head: 21 })
-    expect(s.addresses).toEqual(Array.from({ length: 17 }, (_, i) => 5 + i))
-    s = step(16, cursorAt(16, 5, 21), 'right', true)
-    expect(s.addresses).toEqual(Array.from({ length: 18 }, (_, i) => 5 + i))
+  it('extends a rectangle of addresses with Shift, as on every sheet, and shrinks it back', () => {
+    // The desk's gesture: Shift+↓ ×4 then Shift+→ ×3 from 005 at sixteen wide is five rows by four
+    // columns — 005–008, 021–024, … 069–072 — not every address from 005 to 072.
+    let cursor: CellCursor | null = cursorAt(16, 5)
+    let s = step(16, cursor, 'down', true)
+    expect(s).toMatchObject({ anchor: 5, head: 21, addresses: [5, 21] })
+    for (const direction of ['down', 'down', 'down', 'down', 'right', 'right', 'right'] as const) {
+      const moved: ReturnType<typeof cellArrowStep<string>> = cellArrowStep(dmx(16), 'linear', cursor, direction, true)
+      cursor = moved?.cursor ?? null
+    }
+    expect(cursor).toEqual({ anchor: at(16, 5), head: at(16, 72) })
+    // The last Shift+→ of the gesture, from 071: 005–008 down to 069–072, twenty addresses.
+    const block = cellArrowStep(dmx(16), 'linear', { anchor: at(16, 5), head: at(16, 71) }, 'right', true)
+    expect(block?.cells.map((cell) => addressOf(16, cell)).sort((a, b) => a - b)).toEqual(
+      [5, 21, 37, 53, 69].flatMap((base) => [base, base + 1, base + 2, base + 3]),
+    )
+    // One Shift+↑ back: four rows by four columns.
+    s = step(16, cursor, 'up', true)
+    expect(s.addresses).toEqual([5, 6, 7, 8, 21, 22, 23, 24, 37, 38, 39, 40, 53, 54, 55, 56])
+    const full = cellArrowStep(dmx(16), 'linear', cursor, 'right', true)
+    expect(full?.cells).toHaveLength(5 * 5)
     // Shift back the other way shrinks towards the anchor, then grows past it.
     s = step(16, cursorAt(16, 5, 6), 'left', true)
     expect(s).toMatchObject({ anchor: 5, head: 5, addresses: [5] })
     s = step(16, cursorAt(16, 5, 5), 'left', true)
     expect(s).toMatchObject({ anchor: 5, head: 4, addresses: [4, 5] })
     s = step(8, cursorAt(8, 20), 'up', true)
-    expect(s.addresses).toEqual(Array.from({ length: 9 }, (_, i) => 12 + i))
+    expect(s.addresses).toEqual([12, 20])
+  })
+
+  it('does not wrap a Shift step, though a plain one does', () => {
+    // 016 is the end of its row at sixteen wide: a plain → goes on to 017, Shift+→ stays.
+    expect(step(16, cursorAt(16, 16), 'right').addresses).toEqual([17])
+    expect(step(16, cursorAt(16, 16), 'right', true)).toMatchObject({ anchor: 16, head: 16, addresses: [16] })
+    expect(step(8, cursorAt(8, 9), 'left', true)).toMatchObject({ anchor: 9, head: 9, addresses: [9] })
   })
 
   it('steps a plain arrow from the anchor, collapsing an extended selection', () => {

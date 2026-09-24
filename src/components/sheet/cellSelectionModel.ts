@@ -121,19 +121,20 @@ export function describeCellScope<C extends string>(
 }
 
 /**
- * How a sheet's cells run for the arrow keys (CLAUDE.md §Sheet kit):
+ * How a sheet's cells run for the **plain** arrow keys (CLAUDE.md §Sheet kit):
  *
- * - **`grid`** — a spreadsheet. ← / → stop at the first and last column, and Shift extends a
- *   **rectangle** from the anchor. Every sheet whose columns are different things: the patch list,
- *   the cue sheet, the libraries, the programmer.
+ * - **`grid`** — a spreadsheet. ← / → stop at the first and last column. Every sheet whose columns
+ *   are different things: the patch list, the cue sheet, the libraries, the programmer.
  * - **`linear`** — the cells are one sequence read row by row, and the rows are only how it is
- *   wrapped onto the screen. ← / → **wrap** across a row boundary and stop at the two ends, and
- *   Shift extends a **run** of the sequence from the anchor. The DMX sheet, whose sequence is the
- *   address space: `008 → 009` moves to the next row, and Shift+↓ from `005` at sixteen wide is
- *   `005`–`021`, the full rows in between included.
+ *   wrapped onto the screen. A plain ← / → **wraps** across a row boundary and stops at the two
+ *   ends. The DMX sheet, whose sequence is the address space: `008 → 009` moves to the next row.
  *
- * ↑ / ↓ are the same in both — one row, stopping at the first and the last. On the DMX sheet that
- * is ± the row width in whichever layout is showing; every row is full (512 divides by 16, 8 and 4).
+ * **Shift extends a rectangle in both**, and does not wrap: Shift+↓ ×4 then Shift+→ ×3 from one
+ * cell is five rows by four columns, on the DMX sheet as on any other. It was a run of the reading
+ * order on a `linear` sheet until Chris tried it on the desk (2026-09-24): a block of addresses
+ * that starts mid-row selected the whole of every row in between, when the gesture on screen was
+ * "these columns, down these rows". ↑ / ↓ are the same in both — one row, stopping at the first
+ * and the last; on the DMX sheet that is ± the row width in whichever layout is showing.
  */
 export type CellFlow = 'grid' | 'linear'
 
@@ -202,8 +203,8 @@ export function cursorOfSelection<C extends string>(ordered: readonly CellRef<C>
  *
  * - **A plain arrow moves from the anchor**, one cell, and collapses the selection to that cell.
  * - **Shift moves the head** and keeps the anchor, so the selection grows away from the anchor and
- *   shrinks back towards it. [flow] decides its shape — a rectangle on a `grid`, a run of the
- *   reading order on a `linear` sheet.
+ *   shrinks back towards it. The shape is a **rectangle** from the anchor to the head whatever
+ *   the [flow], and a Shift step does not wrap — [flow] governs only a plain ← / →.
  * - **With no cursor on the grid** — nothing selected, or its cells gone from view — ↓ and → land
  *   on the first cell and ↑ and ← on the last, whether or not Shift is held.
  * - **A cell the row does not take is stepped past** (`CellGrid.takes`), to the next one in the
@@ -254,7 +255,7 @@ export function cellArrowStep<C extends string>(
     if (direction === 'up') return index >= width ? index - width : null
     if (direction === 'down') return index + width < count ? index + width : null
     const delta = direction === 'right' ? 1 : -1
-    if (flow === 'linear') return index + delta >= 0 && index + delta < count ? index + delta : null
+    if (flow === 'linear' && !extend) return index + delta >= 0 && index + delta < count ? index + delta : null
     const c = (index % width) + delta
     return c >= 0 && c < width ? index + delta : null
   }
@@ -273,12 +274,8 @@ export function cellArrowStep<C extends string>(
   const anchor = at(anchorIdx)
   const head = at(to)
   const cells: CellRef<C>[] = []
-  if (flow === 'linear') {
-    for (let i = Math.min(anchorIdx, to); i <= Math.max(anchorIdx, to); i++) cells.push(at(i))
-  } else {
-    const [r0, r1] = [Math.floor(anchorIdx / width), Math.floor(to / width)].sort((a, b) => a - b)
-    const [c0, c1] = [anchorIdx % width, to % width].sort((a, b) => a - b)
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push(at(r * width + c))
-  }
+  const [r0, r1] = [Math.floor(anchorIdx / width), Math.floor(to / width)].sort((a, b) => a - b)
+  const [c0, c1] = [anchorIdx % width, to % width].sort((a, b) => a - b)
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push(at(r * width + c))
   return { cursor: { anchor, head }, cells }
 }

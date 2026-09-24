@@ -395,8 +395,12 @@ describe('useSheet cell keys', () => {
     press('ArrowRight')
     press('ArrowRight')
     expect(cells(result)).toEqual(['b·x'])
+    // Shift does not wrap: it grows a rectangle, and b·x is already at the row's start.
     press('ArrowLeft', { shiftKey: true })
-    expect(cells(result)).toEqual(['a·y', 'b·x'])
+    expect(cells(result)).toEqual(['b·x'])
+    press('ArrowUp', { shiftKey: true })
+    press('ArrowRight', { shiftKey: true })
+    expect(cells(result)).toEqual(['a·x', 'a·y', 'b·x', 'b·y'])
   })
 
   it('selects the last cell on ↑ with nothing selected on a sheet with no rows, and every cell with ⌘A', () => {

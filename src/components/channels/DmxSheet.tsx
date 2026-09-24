@@ -391,7 +391,8 @@ export function DmxSheet({
   // No row axis: every press is a cell press, so the arrows always walk the cells and ⌘A selects
   // every address. `tableProps` carries the flag to the table, so this is the one place it is said.
   // The cells run `linear`: the kit walks rows × columns in order, which on this sheet is address
-  // order in every arm, so ← / → wrap from `016` onto `017` and Shift extends a run of addresses.
+  // order in every arm, so a plain ← / → wraps from `016` onto `017`. Shift extends a rectangle, as
+  // on every sheet: ↓ then → from `005` is `005`, `006`, `021`, `022` at sixteen wide.
   const sheet = useSheet<DmxRow, DmxColumnKey>({
     rows,
     columns,

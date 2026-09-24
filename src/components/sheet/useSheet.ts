@@ -101,10 +101,10 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    */
   selectsRows?: boolean
   /**
-   * How the arrows walk this sheet's cells (`CellFlow`): `grid` (the default) stops at a row's
-   * ends and extends a rectangle; `linear` wraps from a row's end onto the next and extends a run
-   * of the reading order — the DMX sheet, whose reading order is address order. The kit derives
-   * the order itself from the rows and the columns that hold cells, so this is all a surface says.
+   * How a plain ← / → walks this sheet's cells (`CellFlow`): `grid` (the default) stops at a row's
+   * ends; `linear` wraps from a row's end onto the next — the DMX sheet, whose reading order is
+   * address order. Shift extends a rectangle on both. The kit derives the order itself from the
+   * rows and the columns that hold cells, so this is all a surface says.
    */
   cellFlow?: CellFlow
 }

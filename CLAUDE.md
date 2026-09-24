@@ -2264,10 +2264,14 @@ kit cell whose `value` is undefined (`takesValue`), a programmer column the row 
 for (`buildRowCells`) — is drawn with no `data-cell` and no ring, so landing there would select
 something invisible that nothing could scroll to. ↓ in Colour skips the dimmer-only pars and lands
 on the next head that has colour; with none before the edge the arrow stays. A Shift rectangle
-still covers the blanks between its corners, as the marquee's does. **A surface says only its `cellFlow`** (a `useSheet` option): **`grid`**, the default, stops at
-a row's ends and grows a **rectangle**; **`linear`** wraps from a row's end onto the next and grows
-a **run of the reading order** — the DMX sheet, whose reading order is address order in every arm,
-so the kit needs no notion of an address. ↑ / ↓ are one row in both, stopping at the first and last.
+still covers the blanks between its corners, as the marquee's does. **Shift grows a rectangle on
+every sheet, and never wraps** — Shift+↓ ×4 then Shift+→ ×3 from one cell is five rows by four
+columns. **A surface says only its `cellFlow`** (a `useSheet` option), and it governs a *plain*
+← / → alone: **`grid`**, the default, stops at a row's ends; **`linear`** wraps from a row's end
+onto the next — the DMX sheet, whose reading order is address order in every arm, so the kit needs
+no notion of an address. ↑ / ↓ are one row in both, stopping at the first and last. Shift on a
+`linear` sheet extended a run of addresses until the desk tried it (2026-09-24): a block starting
+mid-row took the whole of every row in between, when the gesture on screen was a rectangle.
 
 **The anchor rides in the cell selection** (`useCellSelection`'s `cursor`, beside the keys in one
 state object so they cannot describe two different selections): the keys' door, `place`, sets it,
@@ -2326,9 +2330,9 @@ Three surface rules, each pinned by its test:
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
   ownership rings read through the property that drives the channel. No row axis: the row head
   hangs no `data-grid-name-header`, so every press is a cell press, the arrows always walk the
-  cells — `cellFlow: 'linear'`, so ← / → wrap `016 → 017` and Shift+↓ from `005` at sixteen wide is
-  `005`–`021`, ↑ / ↓ are ± the row width in whichever arm is showing, and the ends are `001` and
-  `512` — and ⌘A selects all 512, which ⌫ would then zero. Spread is one `raw` plan
+  cells — `cellFlow: 'linear'`, so a plain ← / → wraps `016 → 017`, ↑ / ↓ are ± the row width in
+  whichever arm is showing, the ends are `001` and `512`, and Shift grows a rectangle (↓ then →
+  from `005` at sixteen wide is `005`, `006`, `021`, `022`) — and ⌘A selects all 512, which ⌫ would then zero. Spread is one `raw` plan
   over every selected cell in address order (an address has no intent for the desk to resolve). Writes are `channels.update` per address; Clear is 0; Park /
   Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
   confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
