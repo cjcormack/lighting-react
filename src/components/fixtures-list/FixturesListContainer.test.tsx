@@ -6,7 +6,7 @@ import type { CellSelection } from '../sheet/useCellSelection'
 import type { ColumnKey } from './columns'
 import type { Row, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
-import { chan, colourProp, makeFixture, sliderProp } from '../../test/fixtureFactories'
+import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '../../test/fixtureFactories'
 import { RailTabClaimContext, type RailTabClaim } from '../programmer/railTab'
 import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
 
@@ -41,7 +41,8 @@ vi.mock('./useListSelection', async () => {
     useListSelection: () => ({
       selectedIds: rowSelection.ids,
       orderedSelected: [...rowSelection.ids],
-      anchor: null,
+      // The last id set, as the slice's range pivot is — what the tree keys open and close.
+      anchor: [...rowSelection.ids].at(-1) ?? null,
       count: rowSelection.ids.size,
       isSelected: (id: RowId) => rowSelection.ids.has(id),
       select: rowSelection.select,
@@ -67,6 +68,8 @@ vi.mock('../programmer/ProgrammerScope', async (importOriginal) => ({
 const FIXTURES = [
   makeFixture('a', [sliderProp('dimmer', 'dimmer', chan(1)), colourProp('rgbColour', chan(2), chan(3), chan(4))], { name: 'SL Wash 1' }),
   makeFixture('b', [], { name: 'SL Wash 2' }),
+  // A multi-head fixture, so a row can be opened by → — the tree keys the cell arrows must not take.
+  makePixelBar('c', 2, [], { name: 'Pixel Bar' }),
 ]
 vi.mock('../../store/fixtures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../store/fixtures')>()),
@@ -133,6 +136,8 @@ const table = vi.hoisted(() => ({
   editorOpen: false,
   /** Every open request the container handed the table — what would have opened a popover. */
   keyboardOpens: [] as CellOpenRequest<ColumnKey>[],
+  /** The last cell the container asked the table to bring into view. */
+  revealCell: null as { rowId: string; col: ColumnKey } | null,
 }))
 vi.mock('./FixturesTable', () => ({
   FixturesTable: (props: {
@@ -142,8 +147,10 @@ vi.mock('./FixturesTable', () => ({
     onBackgroundClick?: () => void
     closeEditorCell?: { rowId: string; col: ColumnKey } | null
     keyboardOpen?: CellOpenRequest<ColumnKey> | null
+    revealCell?: { rowId: string; col: ColumnKey } | null
   }) => {
     table.cellSelection = props.cellSelection
+    if (props.revealCell) table.revealCell = props.revealCell
     table.rows = props.rows
     if (props.closeEditorCell) table.closeEditorCell = props.closeEditorCell
     if (props.keyboardOpen) table.keyboardOpens.push(props.keyboardOpen)
@@ -187,6 +194,7 @@ beforeEach(() => {
   table.closeEditorCell = null
   table.editorOpen = false
   table.keyboardOpens = []
+  table.revealCell = null
 })
 afterEach(cleanup)
 
@@ -262,6 +270,77 @@ describe('FixturesListContainer on the plain list routes', () => {
     // key having done nothing.
     render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
     expect(clearCellEffects.enabled).toBe(true)
+  })
+})
+
+/**
+ * The arrows over a cell marquee (CLAUDE.md §Sheet kit): the programmer's own listener, stepping by
+ * the kit's `cellArrowStep` over the visible rows and columns. ↑ / ↓ over cells used to drop them
+ * and step the rows, and ← / → looked for a tree row to open; over a marquee both now move it.
+ */
+describe('FixturesListContainer cell arrows', () => {
+  const cells = () =>
+    table.cellSelection!.cells.map((c) => `${c.rowId}·${c.col}`).sort()
+  const press = (key: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key, ...init })
+
+  it('moves a selected cell with every arrow and brings it into view, without touching the rows', () => {
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    fireEvent.click(screen.getByTestId('cell'))
+    expect(cells()).toEqual(['fixture:a·dimmer'])
+    press('ArrowRight')
+    expect(cells()).toEqual(['fixture:a·colour'])
+    // `b` has no properties, so every cell on its row is blank: ↓ steps past it to the pixel bar.
+    press('ArrowDown')
+    expect(cells()).toEqual(['fixture:c·colour'])
+    expect(table.revealCell).toEqual({ rowId: 'fixture:c', col: 'colour' })
+    press('ArrowUp')
+    press('ArrowLeft')
+    expect(cells()).toEqual(['fixture:a·dimmer'])
+    expect(rowSelection.select).not.toHaveBeenCalled()
+  })
+
+  it('extends a rectangle with Shift and shrinks it back towards the anchor', () => {
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    fireEvent.click(screen.getByTestId('cell'))
+    press('ArrowRight', { shiftKey: true })
+    // The head steps past `b`'s blank row, but the rectangle still covers it, as a marquee's does.
+    press('ArrowDown', { shiftKey: true })
+    expect(cells()).toEqual([
+      'fixture:a·colour',
+      'fixture:a·dimmer',
+      'fixture:b·colour',
+      'fixture:b·dimmer',
+      'fixture:c·colour',
+      'fixture:c·dimmer',
+    ])
+    press('ArrowUp', { shiftKey: true })
+    expect(cells()).toEqual(['fixture:a·colour', 'fixture:a·dimmer'])
+    press('ArrowLeft', { shiftKey: true })
+    expect(cells()).toEqual(['fixture:a·dimmer'])
+  })
+
+  it('leaves → and ← over a row selection to the tree: they open and close a multi-head fixture', () => {
+    rowSelection.ids = new Set(['fixture:c'])
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    const closed = table.rows.length
+    press('ArrowRight')
+    expect(table.rows.length).toBe(closed + 2)
+    expect(table.cellSelection!.count).toBe(0)
+    press('ArrowLeft')
+    expect(table.rows.length).toBe(closed)
+  })
+
+  it('leaves ⌥ / ⌘ / Ctrl arrows alone, and an arrow with no cells selected to the rows', () => {
+    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    press('ArrowRight')
+    expect(table.cellSelection!.count).toBe(0)
+    press('ArrowDown')
+    expect(rowSelection.select).toHaveBeenCalledWith('fixture:a', 'replace')
+    fireEvent.click(screen.getByTestId('cell'))
+    press('ArrowRight', { altKey: true })
+    press('ArrowRight', { metaKey: true })
+    press('ArrowRight', { ctrlKey: true })
+    expect(cells()).toEqual(['fixture:a·dimmer'])
   })
 })
 

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { orderedSelectedCells, type CellActionCopy, type CellKeyboardPermission } from './cellEntry'
-import type { CellRef, RowId } from './cellSelectionModel'
+import type { CellFlow, CellRef, RowId } from './cellSelectionModel'
 import { arrowStepTarget, type ListSelectIntent } from './listSelectionModel'
-import { useCellSelection, type CellSelection } from './useCellSelection'
+import { stepCellSelection, useCellSelection, type CellSelection } from './useCellSelection'
 import { useCellEditorRequests } from './useCellEditorRequests'
 import { useLocalListSelection } from './useLocalListSelection'
-import { useSheetKeyboard, type SheetKeyRefusal, type SheetRowKeys } from './useSheetKeyboard'
+import { useSheetKeyboard, type SheetCellKeys, type SheetKeyRefusal, type SheetRowKeys } from './useSheetKeyboard'
 import { useLivePush } from '../editor/useLivePush'
 import {
   commitToSelectedCells,
@@ -96,10 +96,17 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * The sheet has a row axis. True (the default), a click or a drag on the first column selects
    * rows, and ⌘A and ↑ / ↓ step the row selection, Shift extending — the programmer's keys, on
    * every sheet (`useSheetKeyboard`'s `rowKeys`). False is the DMX sheet, where every press is a
-   * cell press and there is no row selection to move. Said once, here: `tableProps` carries it to
+   * cell press, there is no row selection to move, and the arrows and ⌘A are the cells'. Said once, here: `tableProps` carries it to
    * `SheetTable`, so the pointer and the keyboard cannot disagree.
    */
   selectsRows?: boolean
+  /**
+   * How the arrows walk this sheet's cells (`CellFlow`): `grid` (the default) stops at a row's
+   * ends and extends a rectangle; `linear` wraps from a row's end onto the next and extends a run
+   * of the reading order — the DMX sheet, whose reading order is address order. The kit derives
+   * the order itself from the rows and the columns that hold cells, so this is all a surface says.
+   */
+  cellFlow?: CellFlow
 }
 
 /**
@@ -124,6 +131,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
   rowName,
   onOpenRow,
   selectsRows = true,
+  cellFlow = 'grid',
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -339,8 +347,9 @@ export function useSheet<Row extends SheetRow, C extends string>({
     }
   }, [onOpenRow, selectedRows])
 
-  // ⌘A and ↑ / ↓ over the rows — the programmer's keys, stepped by its rule. Both go through the
-  // row doors, so a key pressed over a cell marquee drops the cells, as a row click does.
+  // ⌘A and ↑ / ↓ over the rows — the programmer's keys, stepped by its rule, through the row doors.
+  // ⌘A over a cell marquee drops the cells, as a row click does; ↑ / ↓ there are the cells' keys
+  // (`cellKeys` below), which `useSheetKeyboard` hands them first.
   const { selectAll: selectAllRaw, anchor: rowAnchor, orderedSelected: rowsOrdered } = rowSelection
   const rowKeys = useMemo<SheetRowKeys | undefined>(() => {
     if (!selectsRows) return undefined
@@ -364,6 +373,49 @@ export function useSheet<Row extends SheetRow, C extends string>({
     }
   }, [clearCells, rowAnchor, rowsOrdered, selectAllRaw, selectRow, selectableOrder, selectsRows])
 
+  // The arrows over the cells — `cellArrowStep`'s rule over the selectable rows and the columns
+  // that hold cells (a read-out column hangs no `data-column-header`, so no marquee reaches it and
+  // no arrow does either), stepping past a blank cell. A step goes through the cell door, so it drops a row selection as a
+  // marquee does, and asks the table to bring the head into view by the least move.
+  const selectableColumns = useMemo(() => columns.filter((c) => c.cell != null).map((c) => c.key), [columns])
+  // A cell whose row has nothing to set in its column is drawn blank (library-sheets D12) — no
+  // `data-cell`, no ring — so the arrows step past it, as they step past a read-out column.
+  const cellGrid = useMemo(() => {
+    const rowById = new Map(rows.map((row) => [row.id, row]))
+    const takes = (rowId: RowId, col: C): boolean => {
+      const row = rowById.get(rowId)
+      const column = columnByKey.get(col)
+      return row != null && column != null && takesValue(column, row)
+    }
+    return { rows: selectableOrder, cols: selectableColumns, takes }
+  }, [columnByKey, rows, selectableOrder, selectableColumns])
+  const [revealCell, setRevealCell] = useState<CellRef<C> | null>(null)
+  const onRevealedCell = useCallback(() => setRevealCell(null), [])
+  const { place: placeCells } = cellSelection
+  const cellKeys = useMemo<SheetCellKeys>(() => {
+    const clearRowsIfAny = () => {
+      if (rowCountRef.current > 0) clearRows()
+    }
+    return {
+      onStep: (direction, extend) => {
+        const head = stepCellSelection(cellSelection, cellGrid, cellFlow, direction, extend, clearRowsIfAny)
+        if (head == null) return false
+        setRevealCell(head)
+        return true
+      },
+      // ⌘A on a sheet with no rows to select is every cell — the DMX sheet's whole universe. A
+      // sheet with rows keeps ⌘A for them (`useSheetKeyboard` prefers `rowKeys`).
+      onSelectAll: selectsRows
+        ? undefined
+        : () => {
+            const cells = cellGrid.rows.flatMap((rowId) => cellGrid.cols.map((col) => ({ rowId, col })))
+            if (cells.length === 0) return
+            clearRowsIfAny()
+            placeCells(cells, { anchor: cells[0], head: cells[cells.length - 1] })
+          },
+    }
+  }, [cellFlow, cellGrid, cellSelection, clearRows, placeCells, selectsRows])
+
   useSheetKeyboard<C>({
     cellCount,
     permission: effective,
@@ -377,6 +429,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     rowCount: cellCount > 0 ? 0 : selectedRows.length,
     onOpenRow: openSelectedRow,
     rowKeys,
+    cellKeys,
   })
 
   const [marqueeDragging, setMarqueeDragging] = useState(false)
@@ -433,6 +486,8 @@ export function useSheet<Row extends SheetRow, C extends string>({
     selectionEmpty: rowSelection.count === 0 && cellCount === 0,
     scrollToRowId,
     onScrolledToRow: () => setScrollToRowId(null),
+    revealCell,
+    onRevealedCell,
     selectsRows,
   } satisfies Partial<SheetTableProps<Row, C>>
 

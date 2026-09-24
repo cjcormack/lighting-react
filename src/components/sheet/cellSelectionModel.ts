@@ -119,3 +119,166 @@ export function describeCellScope<C extends string>(
   const rowCount = new Set(cells.map((c) => c.rowId)).size
   return `${rowCount} × ${cols.map(labelFor).join(', ')}`
 }
+
+/**
+ * How a sheet's cells run for the arrow keys (CLAUDE.md §Sheet kit):
+ *
+ * - **`grid`** — a spreadsheet. ← / → stop at the first and last column, and Shift extends a
+ *   **rectangle** from the anchor. Every sheet whose columns are different things: the patch list,
+ *   the cue sheet, the libraries, the programmer.
+ * - **`linear`** — the cells are one sequence read row by row, and the rows are only how it is
+ *   wrapped onto the screen. ← / → **wrap** across a row boundary and stop at the two ends, and
+ *   Shift extends a **run** of the sequence from the anchor. The DMX sheet, whose sequence is the
+ *   address space: `008 → 009` moves to the next row, and Shift+↓ from `005` at sixteen wide is
+ *   `005`–`021`, the full rows in between included.
+ *
+ * ↑ / ↓ are the same in both — one row, stopping at the first and the last. On the DMX sheet that
+ * is ± the row width in whichever layout is showing; every row is full (512 divides by 16, 8 and 4).
+ */
+export type CellFlow = 'grid' | 'linear'
+
+export type CellArrow = 'up' | 'down' | 'left' | 'right'
+
+/** The arrow a `KeyboardEvent.key` names, or null. */
+export function arrowOfKey(key: string): CellArrow | null {
+  switch (key) {
+    case 'ArrowUp':
+      return 'up'
+    case 'ArrowDown':
+      return 'down'
+    case 'ArrowLeft':
+      return 'left'
+    case 'ArrowRight':
+      return 'right'
+    default:
+      return null
+  }
+}
+
+/**
+ * The cells an arrow walks: the selectable rows in display order and the selectable columns in
+ * display order. Row-major over the two is the reading order — on the DMX sheet, address order.
+ */
+export interface CellGrid<C extends string = string> {
+  rows: readonly RowId[]
+  cols: readonly C[]
+  /**
+   * Whether this row has a cell in this column worth landing on — false for a column the row
+   * resolves nothing for, which the tables draw **blank**: no `data-cell`, no selection ring, so a
+   * cell selected there would be invisible and could not be scrolled to. The arrows step past such
+   * a cell to the next one that takes, the way they step past a read-out column; a Shift rectangle
+   * still covers blanks between its corners, as the marquee's does. Absent means every cell takes.
+   */
+  takes?: (rowId: RowId, col: C) => boolean
+}
+
+/**
+ * Where a keyboard selection starts and where it has got to. The **anchor** is fixed while Shift
+ * extends and is where a plain arrow steps from; the **head** is the end Shift moves, so Shift back
+ * the other way shrinks the selection towards the anchor.
+ */
+export interface CellCursor<C extends string = string> {
+  anchor: CellRef<C>
+  head: CellRef<C>
+}
+
+/**
+ * The cursor a selection made by the pointer implies: its first cell in reading order as the
+ * anchor, its last as the head. A click is both at once; a marquee is anchored at its top-left
+ * corner whichever way it was dragged — the pointer's own press point is not kept, and a drag
+ * is a rectangle rather than a direction. [ordered] is `orderedSelectedCells`' answer.
+ */
+export function cursorOfSelection<C extends string>(ordered: readonly CellRef<C>[]): CellCursor<C> | null {
+  if (ordered.length === 0) return null
+  return { anchor: ordered[0], head: ordered[ordered.length - 1] }
+}
+
+/**
+ * Where an arrow key moves a cell selection: the new cursor and the cells it selects, or null when
+ * the grid has no cells.
+ *
+ * The rule every sheet's cell arrows share — the kit's sheets through `useSheet`, the programmer
+ * through its own listener — the cell counterpart of `arrowStepTarget`, and on the same terms:
+ *
+ * - **A plain arrow moves from the anchor**, one cell, and collapses the selection to that cell.
+ * - **Shift moves the head** and keeps the anchor, so the selection grows away from the anchor and
+ *   shrinks back towards it. [flow] decides its shape — a rectangle on a `grid`, a run of the
+ *   reading order on a `linear` sheet.
+ * - **With no cursor on the grid** — nothing selected, or its cells gone from view — ↓ and → land
+ *   on the first cell and ↑ and ← on the last, whether or not Shift is held.
+ * - **A cell the row does not take is stepped past** (`CellGrid.takes`), to the next one in the
+ *   arrow's direction that does — ↓ in Colour skips the dimmer-only pars. None before the edge is
+ *   the edge.
+ * - **At an edge the arrow stops** — a plain arrow collapses onto the cell it was on, Shift leaves
+ *   the selection as it was. It still answers, so the caller claims the key: letting it fall
+ *   through at an edge would hand it to the page, which would scroll the sheet under the cell.
+ */
+export function cellArrowStep<C extends string>(
+  grid: CellGrid<C>,
+  flow: CellFlow,
+  cursor: CellCursor<C> | null,
+  direction: CellArrow,
+  extend: boolean,
+): { cursor: CellCursor<C>; cells: CellRef<C>[] } | null {
+  const { rows, cols } = grid
+  const width = cols.length
+  const count = rows.length * width
+  if (count === 0) return null
+  const at = (index: number): CellRef<C> => ({ rowId: rows[Math.floor(index / width)], col: cols[index % width] })
+  const takes = (index: number): boolean => {
+    if (grid.takes == null) return true
+    const cell = at(index)
+    return grid.takes(cell.rowId, cell.col)
+  }
+  const indexOf = (cell: CellRef<C>): number => {
+    const r = rows.indexOf(cell.rowId)
+    const c = cols.indexOf(cell.col)
+    return r === -1 || c === -1 ? -1 : r * width + c
+  }
+
+  const anchorIdx = cursor ? indexOf(cursor.anchor) : -1
+  if (anchorIdx === -1) {
+    const forward = direction === 'down' || direction === 'right'
+    let index = forward ? 0 : count - 1
+    while (index >= 0 && index < count && !takes(index)) index += forward ? 1 : -1
+    if (index < 0 || index >= count) return null
+    const only = at(index)
+    return { cursor: { anchor: only, head: only }, cells: [only] }
+  }
+  const headIdx = extend && cursor ? indexOf(cursor.head) : -1
+  const from = headIdx === -1 ? anchorIdx : headIdx
+
+  // One move at a time in the arrow's direction, until a cell that takes or the edge. At the edge
+  // — or with no taking cell before it — the arrow stays where it was.
+  const move = (index: number): number | null => {
+    if (direction === 'up') return index >= width ? index - width : null
+    if (direction === 'down') return index + width < count ? index + width : null
+    const delta = direction === 'right' ? 1 : -1
+    if (flow === 'linear') return index + delta >= 0 && index + delta < count ? index + delta : null
+    const c = (index % width) + delta
+    return c >= 0 && c < width ? index + delta : null
+  }
+  let to = from
+  for (let probe = move(from); probe != null; probe = move(probe)) {
+    if (takes(probe)) {
+      to = probe
+      break
+    }
+  }
+
+  if (!extend) {
+    const only = at(to)
+    return { cursor: { anchor: only, head: only }, cells: [only] }
+  }
+  const anchor = at(anchorIdx)
+  const head = at(to)
+  const cells: CellRef<C>[] = []
+  if (flow === 'linear') {
+    for (let i = Math.min(anchorIdx, to); i <= Math.max(anchorIdx, to); i++) cells.push(at(i))
+  } else {
+    const [r0, r1] = [Math.floor(anchorIdx / width), Math.floor(to / width)].sort((a, b) => a - b)
+    const [c0, c1] = [anchorIdx % width, to % width].sort((a, b) => a - b)
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push(at(r * width + c))
+  }
+  return { cursor: { anchor, head }, cells }
+}

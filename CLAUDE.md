@@ -2225,8 +2225,9 @@ Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface 
 pointer and the keyboard cannot disagree) — ⌘A selects every row and ↑ / ↓ step the row selection,
 Shift extending, as the programmer's list does: `arrowStepTarget` in `listSelectionModel.ts` is the
 one rule both step by (a plain step from the anchor, Shift from the range's moving edge, ↓ onto the
-first row and ↑ onto the last with nothing selected), pinned in `listSelectionModel.test.ts`, and a
-row key drops a cell marquee through the row door as a row click does. They are a second listener
+first row and ↑ onto the last with nothing selected), pinned in `listSelectionModel.test.ts`. ⌘A
+drops a cell marquee through the row door as a row click does; **↑ / ↓ do not any more** — over a
+cell selection the arrows are the cells' (below). They are a second listener
 in `useSheetKeyboard` (`rowKeys`), **bubble-phase and standing aside from a `defaultPrevented`
 key**, because some controls answer an arrow themselves — a Select's list, a menu, a slider — and
 claim it on their own handler, which only a bubble listener runs after; from capture, ↓ in an open
@@ -2240,8 +2241,48 @@ foreign-control and modifier rules too, and the dialog guard every
 sheet listener and the programmer's ask is `keyTargetIsGuarded` beside it — which matches
 `alertdialog` as well as `dialog`, since a Radix `AlertDialog` (the batch delete's confirm, the cue
 sheet's unlock question, *Discard changes?*) is the former, and reading `dialog` alone let a key
-reach the rows behind one. →/← stay the programmer's alone: they open and close a group or a
-multi-head fixture, and no kit sheet has a tree.
+reach the rows behind one. →/← over a *row* selection stay the programmer's alone: they open and
+close a group or a multi-head fixture, and no kit sheet has a tree.
+
+**The arrows move a cell selection, on every sheet and the programmer — a spreadsheet's arrows.**
+`cellArrowStep` in `sheet/cellSelectionModel.ts` is the one rule, pinned in
+`cellSelectionModel.test.ts`; the kit's sheets reach it through `useSheetKeyboard`'s `cellKeys` —
+the same bubble listener as `rowKeys`, under every one of its guards — and the programmer's
+container calls it from its own listener, as it calls `arrowStepTarget`. **Which of the two hears
+an arrow**: the cells' whenever cells are selected, or the sheet has no row axis; otherwise ↑ / ↓
+are the rows' and ← / → nobody's (on the programmer, the tree's). So a row sheet's first arrow still
+selects a row, and the arrows walk cells once a click or a marquee has put the sheet in its cell
+shape. The rule's terms are `arrowStepTarget`'s: **a plain arrow moves from the anchor** one
+cell and collapses the selection onto it; **Shift moves the head** and keeps the anchor, so Shift
+back shrinks towards the anchor and then grows past it; with no cursor on the grid ↓ / → land on
+the first cell and ↑ / ← on the last; at an edge the key is still claimed, so the page does not
+scroll instead. The grid is the selectable rows × the columns that hold cells — the kit derives it
+from `rows` and `columns`, skipping dividers and read-out columns (no `data-column-header`, so no
+marquee reaches them either), and the programmer from its selectable rows and visible columns.
+**A blank cell is stepped past** (`CellGrid.takes`): a column the row has nothing to set in — a
+kit cell whose `value` is undefined (`takesValue`), a programmer column the row resolves nothing
+for (`buildRowCells`) — is drawn with no `data-cell` and no ring, so landing there would select
+something invisible that nothing could scroll to. ↓ in Colour skips the dimmer-only pars and lands
+on the next head that has colour; with none before the edge the arrow stays. A Shift rectangle
+still covers the blanks between its corners, as the marquee's does. **A surface says only its `cellFlow`** (a `useSheet` option): **`grid`**, the default, stops at
+a row's ends and grows a **rectangle**; **`linear`** wraps from a row's end onto the next and grows
+a **run of the reading order** — the DMX sheet, whose reading order is address order in every arm,
+so the kit needs no notion of an address. ↑ / ↓ are one row in both, stopping at the first and last.
+
+**The anchor rides in the cell selection** (`useCellSelection`'s `cursor`, beside the keys in one
+state object so they cannot describe two different selections): the keys' door, `place`, sets it,
+and every pointer change and clear drops it. With none stored, a selection's cursor is derived —
+its first cell in reading order as the anchor and its last as the head (`cursorOfSelection`) — so a
+marquee dragged either way is anchored at its top-left. A step asks the table to **reveal** the
+head (`revealCell` on `SheetTable` and `FixturesTable`, through `sheet/revealCell.ts`): the least
+scroll that shows the cell whole clear of the sticky header row and first column, and nothing at
+all while it is already on screen, where a row key's `scrollToRowId` centres its row. A cell whose
+row is virtualised away is scrolled to by the virtualiser (`align: 'auto'`) and revealed once the
+row renders, asked again each frame for up to six (`REVEAL_FRAMES`) — the virtualiser renders from
+its own scroll listener, and one frame is not a promise. The sticky column is read as the header's
+first child, never `[data-grid-name-header]`, which only a sheet that selects rows hangs. **⌘A on a sheet with no row axis selects every cell** — the DMX sheet's whole universe; on
+every other sheet ⌘A is still the rows'. Enter, a typed character and ⌫ then act on whatever the
+arrows left selected, so *select, arrow, type, Enter* is the keyboard flow.
 
 Three surface rules, each pinned by its test:
 
@@ -2284,7 +2325,10 @@ Three surface rules, each pinned by its test:
   `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
   ownership rings read through the property that drives the channel. No row axis: the row head
-  hangs no `data-grid-name-header`, so every press is a cell press, and Spread is one `raw` plan
+  hangs no `data-grid-name-header`, so every press is a cell press, the arrows always walk the
+  cells — `cellFlow: 'linear'`, so ← / → wrap `016 → 017` and Shift+↓ from `005` at sixteen wide is
+  `005`–`021`, ↑ / ↓ are ± the row width in whichever arm is showing, and the ends are `001` and
+  `512` — and ⌘A selects all 512, which ⌫ would then zero. Spread is one `raw` plan
   over every selected cell in address order (an address has no intent for the desk to resolve). Writes are `channels.update` per address; Clear is 0; Park /
   Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
   confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
@@ -3284,7 +3328,8 @@ only when it changed, and the release's click-swallow is load-bearing twice over
 cell's own `onClick` would otherwise select the one row under the release. Enabled on all three
 lists, since the checkbox went from all three: without it the two plain routes would have had no
 way to accumulate a selection by touch. The keyboard path is window-level and deliberately has no
-per-row control: ⌘A, ↑/↓ with Shift extending, and **→/← open and close the anchor row** — a group
+per-row control: ⌘A, ↑/↓ with Shift extending, and **→/← open and close the anchor row** — over a
+row selection; over a cell marquee every arrow moves the marquee (§Sheet kit) — a group
 over its members, a multi-head fixture over its elements — with ← on a member or element climbing
 to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule); ↑/↓
 step by the kit's `arrowStepTarget`, which every sheet on the kit steps by too (§Sheet kit).

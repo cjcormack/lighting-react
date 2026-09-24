@@ -36,6 +36,7 @@ import { cellSelectionClass } from '../sheet/cellSelection'
 import { useCellMarquee } from '../sheet/useCellMarquee'
 import { describeCellScope, type CellRef } from '../sheet/cellSelectionModel'
 import type { CellSelection } from '../sheet/useCellSelection'
+import { useRevealCell } from '../sheet/revealCell'
 
 /** This grid's cell, over its closed column vocabulary. */
 type FixtureCellRef = CellRef<ColumnKey>
@@ -99,6 +100,12 @@ export interface FixturesTableProps {
   /** Row to scroll into view (deep-link); cleared via onScrolledToRow. */
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
+  /**
+   * A cell to bring into view by the least move — the arrow keys' target — cleared via
+   * [onRevealedCell]. `SheetTable`'s prop of the same name, through the same `useRevealCell`.
+   */
+  revealCell?: CellRef<ColumnKey> | null
+  onRevealedCell?: () => void
   /**
    * Colour each cell by which layer owns it, and show the programmer's staged value while
    * blind. Opt-in: the programmer sheet wants it, the plain Fixtures / Groups lists are
@@ -205,6 +212,8 @@ export function FixturesTable({
   onShowInfo,
   scrollToRowId,
   onScrolledToRow,
+  revealCell,
+  onRevealedCell,
   showOwnership = false,
   selectionEmpty,
   cellSelection,
@@ -236,6 +245,13 @@ export function FixturesTable({
       onScrolledToRow?.()
     }
   }, [scrollToRowId, rows, virtualizer, onScrolledToRow])
+
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows])
+  const scrollToIndexAuto = useCallback(
+    (index: number) => virtualizer.scrollToIndex(index, { align: 'auto' }),
+    [virtualizer],
+  )
+  useRevealCell(scrollRef, rowIds, scrollToIndexAuto, revealCell, onRevealedCell)
 
   // The name column is the single biggest consumer of width, and 260px of a 375px phone
   // leaves room for barely one property. `min()` scales it down with the viewport without

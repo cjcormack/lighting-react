@@ -388,8 +388,10 @@ export function DmxSheet({
   )
   const permission = useMemo(() => ({ entry: connected, clear: connected }), [connected])
   const cellDisabled = useCallback(() => !connected, [connected])
-  // No row axis: every press is a cell press, and ⌘A and ↑ / ↓ have no rows to move. `tableProps`
-  // carries the flag to the table, so this is the one place it is said.
+  // No row axis: every press is a cell press, so the arrows always walk the cells and ⌘A selects
+  // every address. `tableProps` carries the flag to the table, so this is the one place it is said.
+  // The cells run `linear`: the kit walks rows × columns in order, which on this sheet is address
+  // order in every arm, so ← / → wrap from `016` onto `017` and Shift extends a run of addresses.
   const sheet = useSheet<DmxRow, DmxColumnKey>({
     rows,
     columns,
@@ -398,6 +400,7 @@ export function DmxSheet({
     cellDisabled,
     noun: 'channel',
     selectsRows: false,
+    cellFlow: 'linear',
   })
   const { cellCount } = sheet
 

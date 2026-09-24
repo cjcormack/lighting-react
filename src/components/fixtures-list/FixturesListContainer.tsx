@@ -8,7 +8,7 @@ import { Lightbulb, Search } from 'lucide-react'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
-import { useCellSelection, type CellSelection } from '../sheet/useCellSelection'
+import { stepCellSelection, useCellSelection, type CellSelection } from '../sheet/useCellSelection'
 import { useEscapeEditorSnapshot } from '../sheet/useEscapeEditorSnapshot'
 import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
@@ -23,10 +23,11 @@ import {
   orderedSelectedCells,
 } from './cellEntry'
 import { isForeignControl, keyTargetIsGuarded } from '../sheet/cellEntry'
+import { editorIsOpen } from '../editor/EditorSurface'
 import { resolutionPropertyNames } from './columns'
 import { cellEffectKey } from './cellEffects'
 import { useClearCellEffects } from './useClearCellEffects'
-import type { CellRef } from '../sheet/cellSelectionModel'
+import { arrowOfKey, type CellArrow, type CellRef } from '../sheet/cellSelectionModel'
 
 /** This list's cell, over its closed column vocabulary. */
 type FixtureCellRef = CellRef<ColumnKey>
@@ -1149,6 +1150,43 @@ export function FixturesListContainer({
   /** Was a cell editor open when Escape was pressed? See the Escape arm below, and the hook. */
   const escapeFoundEditorRef = useEscapeEditorSnapshot()
 
+  // **The arrows over a cell marquee move it**, as a spreadsheet's do and as every kit sheet's do —
+  // `cellArrowStep`'s `grid` rule over the selectable rows and the visible columns, Shift growing
+  // a rectangle from the anchor. A step goes through the cell door (`selectCells`' rule, rows
+  // cleared first), so the desk bridge publishes it like any marquee, and the table brings the
+  // head into view by the least move.
+  const [revealCell, setRevealCell] = useState<FixtureCellRef | null>(null)
+  const onRevealedCell = useCallback(() => setRevealCell(null), [])
+  // A column the row resolves nothing for is drawn blank — no `data-cell`, no ring — so the arrows
+  // step past it (`CellGrid.takes`): the same `buildRowCells` answer `firstEditableSelectedCell`
+  // reads, cached per row for the life of the grid.
+  const cellGrid = useMemo(() => {
+    const byRow = new Map<RowId, ReadonlySet<ColumnKey>>()
+    const takes = (rowId: RowId, col: ColumnKey): boolean => {
+      let cols = byRow.get(rowId)
+      if (!cols) {
+        const row = rowById.get(rowId)
+        cols = new Set(
+          row == null || row.kind === 'divider' ? [] : buildRowCells(row, visibleColumns).map((rowCell) => rowCell.col),
+        )
+        byRow.set(rowId, cols)
+      }
+      return cols.has(col)
+    }
+    return { rows: selectableOrder, cols: visibleColumns, takes }
+  }, [rowById, selectableOrder, visibleColumns])
+  const stepCells = useCallback(
+    (direction: CellArrow, extend: boolean): boolean => {
+      const head = stepCellSelection(cellSelection, cellGrid, 'grid', direction, extend, () => {
+        if (rowCountRef.current > 0) clearRows()
+      })
+      if (head == null) return false
+      setRevealCell(head)
+      return true
+    },
+    [cellGrid, cellSelection, clearRows],
+  )
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       // A key another handler has already claimed — ⇧F on `document`'s capture phase, which is the
@@ -1224,6 +1262,14 @@ export function FixturesListContainer({
         selectAllRows()
         return
       }
+      const arrow = arrowOfKey(e.key)
+      if (arrow != null && cellCount > 0) {
+        // Over a cell marquee every arrow is the marquee's; →/← open and close the tree only over
+        // a row selection. Plain and Shift only, and not under an open editor — the kit's guards.
+        if (e.metaKey || e.ctrlKey || e.altKey || editorIsOpen()) return
+        if (stepCells(arrow, e.shiftKey)) e.preventDefault()
+        return
+      }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         // Not from a focused control either *inside* a row — a chip or a cell trigger does not
         // want its row opened under it — on top of the foreign-control rule above.
@@ -1268,7 +1314,7 @@ export function FixturesListContainer({
     // for the same reason. `canTypeCells` is a boolean, and `isCellSelected` is stable for the
     // mount — it reads `useCellSelection`'s own ref, which is why the marquee test above costs
     // this listener no extra rebinds.
-  }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, escapeFoundEditorRef, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor])
+  }, [selection, selectRow, selectAllRows, selectableOrder, rowById, handleToggleExpand, cellCount, clearByLadder, escapeFoundEditorRef, canClearCells, canTypeCells, clearSelectedCells, isCellSelected, openCellEditor, stepCells])
 
   if (fixturesLoading || groupsLoading) {
     return <SheetPage.Empty loading />
@@ -1445,6 +1491,8 @@ export function FixturesListContainer({
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
+          revealCell={revealCell}
+          onRevealedCell={onRevealedCell}
           showOwnership={showOwnership}
           // An open cell editor belongs to whatever is selected — the marquee it sits in, or the
           // row selection its own click created. Deselect while one is open and it stays on

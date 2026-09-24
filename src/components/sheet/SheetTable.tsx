@@ -21,6 +21,7 @@ import { cellSelectionClass } from './cellSelection'
 import { describeCellScope, type CellRef, type RowId } from './cellSelectionModel'
 import { useCellMarquee } from './useCellMarquee'
 import type { CellSelection } from './useCellSelection'
+import { useRevealCell } from './revealCell'
 import type { CellOpenRequest } from './useCellEditorRequests'
 import { batchLabelOf, type SheetCellProps, type SheetColumn, type SheetRow } from './sheetModel'
 
@@ -127,6 +128,13 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   selectionEmpty?: boolean
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
+  /**
+   * A cell to scroll into view by the least move — the arrow keys' target (`useRevealCell`),
+   * cleared via [onRevealedCell]. Where [scrollToRowId] centres a row it was sent to, this leaves
+   * the sheet still while the cell is already on screen, as a spreadsheet's arrows do.
+   */
+  revealCell?: CellRef<C> | null
+  onRevealedCell?: () => void
 }
 
 /**
@@ -168,6 +176,8 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   selectionEmpty,
   scrollToRowId,
   onScrolledToRow,
+  revealCell,
+  onRevealedCell,
 }: SheetTableProps<Row, C>) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -237,6 +247,11 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     useSensor(KeyboardSensor),
   )
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows])
+  const scrollToIndexAuto = useCallback(
+    (index: number) => virtualizer.scrollToIndex(index, { align: 'auto' }),
+    [virtualizer],
+  )
+  useRevealCell(scrollRef, rowIds, scrollToIndexAuto, revealCell, onRevealedCell)
   const onReorder = rowDrag?.onReorder
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
