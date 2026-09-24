@@ -254,7 +254,7 @@ export function ProjectTemplates() {
         </span>
         <span className="ml-auto">
           {isCurrentProject
-            ? 'Value is the intent — the desk resolves it per head'
+            ? 'Value edits the intent — the desk resolves it per head'
             : 'Not the running project · copy a template here to use it'}
         </span>
       </SheetPage.Footer>

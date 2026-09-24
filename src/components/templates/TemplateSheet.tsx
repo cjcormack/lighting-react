@@ -26,6 +26,9 @@ import { useCopyTemplateMutation, useSaveTemplateMutation } from '@/store/templa
 import type { TemplateEffect, TemplateInput, TemplateSummary } from '@/api/templatesApi'
 import type { SpeedMaster } from '@/api/speedMastersApi'
 import { useTemplateDelete } from './useTemplateDelete'
+import { TemplateValueCell, type TemplateValueDraft, type TemplateValueLanding } from './TemplateValueCell'
+import { applyValueChanges, seedValues, templateRowsFromValues, templateRowsKey } from './familyControls/templateRows'
+import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 
 export type TemplateColumnKey = 'holds' | 'value' | 'fade' | 'master' | 'notes' | 'layers' | 'pages' | 'pressed'
 
@@ -70,10 +73,13 @@ export interface TemplateSheetProps {
  * `TemplateListRow` and its `…` menu. The route draws the family chips and groups the rows under
  * family dividers; this draws the columns and the bar.
  *
- * - **Holds** and **Value** are read-outs this session. Value is the template's own grammar in one
- *   line — the swatch and `#FF9D4A · Extract white`, `50%`, `270° / 135°` for a generic value;
- *   *4 heads · per fixture*; the effect and its speed — read from `rows ?? []`, since an effect
- *   template's empty list is omitted on the wire. Session 3 makes it editable on generic values.
+ * - **Holds** is a read-out. **Value** reads the template's own grammar in one line — the swatch
+ *   and `#FF9D4A · Extract white`, `50%`, `270° / 135°` for a generic value; *4 heads · per
+ *   fixture*; the effect and its speed — read from `rows ?? []`, since an effect template's empty
+ *   list is omitted on the wire. On a **generic value** template it is `TemplateValueCell` (session
+ *   3, D6): the editor's own family controls, `PUT {rows}` through the lifted rows builder, the
+ *   origin's family only (see the column), Clear refused, no Spread. Per-fixture and effect
+ *   templates read out and are skipped by name.
  * - **Fade** is a `NumberCell` in seconds on **value** templates: `PUT {fadeDurationMs,
  *   fadeDurationMsPresent: true}`. Clear writes null — *default (none)*, the caller's default, which
  *   a press applies at 0 — and Spread is the kit's `duration` plan. An effect template has no
@@ -184,8 +190,69 @@ export function TemplateSheet({
         key: 'value',
         label: 'Value',
         width: 'minmax(150px, 200px)',
-        value: () => undefined,
+        // Editable on a generic value template only (D6). A per-fixture template's values were
+        // recorded per head and an effect template holds no value, so both read out — `undefined`
+        // here — and open the editor from the pencil; a marquee over them skips them by name.
+        // **No `kind`**: the column takes commits from its own editor alone, and the family rule
+        // lives in `write`, since one column cannot carry a per-row `value:<family>` kind.
+        value: (row) => (row.template != null ? templateValueDraft(row.template) : undefined),
         display: (row) => (row.template ? <TemplateValue template={row.template} /> : null),
+        cell: (row, props) => {
+          const cellProps = props as React.ComponentProps<typeof TemplateValueCell>
+          return (
+            <TemplateValueCell
+              {...cellProps}
+              face={row.template ? <TemplateValue template={row.template} /> : null}
+              landing={() => valueLanding(cellProps.value.family, cellProps.batchRows() as TemplateSheetRow[])}
+            />
+          )
+        },
+        write: (batch, value) => {
+          if (!isTemplateValueDraft(value) || value.changes == null) return false
+          const { family, changes } = value
+          const emptied: string[] = []
+          for (const row of batch as MemberRow[]) {
+            // The origin's family only: a colour draft on an intensity template would be refused
+            // as a change of family, and is named as skipped on the editor's read-out instead.
+            if (row.template.family !== family) continue
+            // **What changed, over this template's own values** — never the origin's whole draft.
+            // The PUT replaces a template's rows, so the draft would delete a sibling's strobe,
+            // its white, another beam role, on an Enter that changed nothing.
+            const own = seedValues(row.template)
+            const next = templateRowsFromValues(family, applyValueChanges(own, changes))
+            // The write boundary refuses a value template with no rows: a removal that would leave
+            // one empty is skipped and named. (The editor refuses an empty origin before this.)
+            if (next.length === 0) {
+              emptied.push(row.template.name)
+              continue
+            }
+            // Compared through the builder on both sides, so a stored row that parses to the same
+            // intent — a lower-case hex, an older row order — is no change.
+            if (templateRowsKey(next) !== templateRowsKey(templateRowsFromValues(family, own))) {
+              put(row.template, 'value', { rows: next })
+            }
+          }
+          if (emptied.length > 0) {
+            toast.info(`${listNames(emptied, 'template')} would hold no value — skipped`, {
+              id: 'sheet-write:templates:value-skip',
+            })
+          }
+          return true
+        },
+        clearRefusal: 'A template holds a value — set another one instead',
+        skipNote: (skipped) => {
+          const one = skipped.length === 1
+          const effect = (row: TemplateSheetRow) => row.template?.kind === 'effect'
+          const perHead = (row: TemplateSheetRow) => row.template?.kind === 'value' && !row.template.isGeneric
+          const reason = skipped.every(effect)
+            ? one ? 'runs an effect' : 'run effects'
+            : skipped.every(perHead)
+              ? one ? 'holds a value per head' : 'hold values per head'
+              : skipped.every((row) => effect(row) || perHead(row))
+                ? 'hold effects or per-head values'
+                : 'cannot be set here'
+          return `${listNames(skipped.map(templateRowName), 'template')} ${reason} — open to change · skipped`
+        },
       },
       {
         key: 'fade',
@@ -586,6 +653,43 @@ function templateRowName(row: TemplateSheetRow): string {
 /** `1.5`, `2`, `0.25` — seconds as the Fade column prints them. */
 function formatSeconds(seconds: number): string {
   return String(Math.round(seconds * 1000) / 1000)
+}
+
+/**
+ * A generic value template's Value — its family and its draft, parsed by `seedValues` — or
+ * undefined for a per-fixture or effect template, which read out. Cached per template object, so a
+ * row's cell sees one identity until the list refetches.
+ */
+function templateValueDraft(template: TemplateSummary): TemplateValueDraft | undefined {
+  // A null family is a template whose rows name no known property: there is no control to mount.
+  const family = template.family
+  if (template.kind !== 'value' || !template.isGeneric || family == null) return undefined
+  let draft = DRAFTS.get(template)
+  if (draft == null) {
+    draft = { family, values: seedValues(template) }
+    DRAFTS.set(template, draft)
+  }
+  return draft
+}
+const DRAFTS = new WeakMap<TemplateSummary, TemplateValueDraft>()
+
+function isTemplateValueDraft(value: unknown): value is TemplateValueDraft {
+  return typeof value === 'object' && value != null && 'family' in value && 'values' in value
+}
+
+/**
+ * The batch a Value commit lands on — the templates of the origin's family — and the rest named,
+ * the read-out's half of `write`'s family rule: *Amber and Deep Blue are Colour · skipped*.
+ */
+function valueLanding(family: AttributeFamily, batch: readonly TemplateSheetRow[]): TemplateValueLanding {
+  const other = batch.filter((row) => row.template != null && row.template.family !== family)
+  const families = [...new Set(other.flatMap((row) => (row.template?.family != null ? [row.template.family] : [])))]
+  const named = listNames(other.map(templateRowName), 'template')
+  const verb = other.length === 1 ? 'is' : 'are'
+  return {
+    count: batch.length - other.length,
+    skipped: other.length === 0 ? null : `${named} ${verb} ${formatFamilyList(families, ' and ')} · skipped`,
+  }
 }
 
 /**

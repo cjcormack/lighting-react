@@ -239,10 +239,14 @@ reads, so the two grammars would agree on some rows and silently disagree on oth
 than fields on the colour intent, because each then writes only its own channel: that is what lets a
 UV-only template sit **over** an amber wash instead of replacing it, and it is the only way to say
 "UV at 200" at all, since no `WhitePolicy` has ever driven UV. An explicit `white` or `amber` row
-**forces the colour row to `rgbonly`** — the policy drives the same byte — which `ColourControl`
-enforces by rewriting the stored intent (not just the button's variant: showing RGB only while the
-value still said `extract` produced an editor displaying a template it could not save) and the write
-boundary refuses by name. UV is exempt.
+**forces the colour row to `rgbonly`** — the policy drives the same byte — which the one rows
+builder enforces by rewriting the saved colour row's policy (not just the button's variant: showing
+RGB only while the value still said `extract` produced an editor displaying a template it could not
+save) and the write boundary refuses by name. UV is exempt. The builder is `templateRowsFromValues`
+in `components/templates/familyControls/templateRows.ts`, through `effectiveColourPolicy`;
+`ColourControl` reads the same derivation **for display only**, and both hosts of the family
+controls — `TemplateEditor` and the template sheet's Value cell — save through the builder, so
+neither can send the refused pair (§Library sheets).
 
 **A colour template refuses as a whole**, and this is the one place compatibility is finer than D6.
 A head missing any emitter the template names takes *none* of its colour rows —
@@ -1624,7 +1628,7 @@ is declared `rows?:` on this side**, and that is not belt-and-braces about the a
 mid-upgrade serves handler bodies without new response fields, which `lastPressedAt`'s own comment
 already records, so the client must not crash on a server that predates the fix. Declaring it
 required was what hid the other unguarded reads from `strict` — `LayerPicker`'s `.length`,
-`TemplateEditor`'s `for…of` in `seedValues` (whose `isGeneric` guard lets an effect template through,
+`seedValues`' `for…of` (then `TemplateEditor`'s, now `familyControls/templateRows.ts`; its `isGeneric` guard lets an effect template through,
 since every effect template is generic), and four more. Making the type honest is what found them;
 each now reads `?? []`, and `templateRowsSwatch` takes an absent list as an empty one.
 
@@ -2388,8 +2392,8 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 kit, each on its existing route** (`lighting7/docs/plans/library-sheets-plan.md`; the boards are
 `library-sheets-design/`, the plan wins on behaviour and the boards on layout and copy). Session 1
 built the kit's library half and put **Speed Masters** on it; session 2 put **Looks and Templates**
-on it; template values in the cell (3) and Scripts and the FX Library (4) follow. The rules, which every one
-of the five keeps:
+on it; session 3 made a generic value template's **Value** editable in the cell; Scripts and the FX
+Library (4) follow. The rules, which every one of the five keeps:
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
   view key: a second view has to earn one. The record editors stay — they are what a row *opens*.
@@ -2551,6 +2555,57 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   `timingSource`, so which field to write is unknown: its Master is blank and skipped.
 - **Value reads `rows ?? []`** and never resolves (`templateIntent.ts`'s rule): the swatch and
   `describeTemplateRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
+
+**Session 3 put a generic value template's Value in the cell** (D6) — `TemplateValueCell`, on the
+Templates sheet's Value column. What it is and what it learned:
+
+- **It mounts the editor's own family controls, lifted, not the editor kit's editors.** `FamilyControls`
+  and its four (`ColourControl`, `PercentControl`, `PositionControl`, `BeamControls`) moved into
+  `components/templates/familyControls/` **with the rows half** — `seedValues`, `withIntent`,
+  `colourPolicyLocked`, `effectiveColourPolicy`, `templateRowsFromValues` (the editor's `rows` memo)
+  and `templateRowsKey` (its dirty check), all in `templateRows.ts` — and `TemplateEditor` imports
+  them back, so a template's value has one control and one grammar in two hosts. (`valueChanges`,
+  `applyValueChanges` and `templateValuesEmpty` joined them for the cell.) The rgbonly rule is
+  the builder's, applied to the saved rows (§Looks, templates and layers); a host that built rows any
+  other way could send the pair the write boundary refuses by name. The hex field gained
+  `type="text"` and an `aria-label` (*Hex colour*) in the move — `useEditorKeyboard`'s selector
+  names the type, so without it Enter in the field did nothing in the cell.
+- **Generic value templates only.** A per-fixture template's values were recorded per head and an
+  effect template holds no value, so both keep the read-out — `value: undefined`, blank of any
+  editor, named when a marquee sweeps them up (*Pulse runs an effect — open to change · skipped*) —
+  and change through the pencil. So does a template whose `family` is null (rows naming no known
+  property): there is no control to mount.
+- **The family rule lives in `write`, not in `kind`.** The column has no `kind`, so it takes commits
+  from its own editor alone; the commit is `{family, values}` — the origin's family travels with it
+  — and `write` drops every row of another family. The **editor names them**, since the kit's skip
+  read-out knows only `value: undefined`: the column hands the cell a `landing()` over the batch, and
+  the label line counts the origin's family (*2 templates*, not the marquee's 4) beside *Amber is
+  Colour · skipped*.
+- **It commits on Enter and Apply, never as the controls move.** A rows PUT republishes every cue
+  layering the template, so a colour drag written per frame would be a republish per frame — the
+  `NumberCell` / `TextCell` rule, not the level editor's. Three families have no text field, so on a
+  desk the **first slider takes focus** (Radix's default is the first button, a *Clear*, which made
+  Enter a deletion) and Enter on a focused slider applies.
+- **A commit carries what changed, never the origin's draft.** The PUT replaces a template's rows
+  whole, so the first cut — the origin's rows written to every same-family template in the marquee —
+  deleted a sibling's strobe, white or other beam role on an Enter that changed nothing (found in
+  review, the colour editor's unstated-emitter bug again). The cell commits `valueChanges(seed,
+  draft)` — each property set or removed — and `write` applies it over **each template's own**
+  `seedValues` (`applyValueChanges`) before the builder, so a property the operator did not touch
+  stays as each template has it. A removal that would leave a sibling with no rows is skipped and
+  toasted by name. `TemplateSheet.test.tsx` pins it with a dimmer + strobe sibling.
+- **A no-op writes nothing, compared through the builder on both sides.** No change is no change
+  anywhere, and `write` builds each target's current rows from `seedValues` rather than reading them
+  raw, so a stored lower-case hex or an older row order is the same intent. An empty draft is refused
+  in the editor (the write boundary 400s a value template with no rows); Clear is refused on the
+  column and there is no Spread (plan §7). The draft is cached per template object
+  (`templateValueDraft`), so a row's cell sees one identity until the list refetches, and the
+  editor reads the batch's landing once, on the open.
+- **Measured in the app on 2026-09-24**: the popover is **288** for Intensity, Position and Beam and
+  **320** for Colour (the 160px picker, a gap and the hex column need 296 inside the padding). Its
+  body scrolls under the viewport with Apply outside the scroller, `SpreadPanel`'s bound — Colour is
+  ~565px of controls and Beam ~625 (the exclusions list), both taller than half an 820 frame. The
+  footer's copy is the board's: *Value edits the intent — the desk resolves it per head*.
 
 ### The editor kit
 

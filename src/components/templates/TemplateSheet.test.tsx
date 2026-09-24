@@ -120,6 +120,7 @@ const ROWS: TemplateSheetRow[] = LIBRARY.map((t) => ({ id: templateRowId(t.id), 
 
 /** Stubbed column bands, left to right in `TemplateSheet`'s order — as the marquee measures them. */
 const BANDS: Record<string, [number, number]> = {
+  value: [244, 444],
   fade: [444, 516],
   master: [516, 636],
   notes: [636, 800],
@@ -330,6 +331,165 @@ describe('TemplateSheet — Master', () => {
       { projectId: 1, templateId: 3, effect: { ...PULSE.effect, speedMasterUuid: null } },
       { projectId: 1, templateId: 7, effect: { ...running.effect, rateSpeedMasterUuid: null } },
     ])
+  })
+})
+
+/** The rows each saved `PUT {rows}` carried, as `property=value` in order — the grammar the desk stores. */
+function sentRows(call: number): string[] {
+  const body = saveTemplate.mock.calls[call][0] as { rows: { propertyName: string; value: string }[] }
+  return body.rows.map((r) => `${r.propertyName}=${r.value}`)
+}
+
+describe('TemplateSheet — Value (session 3)', () => {
+  it('edits a colour template in the editor’s own control, and a white row forces the policy to RGB only', async () => {
+    draw()
+    drag('value', 4, 4)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    // The editor's control, lifted: the hex field, the policy buttons, the emitters.
+    expect(await screen.findByLabelText('Hex colour')).toHaveValue('#FF9D4A')
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Set White' }))
+    // Shown first, with the reason: the policy would drive the same byte.
+    expect(screen.getByRole('button', { name: 'Extract' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(saveTemplate).toHaveBeenCalledTimes(1)
+    expect(saveTemplate.mock.calls[0][0]).toMatchObject({ projectId: 1, templateId: 4 })
+    // The stored `policy=extract` is written back as `rgbonly`: the white/extract pair is what the
+    // write boundary refuses by name, and the lifted rows builder is what keeps the cell from sending it.
+    expect(sentRows(0)).toEqual(['rgbColour=#FF9D4A;policy=rgbonly', 'white=dmx:255'])
+    expect(saveTemplate.mock.calls[0][0]).toEqual({
+      projectId: 1,
+      templateId: 4,
+      rows: [
+        { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly', sortOrder: 0 },
+        { targetType: 'deferred', targetKey: '', propertyName: 'white', value: 'dmx:255', sortOrder: 1 },
+      ],
+    })
+  })
+
+  it('writes a typed hex from Enter in its field, and nothing at all from Enter on an untouched editor', async () => {
+    draw()
+    drag('value', 4, 4)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const hex = await screen.findByLabelText('Hex colour')
+    fireEvent.keyDown(hex, { key: 'Enter' })
+    expect(saveTemplate).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Hex colour')).not.toBeInTheDocument()
+
+    drag('value', 4, 4)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const again = await screen.findByLabelText('Hex colour')
+    fireEvent.change(again, { target: { value: '#1030FF' } })
+    fireEvent.keyDown(again, { key: 'Enter' })
+    expect(sentRows(0)).toEqual(['rgbColour=#1030FF;policy=extract'])
+  })
+
+  it('Enter on an untouched slider editor writes nothing either — and a stored row the builder reads the same is no change', async () => {
+    // A lower-case hex and no policy order the builder would write: the same intent, so no change.
+    const lower = template(4, { ...AMBER, rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a;policy=extract' }] })
+    draw({ rows: [...ROWS.slice(0, 3), { id: templateRowId(4), template: lower }] })
+    drag('value', 4, 4)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.keyDown(await screen.findByLabelText('Hex colour'), { key: 'Enter' })
+    expect(saveTemplate).not.toHaveBeenCalled()
+
+    drag('value', 1, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const [level] = await screen.findAllByRole('slider')
+    fireEvent.keyDown(level, { key: 'Enter' })
+    expect(saveTemplate).not.toHaveBeenCalled()
+  })
+
+  it('writes only the origin’s family over a mixed marquee, and names the rest as skipped', async () => {
+    draw()
+    // Full and Half are Intensity, Pulse is an effect, Amber is Colour.
+    drag('value', 1, 4)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const editor = (await screen.findByText('The intent — the desk resolves it per head')).closest(
+      '[data-template-value-editor]',
+    ) as HTMLElement
+    expect(within(editor).getByText('Pulse runs an effect — open to change · skipped')).toBeInTheDocument()
+    expect(within(editor).getByText('Amber is Colour · skipped')).toBeInTheDocument()
+    // The label line counts what the commit reaches, not what the marquee covers.
+    expect(within(editor).getByText('2 templates')).toBeInTheDocument()
+    const [level] = within(editor).getAllByRole('slider')
+    fireEvent.keyDown(level, { key: 'ArrowLeft' })
+    fireEvent.keyDown(level, { key: 'Enter' })
+    expect(saveTemplate.mock.calls.map(([a]) => (a as { templateId: number }).templateId)).toEqual([1, 2])
+    expect(sentRows(0)).toEqual(['dimmer=pct:99'])
+    expect(sentRows(1)).toEqual(['dimmer=pct:99'])
+  })
+
+  it('lands what changed over each template’s own values — a sibling keeps the properties the operator did not touch', async () => {
+    // Full holds a level; Strobed holds a level and a strobe. Replacing Strobed's rows with Full's
+    // would delete its strobe — on an untouched Enter as much as on an edit.
+    const strobed = template(7, {
+      name: 'Strobed',
+      rows: [
+        { targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' },
+        { targetType: 'deferred', targetKey: '', propertyName: 'strobe', value: 'pct:25' },
+      ],
+    })
+    draw({ rows: [ROWS[0], { id: templateRowId(7), template: strobed }] })
+    drag('value', 1, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    let [level] = await screen.findAllByRole('slider')
+    fireEvent.keyDown(level, { key: 'Enter' })
+    expect(saveTemplate).not.toHaveBeenCalled()
+
+    drag('value', 1, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    ;[level] = await screen.findAllByRole('slider')
+    fireEvent.keyDown(level, { key: 'ArrowLeft' })
+    fireEvent.keyDown(level, { key: 'Enter' })
+    await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(2))
+    expect(saveTemplate.mock.calls.map(([a]) => (a as { templateId: number }).templateId)).toEqual([1, 7])
+    expect(sentRows(0)).toEqual(['dimmer=pct:99'])
+    expect(sentRows(1)).toEqual(['dimmer=pct:99', 'strobe=pct:25'])
+  })
+
+  it('skips, by name, a sibling a removal would leave with no value', async () => {
+    const both = template(8, {
+      name: 'Both',
+      rows: [
+        { targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:40' },
+        { targetType: 'deferred', targetKey: '', propertyName: 'strobe', value: 'pct:10' },
+      ],
+    })
+    // Clearing Both's level leaves its strobe; the same removal would empty Full.
+    draw({ rows: [{ id: templateRowId(8), template: both }, ROWS[0]] })
+    drag('value', 1, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    await screen.findAllByRole('slider')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(saveTemplate.mock.calls.map(([a]) => (a as { templateId: number }).templateId)).toEqual([8])
+    expect(sentRows(0)).toEqual(['strobe=pct:10'])
+    expect(toastInfo).toHaveBeenCalledWith('Full would hold no value — skipped', { id: 'sheet-write:templates:value-skip' })
+  })
+
+  it('keeps a per-fixture and an effect template as read-outs — no editor, the read-out drawn', () => {
+    draw()
+    for (const id of [3, 5, 6]) {
+      expect(row(id).querySelector('[data-cell="value"]')).toBeNull()
+    }
+    expect(row(6)).toHaveTextContent('2 heads · per fixture')
+    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4s')
+    expect(row(4).querySelector('[data-cell="value"] button')).not.toBeNull()
+  })
+
+  it('refuses Clear — a template holds a value — and offers no Spread', () => {
+    draw()
+    drag('value', 1, 2)
+    const clear = screen.getByRole('button', { name: 'Clear cells' })
+    expect(clear).toBeDisabled()
+    expect(clear).toHaveAttribute('title', 'A template holds a value — set another one instead')
+    expect(screen.getByRole('button', { name: /Spread/ })).toBeDisabled()
+  })
+
+  it('is inert in another project’s library — template PUTs are the running project’s', () => {
+    draw({ isCurrentProject: false, projectName: 'Rehearsal Room' })
+    expect(row(4).querySelector('[data-cell="value"] button')).toBeDisabled()
   })
 })
 
