@@ -673,7 +673,6 @@ export function PatchSheet({
         firstColumn={{
           label: 'Fixture',
           width: '240px',
-          selectsRows: true,
           render: (row, selected) => (
             <>
               {/* **A double click renames the head — in the same popover every value cell opens.**

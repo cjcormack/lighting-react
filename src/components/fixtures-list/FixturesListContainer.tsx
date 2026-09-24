@@ -22,6 +22,7 @@ import {
   marqueeOwnsKeyTarget,
   orderedSelectedCells,
 } from './cellEntry'
+import { isForeignControl, keyTargetIsGuarded } from '../sheet/cellEntry'
 import { resolutionPropertyNames } from './columns'
 import { cellEffectKey } from './cellEffects'
 import { useClearCellEffects } from './useClearCellEffects'
@@ -29,7 +30,7 @@ import type { CellRef } from '../sheet/cellSelectionModel'
 
 /** This list's cell, over its closed column vocabulary. */
 type FixtureCellRef = CellRef<ColumnKey>
-import type { ListSelectIntent } from '../sheet/listSelectionModel'
+import { arrowStepTarget, type ListSelectIntent } from '../sheet/listSelectionModel'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import {
   ColumnsMenu,
@@ -57,7 +58,6 @@ import {
   treeKeyAction,
 } from './rowModel'
 import { buildRowCells } from './useRowValues'
-import { isEditableTarget } from '../../lib/domUtils'
 import { useIncludeSelectionRequest } from '../../store/includeSelection'
 import {
   listSelectionIntentFor,
@@ -1155,13 +1155,12 @@ export function FixturesListContainer({
       // full-screen toggle — is not this grid's to seed an editor with. Same posture as
       // `useTransportKeys`; a bubble listener on `window` is the last to run, so the answer is here.
       if (e.defaultPrevented) return
-      if (isEditableTarget(e.target instanceof Element ? e.target : null)) return
-      if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
+      if (keyTargetIsGuarded(e.target)) return
 
       if (e.key === 'Escape') {
         // **An open editor takes Escape first, and keeps the selection.** The clear used to be
-        // guarded only by *where the key was pressed* (`isEditableTarget`, `closest('[role=dialog]')`
-        // above), which is a different question and answers wrongly the moment focus is not inside
+        // guarded only by *where the key was pressed* (`keyTargetIsGuarded` above), which is a
+        // different question and answers wrongly the moment focus is not inside
         // the panel — on the Set button that opened it, say. Escape then closed the editor **and**
         // took the selection it was opened for.
         //
@@ -1216,14 +1215,18 @@ export function FixturesListContainer({
           return
         }
       }
+      // The row keys — ⌘A, ↑/↓ and →/← — stand aside from a focused control outside the rows (a
+      // template chip, a verb, a menu): the kit's rule, `isForeignControl`, which exempts the name
+      // and cell triggers a click inside a row leaves focused.
+      if (isForeignControl(e.target)) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault()
         selectAllRows()
         return
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        // Not from a focused control: a Select or a menu answers these keys itself, and a chip
-        // does not want its row opened under it.
+        // Not from a focused control either *inside* a row — a chip or a cell trigger does not
+        // want its row opened under it — on top of the foreign-control rule above.
         if (
           e.target instanceof HTMLElement &&
           e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
@@ -1242,31 +1245,14 @@ export function FixturesListContainer({
         }
         return
       }
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        if (selectableOrder.length === 0) return
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // The kit's rule (`arrowStepTarget`), so this list and every sheet step alike — plain and
+        // Shift arrows only, as the kit's: ⌘, Ctrl and ⌥ arrows are the browser's and the OS's.
+        const next = arrowStepTarget(selectableOrder, selection, e.key === 'ArrowDown' ? 'down' : 'up', e.shiftKey)
+        if (next == null) return
         e.preventDefault()
-        const anchorIdx = selection.anchor ? selectableOrder.indexOf(selection.anchor) : -1
-        // Shift extends from the range's MOVING edge — the end that isn't the
-        // anchor. Hardcoding the bottom of the selection here would cap
-        // upward ranges at two rows (the bottom edge is the anchor when
-        // extending up).
-        let fromIdx = anchorIdx
-        if (e.shiftKey && selection.orderedSelected.length > 0) {
-          const firstIdx = selectableOrder.indexOf(selection.orderedSelected[0])
-          const lastIdx = selectableOrder.indexOf(
-            selection.orderedSelected[selection.orderedSelected.length - 1],
-          )
-          fromIdx = firstIdx < anchorIdx ? firstIdx : lastIdx
-        }
-        const delta = e.key === 'ArrowDown' ? 1 : -1
-        const nextIdx =
-          fromIdx === -1
-            ? e.key === 'ArrowDown'
-              ? 0
-              : selectableOrder.length - 1
-            : Math.max(0, Math.min(selectableOrder.length - 1, fromIdx + delta))
-        selectRow(selectableOrder[nextIdx], e.shiftKey ? 'range' : 'replace')
-        setScrollToRowId(selectableOrder[nextIdx])
+        selectRow(next, e.shiftKey ? 'range' : 'replace')
+        setScrollToRowId(next)
       }
     }
     window.addEventListener('keydown', onKeyDown)

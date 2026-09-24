@@ -2219,6 +2219,30 @@ busk view. `useSheetKeyboard` is the kit's window listener and it is **capture-p
 enabled, and a name typed into a cue cell begins with a character — so the sheet claims the key
 first and the transport now stands aside from a key whose default is already prevented.
 
+**The row keys are every sheet's, and they are the one half that listens in the bubble phase.**
+Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface passes `useSheet`
+`selectsRows: false`, the one place that is said (`tableProps` carries it to `SheetTable`, so the
+pointer and the keyboard cannot disagree) — ⌘A selects every row and ↑ / ↓ step the row selection,
+Shift extending, as the programmer's list does: `arrowStepTarget` in `listSelectionModel.ts` is the
+one rule both step by (a plain step from the anchor, Shift from the range's moving edge, ↓ onto the
+first row and ↑ onto the last with nothing selected), pinned in `listSelectionModel.test.ts`, and a
+row key drops a cell marquee through the row door as a row click does. They are a second listener
+in `useSheetKeyboard` (`rowKeys`), **bubble-phase and standing aside from a `defaultPrevented`
+key**, because some controls answer an arrow themselves — a Select's list, a menu, a slider — and
+claim it on their own handler, which only a bubble listener runs after; from capture, ↓ in an open
+menu would move the menu's highlight and the sheet's row. The partition chips and the bar's verbs
+claim nothing — they are plain buttons — so the row keys also stand aside from **any focused
+control outside the rows** (`isForeignControl` in `sheet/cellEntry.ts`), exempting the rename
+button and cell trigger a click inside a row leaves focused, which is where focus sits while ↓
+moves the selection on. Only plain and Shift arrows (⌘, Ctrl and ⌥ arrows are the browser's and
+the OS's), and — on the kit — not under an open editor. The programmer's list takes the
+foreign-control and modifier rules too, and the dialog guard every
+sheet listener and the programmer's ask is `keyTargetIsGuarded` beside it — which matches
+`alertdialog` as well as `dialog`, since a Radix `AlertDialog` (the batch delete's confirm, the cue
+sheet's unlock question, *Discard changes?*) is the former, and reading `dialog` alone let a key
+reach the rows behind one. →/← stay the programmer's alone: they open and close a group or a
+multi-head fixture, and no kit sheet has a tree.
+
 Three surface rules, each pinned by its test:
 
 - **Patch list** (`PatchSheet.test.tsx`, `lib/patchAddress.test.ts`): **Set over N addresses lands
@@ -3262,7 +3286,8 @@ lists, since the checkbox went from all three: without it the two plain routes w
 way to accumulate a selection by touch. The keyboard path is window-level and deliberately has no
 per-row control: ⌘A, ↑/↓ with Shift extending, and **→/← open and close the anchor row** — a group
 over its members, a multi-head fixture over its elements — with ← on a member or element climbing
-to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule).
+to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule); ↑/↓
+step by the kit's `arrowStepTarget`, which every sheet on the kit steps by too (§Sheet kit).
 
 **The grid's rows are `select-none`, and a fixture name is no longer selectable text.** Three
 declarations ride together on the rows wrapper — `select-none`, `touch-manipulation` and

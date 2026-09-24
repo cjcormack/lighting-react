@@ -60,7 +60,6 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
     label: string
     width: string
     render: (row: Row, selected: boolean) => React.ReactNode
-    selectsRows: boolean
     /**
      * Open the row's record — the patch editor, a library record's sheet. Given, the column draws a
      * **pencil** after [render] (shown on hover, focus and selection) and a sheet mounting
@@ -71,6 +70,14 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
     /** The pencil's accessible name and tooltip — `Edit Front PAR`. Defaults to `Open`. */
     openLabel?: (row: Row) => string
   }
+  /**
+   * The sheet has a row axis: a click or a drag on the first column selects rows, and the first
+   * column hangs `data-grid-name-header`. `useSheet`'s `tableProps` carries it from the one place a
+   * surface states it — `useSheet`'s own `selectsRows`, which also decides whether ⌘A and ↑ / ↓
+   * are heard — so the pointer and the keyboard cannot disagree about whether rows are selectable.
+   * False is the DMX sheet, where every press is a cell press. Defaults to true.
+   */
+  selectsRows?: boolean
   /** The height of every row, dividers included. 36 everywhere but the DMX sheet's 44. */
   rowHeight?: number
   /** Below this the table needs its columns' minimum widths; the sum of the tracks' floors. */
@@ -137,6 +144,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   rows,
   columns,
   firstColumn,
+  selectsRows = true,
   rowHeight = SHEET_ROW_HEIGHT,
   minWidth,
   isSelected,
@@ -214,7 +222,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     visibleColumns,
     cellSelection,
     isRowSelected: isSelected,
-    onRowMarquee: firstColumn.selectsRows ? onRowMarquee : undefined,
+    onRowMarquee: selectsRows ? onRowMarquee : undefined,
     onDragChange: onMarqueeDragChange,
   })
 
@@ -276,7 +284,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
               // The marquee measures the first column from this — see `useCellMarquee`. A sheet
               // whose first column selects no rows hangs no name header, and every press is a cell
               // press.
-              {...(firstColumn.selectsRows ? { 'data-grid-name-header': true } : {})}
+              {...(selectsRows ? { 'data-grid-name-header': true } : {})}
               // `px-2` *after* the header class — `cn` is tailwind-merge and the header class carries
               // `px-1.5`, so this order is what keeps the label on the row cells' 8px inset.
               className={cn(SHEET_STICKY_CELL_CLASS, SHEET_HEADER_CELL_CLASS, 'px-2')}
@@ -330,6 +338,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   row={row}
                   columns={columns}
                   firstColumn={firstColumn}
+                  selectsRows={selectsRows}
                   gridTemplateColumns={gridTemplateColumns}
                   selected={row.divider == null && isSelected(row.id)}
                   rowClass={rowClass?.(row)}
@@ -573,6 +582,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   row: Row
   columns: readonly SheetColumn<Row, C>[]
   firstColumn: SheetTableProps<Row, C>['firstColumn']
+  selectsRows: boolean
   gridTemplateColumns: string
   selected: boolean
   rowClass?: string
@@ -599,6 +609,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   row,
   columns,
   firstColumn,
+  selectsRows,
   gridTemplateColumns,
   selected,
   rowClass,
@@ -660,9 +671,9 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         className={cn(
           SHEET_STICKY_CELL_CLASS,
           'flex h-full items-center gap-1.5 px-2',
-          firstColumn.selectsRows && 'cursor-pointer',
+          selectsRows && 'cursor-pointer',
         )}
-        onClick={firstColumn.selectsRows ? (e) => onRowClick(row.id, e) : undefined}
+        onClick={selectsRows ? (e) => onRowClick(row.id, e) : undefined}
       >
         {/* The selection tint and the 3px edge survive the opaque sticky background by being
             drawn on this overlay rather than on the row — see `FixturesTable`. */}

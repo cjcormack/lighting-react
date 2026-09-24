@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { orderedSelectedCells, type CellActionCopy, type CellKeyboardPermission } from './cellEntry'
 import type { CellRef, RowId } from './cellSelectionModel'
-import type { ListSelectIntent } from './listSelectionModel'
+import { arrowStepTarget, type ListSelectIntent } from './listSelectionModel'
 import { useCellSelection, type CellSelection } from './useCellSelection'
 import { useCellEditorRequests } from './useCellEditorRequests'
 import { useLocalListSelection } from './useLocalListSelection'
-import { useSheetKeyboard, type SheetKeyRefusal } from './useSheetKeyboard'
+import { useSheetKeyboard, type SheetKeyRefusal, type SheetRowKeys } from './useSheetKeyboard'
 import { useLivePush } from '../editor/useLivePush'
 import {
   commitToSelectedCells,
@@ -92,6 +92,14 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * does nothing with a row selection, as before.
    */
   onOpenRow?: (row: Row) => void
+  /**
+   * The sheet has a row axis. True (the default), a click or a drag on the first column selects
+   * rows, and ⌘A and ↑ / ↓ step the row selection, Shift extending — the programmer's keys, on
+   * every sheet (`useSheetKeyboard`'s `rowKeys`). False is the DMX sheet, where every press is a
+   * cell press and there is no row selection to move. Said once, here: `tableProps` carries it to
+   * `SheetTable`, so the pointer and the keyboard cannot disagree.
+   */
+  selectsRows?: boolean
 }
 
 /**
@@ -115,6 +123,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
   noun = 'row',
   rowName,
   onOpenRow,
+  selectsRows = true,
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -330,6 +339,31 @@ export function useSheet<Row extends SheetRow, C extends string>({
     }
   }, [onOpenRow, selectedRows])
 
+  // ⌘A and ↑ / ↓ over the rows — the programmer's keys, stepped by its rule. Both go through the
+  // row doors, so a key pressed over a cell marquee drops the cells, as a row click does.
+  const { selectAll: selectAllRaw, anchor: rowAnchor, orderedSelected: rowsOrdered } = rowSelection
+  const rowKeys = useMemo<SheetRowKeys | undefined>(() => {
+    if (!selectsRows) return undefined
+    return {
+      onSelectAll: () => {
+        clearCells()
+        selectAllRaw()
+      },
+      onStep: (direction, extend) => {
+        const next = arrowStepTarget(
+          selectableOrder,
+          { anchor: rowAnchor, orderedSelected: rowsOrdered },
+          direction,
+          extend,
+        )
+        if (next == null) return false
+        selectRow(next, extend ? 'range' : 'replace')
+        setScrollToRowId(next)
+        return true
+      },
+    }
+  }, [clearCells, rowAnchor, rowsOrdered, selectAllRaw, selectRow, selectableOrder, selectsRows])
+
   useSheetKeyboard<C>({
     cellCount,
     permission: effective,
@@ -342,6 +376,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     // delete, a filter) must not make one row read as two.
     rowCount: cellCount > 0 ? 0 : selectedRows.length,
     onOpenRow: openSelectedRow,
+    rowKeys,
   })
 
   const [marqueeDragging, setMarqueeDragging] = useState(false)
@@ -398,6 +433,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     selectionEmpty: rowSelection.count === 0 && cellCount === 0,
     scrollToRowId,
     onScrolledToRow: () => setScrollToRowId(null),
+    selectsRows,
   } satisfies Partial<SheetTableProps<Row, C>>
 
   return {

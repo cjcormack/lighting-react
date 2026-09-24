@@ -584,7 +584,6 @@ export function CueSheet({
         firstColumn={{
           label: 'Cue',
           width: '100px',
-          selectsRows: true,
           render: (row) => {
             const active = row.cue.id === activeCueId
             const standby = row.cue.id === standbyCueId && !active

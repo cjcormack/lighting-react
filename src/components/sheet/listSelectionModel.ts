@@ -97,3 +97,36 @@ export function setListSelection(
   const present = visibleOrder.filter((id) => wanted.has(id))
   return { ids: present, anchor: present[present.length - 1] ?? null }
 }
+
+/**
+ * Where ↑ or ↓ moves a list selection: the row to select next, or null when there are no rows.
+ *
+ * The rule every sheet's arrow keys share — the programmer's list and the kit's sheets alike — so
+ * a list cannot step one way on one page and another way on the next. The caller selects the
+ * answer with `'range'` when [extend] (Shift) and `'replace'` otherwise, and scrolls it into view.
+ *
+ * - **A plain step moves from the anchor**, one row, clamped at both ends. With no anchor in view
+ *   — nothing selected, or the anchor filtered away — ↓ lands on the first row and ↑ on the last.
+ * - **Shift steps the range's *moving* edge** — the end that is not the anchor — so a range
+ *   extended upward keeps growing upward. Stepping from the bottom of the selection regardless
+ *   capped an upward range at two rows, because extending up makes the bottom edge the anchor.
+ */
+export function arrowStepTarget(
+  order: readonly RowId[],
+  selection: { anchor: RowId | null; orderedSelected: readonly RowId[] },
+  direction: 'up' | 'down',
+  extend: boolean,
+): RowId | null {
+  if (order.length === 0) return null
+  const anchorIdx = selection.anchor ? order.indexOf(selection.anchor) : -1
+  let fromIdx = anchorIdx
+  const selected = selection.orderedSelected
+  if (extend && selected.length > 0) {
+    const firstIdx = order.indexOf(selected[0])
+    const lastIdx = order.indexOf(selected[selected.length - 1])
+    fromIdx = firstIdx < anchorIdx ? firstIdx : lastIdx
+  }
+  if (fromIdx === -1) return direction === 'down' ? order[0] : order[order.length - 1]
+  const delta = direction === 'down' ? 1 : -1
+  return order[Math.max(0, Math.min(order.length - 1, fromIdx + delta))]
+}

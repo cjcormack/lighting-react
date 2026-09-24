@@ -1,3 +1,4 @@
+import { isEditableTarget } from '@/lib/domUtils'
 import type { CellRef, RowId } from './cellSelectionModel'
 
 /**
@@ -137,4 +138,35 @@ export function marqueeOwnsKeyTarget<C extends string = string>(
   const rowId = cell?.closest<HTMLElement>('[data-row-id]')?.dataset.rowId
   if (col == null || rowId == null) return false
   return isCellSelected(rowId, col as C)
+}
+
+/**
+ * A key the grid must not hear at all: typed into a field, or pressed inside a dialog.
+ *
+ * **Both dialog roles.** Radix's `AlertDialog` is `role="alertdialog"`, not `dialog` — the batch
+ * delete's *Keep them / Delete anyway*, the cue sheet's unlock question, the sheet primitive's
+ * *Discard changes?* — and a guard reading `[role="dialog"]` alone let ↑ / ↓ move the rows behind
+ * one and Escape clear the selection *Keep them* promises to leave. Every sheet listener and the
+ * programmer's ask this one question, so a third role is added once.
+ */
+export function keyTargetIsGuarded(target: EventTarget | null): boolean {
+  if (isEditableTarget(target instanceof Element ? target : null)) return true
+  return target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"]') != null
+}
+
+/**
+ * A focused control **outside the sheet's rows** — a partition chip, a row verb, a menu item, a
+ * Select's list — whose arrows and ⌘A are not the row selection's to take.
+ *
+ * The row keys stand aside from these (CLAUDE.md §Sheet kit). Most controls on a sheet's chrome do
+ * not answer an arrow themselves — the partition chips and the bar's verbs are plain buttons — so
+ * nothing claims the key before the window hears it, and without this ↓ on *Delete* would move the
+ * row it was about to delete. **A control inside a row is exempt**, because that is where focus
+ * sits in the ordinary case: a click on a name focuses its rename button, a click on a value its
+ * cell trigger, and focus stays there while ↓ moves the selection on.
+ */
+export function isForeignControl(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  const control = target.closest('button, a, [role="menuitem"], [role="menu"], [role="listbox"], [role="slider"]')
+  return control != null && control.closest('[data-row-id]') == null
 }

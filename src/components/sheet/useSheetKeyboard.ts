@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
-import { isEditableTarget } from '@/lib/domUtils'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { marqueeOwnsKeyTarget } from './cellEntry'
+import { isForeignControl, keyTargetIsGuarded, marqueeOwnsKeyTarget } from './cellEntry'
 import type { CellKeyboardPermission } from './cellEntry'
 import type { RowId } from './cellSelectionModel'
 
@@ -12,14 +11,27 @@ export interface SheetKeyRefusal {
   key: string
 }
 
+/** The row keys a sheet answers — see [useSheetKeyboard]'s `rowKeys`. */
+export interface SheetRowKeys {
+  /** ⌘/Ctrl+A: select every selectable row. */
+  onSelectAll: () => void
+  /**
+   * ↑ / ↓, Shift extending: move the row selection one row (`arrowStepTarget` is the rule).
+   * Answers whether a row was selected, so a sheet with no rows leaves the key alone.
+   */
+  onStep: (direction: 'up' | 'down', extend: boolean) => boolean
+}
+
 /**
- * The window-level keys a sheet's cell selection answers: Escape, Enter, a typed character,
- * Backspace / Delete.
+ * The window-level keys a sheet answers: Escape, Enter, a typed character and Backspace / Delete
+ * for its cell selection, and — where the sheet selects rows — ⌘A and ↑ / ↓ for its rows.
  *
  * The programmer's container keeps its own copy of this dispatch, interleaved with its row
  * shortcuts (⌘A, ↑/↓, →/←) in one bubble-phase listener, and it is deliberately not rewired onto
  * this hook — its behaviour is pinned by `FixturesTable.test.tsx` and the rule here is the same
- * one. The three sheets the kit added mount this instead (CLAUDE.md §Sheet kit).
+ * one; ↑/↓ share `arrowStepTarget` outright. →/← stay the programmer's: they open and close a
+ * group or a multi-head fixture, and no kit sheet has a tree. Every sheet on the kit mounts this
+ * instead (CLAUDE.md §Sheet kit).
  *
  * **It listens in the capture phase**, which is the one thing it does differently, and for two
  * reasons. The cue sheet lives under `useTransportKeys`, whose `L` toggles the show lock from a
@@ -56,6 +68,7 @@ export function useSheetKeyboard<C extends string>({
   onRefused,
   rowCount = 0,
   onOpenRow,
+  rowKeys,
 }: {
   /** How many cells are selected — zero means the cell arms are inert and only Escape is heard. */
   cellCount: number
@@ -85,11 +98,15 @@ export function useSheetKeyboard<C extends string>({
   rowCount?: number
   /** ⏎ with one row and no cells selected: open that row's record. Absent, the arm does nothing. */
   onOpenRow?: () => void
+  /**
+   * ⌘A and ↑ / ↓ over the sheet's rows. Absent — the DMX sheet, which has no row axis — neither
+   * key is heard. See the second listener below for why these are not in the capture-phase one.
+   */
+  rowKeys?: SheetRowKeys
 }): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target instanceof Element ? e.target : null)) return
-      if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return
+      if (keyTargetIsGuarded(e.target)) return
 
       if (e.key === 'Escape') {
         // An open editor takes Escape first, and keeps the selection: Radix will close it from its
@@ -165,6 +182,39 @@ export function useSheetKeyboard<C extends string>({
     rowCount,
     onOpenRow,
   ])
+
+  // **The row keys listen in the bubble phase**, the programmer's phase, and stand aside from a
+  // key another handler has already claimed. The cell keys above take capture for the cue sheet's
+  // `L`; nothing here competes with the transport, and what the arrows *do* compete with is the
+  // controls on the page that answer them themselves — a Select's list, a menu, a slider — each of
+  // which claims the key with `preventDefault()` on its own handler, which only a bubble listener
+  // runs after. From capture, ↓ in an open menu would move the menu's highlight *and* the row.
+  //
+  // A control that does **not** claim the key is the other half, and the commoner one: the
+  // partition chips and the bar's verbs are plain buttons, so `isForeignControl` stands aside from
+  // any focused control outside the rows (and exempts the rename button and cell trigger a click
+  // inside a row leaves focused). Only plain arrows and Shift — ⌘, Ctrl and ⌥ arrows are the
+  // browser's and the OS's — and not under an open editor, where a moved selection would leave the
+  // panel writing to a batch it no longer names.
+  useEffect(() => {
+    if (rowKeys == null) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return
+      if (keyTargetIsGuarded(e.target) || isForeignControl(e.target)) return
+      if (editorIsOpen()) return
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        rowKeys.onSelectAll()
+        return
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        if (rowKeys.onStep(e.key === 'ArrowDown' ? 'down' : 'up', e.shiftKey)) e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [rowKeys])
 }
 
 /** A focused button, link or menu item — a control whose own Enter the grid must not take. */

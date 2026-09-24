@@ -52,7 +52,6 @@ export function libraryNameColumn<Row extends SheetRow>({
   return {
     label,
     width,
-    selectsRows: true,
     onOpen,
     openLabel,
     render: (row, selected) => {

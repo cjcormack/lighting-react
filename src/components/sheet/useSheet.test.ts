@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from '@testing-library/react'
+import { act, fireEvent, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { COMMIT_INTERVAL_MS, useSheet } from './useSheet'
 import type { SheetColumn, SheetRow } from './sheetModel'
@@ -154,5 +154,145 @@ describe('useSheet commit cadence', () => {
     // And nothing lands later from a timer left armed.
     act(() => vi.advanceTimersByTime(100))
     expect(write).toHaveBeenCalledTimes(2)
+  })
+})
+
+/**
+ * The row keys every sheet with a row axis answers (CLAUDE.md §Sheet kit): ⌘A, and ↑ / ↓ with
+ * Shift extending — the programmer's keys, stepped by the same `arrowStepTarget`. They are heard on
+ * the window in the bubble phase, so a key a control has already claimed is left alone.
+ */
+describe('useSheet row keys', () => {
+  interface KeyRow extends SheetRow {
+    id: string
+  }
+  const keyRows: KeyRow[] = [
+    { id: 'a' },
+    { id: 'div', divider: 'Section' },
+    { id: 'b' },
+    { id: 'c' },
+    { id: 'd' },
+  ]
+  const keyColumns: SheetColumn<KeyRow, 'v'>[] = [
+    { key: 'v', label: 'V', kind: 'v', width: '64px', value: () => 0, cell: () => null, write: () => true },
+  ]
+
+  function sheet(selectsRows?: boolean) {
+    return renderHook(() =>
+      useSheet<KeyRow, 'v'>({
+        rows: keyRows,
+        columns: keyColumns,
+        permission: { entry: true, clear: true },
+        copy: () => ({ setTitle: 'Set', clearTitle: 'Clear' }),
+        selectsRows,
+      }),
+    )
+  }
+  const press = (key: string, init: KeyboardEventInit = {}, target: Element = document.body) =>
+    act(() => {
+      fireEvent.keyDown(target, { key, ...init })
+    })
+  const selected = (r: { current: ReturnType<typeof useSheet<KeyRow, 'v'>> }) => [...r.current.rowSelection.orderedSelected]
+
+  it('steps the row selection with ↓ and ↑, skipping dividers and clamping at the ends', () => {
+    const { result } = sheet()
+    press('ArrowDown')
+    expect(selected(result)).toEqual(['a'])
+    press('ArrowDown')
+    expect(selected(result)).toEqual(['b'])
+    press('ArrowUp')
+    press('ArrowUp')
+    expect(selected(result)).toEqual(['a'])
+  })
+
+  it('lands ↑ on the last row with nothing selected, and scrolls the row it selects into view', () => {
+    const { result } = sheet()
+    press('ArrowUp')
+    expect(selected(result)).toEqual(['d'])
+    expect(result.current.tableProps.scrollToRowId).toBe('d')
+  })
+
+  it('extends with Shift, upward past two rows', () => {
+    const { result } = sheet()
+    act(() => result.current.selectRow('d'))
+    press('ArrowUp', { shiftKey: true })
+    press('ArrowUp', { shiftKey: true })
+    expect(selected(result)).toEqual(['b', 'c', 'd'])
+  })
+
+  it('selects every row with ⌘A, and a row key drops a cell marquee', () => {
+    const { result } = sheet()
+    act(() => result.current.tableProps.cellSelection.select([{ rowId: 'b', col: 'v' }], 'replace'))
+    expect(result.current.cellCount).toBe(1)
+    press('a', { metaKey: true })
+    expect(result.current.cellCount).toBe(0)
+    expect(selected(result)).toEqual(['a', 'b', 'c', 'd'])
+    act(() => result.current.tableProps.cellSelection.select([{ rowId: 'c', col: 'v' }], 'replace'))
+    press('ArrowDown')
+    expect(result.current.cellCount).toBe(0)
+    expect(selected(result)).toEqual(['a'])
+  })
+
+  it('leaves a key a control has already claimed, one from either dialog role, and ⌥ / ⌘ / Ctrl arrows alone', () => {
+    const { result } = sheet()
+    const menu = document.createElement('div')
+    menu.setAttribute('role', 'menu')
+    menu.tabIndex = 0
+    menu.addEventListener('keydown', (e) => e.preventDefault())
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    const inDialog = document.createElement('button')
+    dialog.appendChild(inDialog)
+    // Radix's AlertDialog — the batch delete's confirm — is `alertdialog`, not `dialog`.
+    const alert = document.createElement('div')
+    alert.setAttribute('role', 'alertdialog')
+    const inAlert = document.createElement('button')
+    alert.appendChild(inAlert)
+    document.body.append(menu, dialog, alert)
+    try {
+      press('ArrowDown', {}, menu)
+      press('ArrowDown', {}, inDialog)
+      press('ArrowDown', {}, inAlert)
+      press('a', { metaKey: true }, inAlert)
+      press('ArrowDown', { altKey: true })
+      press('ArrowDown', { metaKey: true })
+      press('ArrowDown', { ctrlKey: true })
+      expect(result.current.rowSelection.count).toBe(0)
+    } finally {
+      menu.remove()
+      dialog.remove()
+      alert.remove()
+    }
+  })
+
+  it('stands aside from a plain focused control outside the rows, and not from one inside a row', () => {
+    const { result } = sheet()
+    // A partition chip or a row verb: a plain button that claims no key of its own.
+    const chip = document.createElement('button')
+    // A row's rename button or cell trigger, which a click inside the row leaves focused.
+    const row = document.createElement('div')
+    row.setAttribute('data-row-id', 'a')
+    const nameButton = document.createElement('button')
+    row.appendChild(nameButton)
+    document.body.append(chip, row)
+    try {
+      press('ArrowDown', {}, chip)
+      press('a', { metaKey: true }, chip)
+      expect(result.current.rowSelection.count).toBe(0)
+      press('ArrowDown', {}, nameButton)
+      expect(selected(result)).toEqual(['a'])
+      press('ArrowDown', {}, nameButton)
+      expect(selected(result)).toEqual(['b'])
+    } finally {
+      chip.remove()
+      row.remove()
+    }
+  })
+
+  it('hears neither key on a sheet with no row axis', () => {
+    const { result } = sheet(false)
+    press('ArrowDown')
+    press('a', { metaKey: true })
+    expect(result.current.rowSelection.count).toBe(0)
   })
 })

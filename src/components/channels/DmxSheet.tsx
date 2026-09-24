@@ -388,7 +388,17 @@ export function DmxSheet({
   )
   const permission = useMemo(() => ({ entry: connected, clear: connected }), [connected])
   const cellDisabled = useCallback(() => !connected, [connected])
-  const sheet = useSheet<DmxRow, DmxColumnKey>({ rows, columns, permission, copy, cellDisabled, noun: 'channel' })
+  // No row axis: every press is a cell press, and ⌘A and ↑ / ↓ have no rows to move. `tableProps`
+  // carries the flag to the table, so this is the one place it is said.
+  const sheet = useSheet<DmxRow, DmxColumnKey>({
+    rows,
+    columns,
+    permission,
+    copy,
+    cellDisabled,
+    noun: 'channel',
+    selectsRows: false,
+  })
   const { cellCount } = sheet
 
   // **A row width change drops the cell selection, and drops it during the render that changes
@@ -545,7 +555,6 @@ export function DmxSheet({
         firstColumn={{
           label: '',
           width: `${ROW_HEAD_WIDTH}px`,
-          selectsRows: false,
           render: (row) => (
             <span className="relative font-mono text-[11px] tabular-nums text-muted-foreground">
               {String(row.base).padStart(3, '0')}
