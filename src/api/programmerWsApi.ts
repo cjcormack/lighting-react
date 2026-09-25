@@ -102,6 +102,23 @@ export interface ProvenanceEntry {
   layerId?: number
   /** What that layer applies — a Look or a template, named. */
   layerSource?: LayerSource
+  /**
+   * For a cue-won colour whose W / A / UV came from a bundled emitter's own row (a Hex's `white`),
+   * that emitter's winner — one per emitter. The backend lets the emitter's row replace the
+   * colour's copy of it, so the colour's bytes can come from two contributors; this names the
+   * second. Absent when empty.
+   */
+  bundled?: BundledProvenance[]
+}
+
+/** One entry of `ProvenanceEntry.bundled`. */
+export interface BundledProvenance {
+  /** The emitter property (`white`, `amber`, `uv`) whose own row supplied the component. */
+  propertyName: string
+  cueId?: number
+  cueStackId?: number
+  layerId?: number
+  layerSource?: LayerSource
 }
 
 /**

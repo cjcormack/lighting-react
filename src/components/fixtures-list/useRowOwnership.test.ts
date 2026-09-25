@@ -102,6 +102,51 @@ describe('aggregateCellOwnership — the winning layer', () => {
   })
 })
 
+describe('aggregateCellOwnership — a colour carrying a bundled emitter', () => {
+  const COLOUR_KEY: CellPropertyKey[] = [{ targetKey: 'f1', propertyName: 'rgbColour' }]
+
+  /** A cue-won colour from layer [layerId] whose white came from [whiteLayerId]'s row. */
+  function colourWithWhite(layerId: number | undefined, whiteLayerId: number | undefined): ProgrammerKeyState {
+    return {
+      provenance: {
+        targetKey: 'f1',
+        propertyName: 'rgbColour',
+        source: 'CUE',
+        cueId: 4,
+        layerId,
+        layerSource: layerId == null ? undefined : { kind: 'LOOK', id: 101, uuid: 'u1', name: 'Warm Wash' },
+        bundled: [{
+          propertyName: 'white',
+          cueId: 5,
+          layerId: whiteLayerId,
+          layerSource: whiteLayerId == null ? undefined : { kind: 'LOOK', id: 102, uuid: 'u2', name: 'Bright White' },
+        }],
+      },
+    }
+  }
+
+  it('stays one layer when the white came from the same layer', () => {
+    const result = aggregateCellOwnership(COLOUR_KEY, false, lookupFrom({ 'f1|rgbColour': colourWithWhite(1, 1) }))
+    expect(result?.layer).toMatchObject({ layerId: 1, name: 'Warm Wash', mixed: false })
+  })
+
+  it('reads mixed, unnamed, when the white came from another layer', () => {
+    // Naming the RGB's layer would credit it with a white it never asserted.
+    const result = aggregateCellOwnership(COLOUR_KEY, false, lookupFrom({ 'f1|rgbColour': colourWithWhite(1, 2) }))
+    expect(result?.layer).toMatchObject({ layerId: undefined, name: undefined, mixed: true })
+  })
+
+  it('reads mixed, keeping the name, when the white came from a cue row outside any layer', () => {
+    const result = aggregateCellOwnership(COLOUR_KEY, false, lookupFrom({ 'f1|rgbColour': colourWithWhite(1, undefined) }))
+    expect(result?.layer).toMatchObject({ layerId: 1, name: 'Warm Wash', mixed: true })
+  })
+
+  it('shows the white\'s layer as a partial claim when the RGB belongs to none', () => {
+    const result = aggregateCellOwnership(COLOUR_KEY, false, lookupFrom({ 'f1|rgbColour': colourWithWhite(undefined, 2) }))
+    expect(result?.layer).toMatchObject({ layerId: 2, name: 'Bright White', mixed: true })
+  })
+})
+
 describe('aggregateCellOwnership', () => {
   it('returns undefined for a cell backing no properties', () => {
     expect(aggregateCellOwnership([], false, lookupFrom({}))).toBeUndefined()

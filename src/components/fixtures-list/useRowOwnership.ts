@@ -2,11 +2,7 @@ import type { LayerSource } from '@/api/cuesApi'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
-import type {
-  ProgrammerKeyState,
-  ProvenanceEntry,
-  ProvenanceSource,
-} from '../../api/programmerWsApi'
+import type { ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
 import type { CellPropertyKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
 
@@ -127,9 +123,24 @@ export function aggregateCellOwnership(
   // The winning layer, tracked separately from ownership because the two disagree routinely: it is
   // a property of provenance rather than of the operator's entry.
   let layerId: number | undefined
-  let layerEntry: ProvenanceEntry | undefined
+  let layerEntry: { layerSource?: LayerSource } | undefined
   let layerCount = 0
   let layerMixed = false
+  // What the layer verdict is taken over: every covered key, plus every bundled emitter a colour's
+  // W / A / UV came from — each is a contributor to what the cell shows, so a colour whose white
+  // came from another layer is not wholly its RGB layer's.
+  let observations = keys.length
+
+  const observeLayer = (observed: { layerId?: number; layerSource?: LayerSource }) => {
+    if (observed.layerId == null) return
+    layerCount += 1
+    if (layerId === undefined) {
+      layerId = observed.layerId
+      layerEntry = observed
+    } else if (layerId !== observed.layerId) {
+      layerMixed = true
+    }
+  }
 
   keys.forEach((key, index) => {
     const state = lookup(key.targetKey, key.propertyName)
@@ -141,13 +152,11 @@ export function aggregateCellOwnership(
     }
 
     const layer = state.provenance
-    if (layer?.layerId != null) {
-      layerCount += 1
-      if (layerId === undefined) {
-        layerId = layer.layerId
-        layerEntry = layer
-      } else if (layerId !== layer.layerId) {
-        layerMixed = true
+    if (layer) {
+      observeLayer(layer)
+      for (const emitter of layer.bundled ?? []) {
+        observations += 1
+        observeLayer(emitter)
       }
     }
 
@@ -179,7 +188,7 @@ export function aggregateCellOwnership(
           layerId: layerMixed ? undefined : layerId,
           source: layerMixed ? undefined : layerEntry?.layerSource,
           name: layerMixed ? undefined : layerEntry?.layerSource?.name,
-          mixed: layerMixed || layerCount !== keys.length,
+          mixed: layerMixed || layerCount !== observations,
         }
 
   return {
