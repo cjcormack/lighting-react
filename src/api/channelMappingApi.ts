@@ -1,10 +1,27 @@
 import { Subscription } from "./subscription"
 import { InternalApiConnection } from "./internalApi"
 
+/** One `(target, property)` key that drives an address — see `ChannelMappingEntry.properties`. */
+export interface ChannelPropertyKey {
+  targetKey: string
+  propertyName: string
+}
+
 export interface ChannelMappingEntry {
   fixtureKey: string
   fixtureName: string
   description: string
+  /**
+   * Every property key whose channels include this address, as the desk resolves them
+   * (`PropertyChannelWriter.propertyKeysByChannel`) — usually one; two where a bundled
+   * white/amber/UV or a pan/tilt axis is also part of `rgbColour` / `position`; element keys on
+   * a multi-head fixture. The DMX sheet reads ownership through these rather than rebuilding
+   * the channel→property lookup from descriptors, which is how its rings drifted from the desk.
+   *
+   * Optional because a desk that predates the field sends none: the sheet then reads every
+   * patched address as baseline until the desk is restarted.
+   */
+  properties?: ChannelPropertyKey[]
 }
 
 // Universe -> Channel -> Mapping

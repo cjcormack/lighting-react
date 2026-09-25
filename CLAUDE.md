@@ -2328,7 +2328,7 @@ Three surface rules, each pinned by its test:
 - **DMX sheet** (`DmxSheet.test.tsx`): `/projects/:id/channels/:universe/table`, sticky key
   `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
   name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
-  ownership rings read through the property that drives the channel. No row axis: the row head
+  ownership rings read through the desk's own keys for the address (below). No row axis: the row head
   hangs no `data-grid-name-header`, so every press is a cell press, the arrows always walk the
   cells — `cellFlow: 'linear'`, so a plain ← / → wraps `016 → 017`, ↑ / ↓ are ± the row width in
   whichever arm is showing, the ends are `001` and `512`, and Shift grows a rectangle (↓ then →
@@ -2346,6 +2346,28 @@ Three surface rules, each pinned by its test:
   row id exists narrow too, and the same `rowId · col` pair would silently name a different
   address; done in an effect it left one painted frame where `selectedChannels` named an address
   nothing showed as selected.
+
+  **A cell's ring asks the desk which properties drive its address, and never works it out.**
+  `channelMappingState` carries `properties` on every entry — every `(target, property)` key whose
+  channels include the address, from `PropertyChannelWriter.propertyKeysByChannel`, which is
+  `channelsFor` inverted — and the cell aggregates the programmer's state over all of them, plus the
+  programmer's channel **sideband** at that address (`ProgrammerState.channels`, one subscription
+  for the sheet) — a sideband slot promotes the address over a cue or baseline, never over park or
+  an `effect` verdict, because a programmer-band effect outranks the programmer and the desk's
+  per-key answer has already weighed any slot it can attribute. The desk builds the frame once per
+  `Fixtures.structureVersion`, from one read of the register, and shares it across sockets. The sheet used to build that map itself from the fixture descriptors and drifted
+  from the desk three ways at once: a bundled white/amber/UV was filed under `rgbColour` while
+  `updateChannel` lifts a write on one to its **own slider**, so a value set here never rang; an
+  element's white was missing entirely (its colour descriptor names none); and a pan axis read only
+  as `position` where the desk lifts it to `pan`. Two keys per address is normal, so **the address
+  takes the strongest source and is never drawn dashed** — the wire carries one byte, and the
+  programmer grid's "these heads disagree" means nothing for one channel. An address the desk names
+  nothing for reads **baseline** (dimmed) like any idle one; it used to read *nothing* and drew
+  brighter than its patched neighbours. A multi-head fixture's heads ring through the sideband,
+  because the desk's covering lookup (`resolveChannelCoveringKey`) walks only a fixture's own
+  properties, so a write on a head is never lifted to the element's property. A desk that predates
+  the field sends no `properties` and the sheet reads every patched address as baseline until it
+  restarts.
 
   Its cells set **`SheetColumn.gutter: false`**: they draw no corner glyph, and the kit's 18px marks
   gutter made a cell's own ownership ring a box 18px narrower than the selection overlay drawn over

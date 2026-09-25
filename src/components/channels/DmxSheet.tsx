@@ -6,7 +6,6 @@ import { lightingApi } from '@/api/lightingApi'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import { useChannelValue } from '@/hooks/usePropertyValues'
 import { useContainerBand } from '@/hooks/useContainerBand'
-import { useFixtureListQuery, type Fixture, type PropertyDescriptor } from '@/store/fixtures'
 import { useUpdateChannelMutation } from '@/store/channels'
 import { useParkChannelMutation, useUnparkChannelMutation } from '@/store/park'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -22,8 +21,8 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { LevelCell } from '@/components/sheet/cells/LevelCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
-import type { ChannelMappingEntry } from '@/api/channelMappingApi'
-import type { ProgrammerKeyState } from '@/api/programmerWsApi'
+import type { ChannelMappingEntry, ChannelPropertyKey } from '@/api/channelMappingApi'
+import type { ProgrammerChannelEntry, ProgrammerKeyState } from '@/api/programmerWsApi'
 
 /** The row head, 48px, and the floor a cell needs to hold `001 Front PAR` over a value. */
 const ROW_HEAD_WIDTH = 48
@@ -59,106 +58,68 @@ function rowsFor(columnCount: number): DmxRow[] {
   }))
 }
 
-/** The fixture property behind an address, for the ownership ring. */
-interface ChannelOwner {
-  fixtureKey: string
-  propertyName: string
-}
+/** An address no property drives — nothing to subscribe to. */
+const NO_KEYS: readonly ChannelPropertyKey[] = []
 
-function channelKey(universe: number, channelNo: number): string {
-  return `${universe}:${channelNo}`
-}
-
-function addOwner(map: Map<string, ChannelOwner>, fixtureKey: string, property: PropertyDescriptor) {
-  const put = (ref: { universe: number; channelNo: number } | undefined) => {
-    if (ref) map.set(channelKey(ref.universe, ref.channelNo), { fixtureKey, propertyName: property.name })
-  }
-  switch (property.type) {
-    case 'slider':
-    case 'setting':
-      put(property.channel)
-      break
-    case 'colour':
-      put(property.redChannel)
-      put(property.greenChannel)
-      put(property.blueChannel)
-      put(property.whiteChannel)
-      put(property.amberChannel)
-      put(property.uvChannel)
-      break
-    case 'position':
-      put(property.panChannel)
-      put(property.tiltChannel)
-      break
-  }
-}
+const PARKED_OWNERSHIP: CellOwnership = { source: 'parked', touched: false, isUniform: true, owners: [] }
+const BASELINE_OWNERSHIP: CellOwnership = { source: 'baseline', touched: false, isUniform: true, owners: [] }
 
 /**
- * Every address a rig's descriptors name, mapped to the property that drives it.
+ * The programmer's key state for every property that drives an address — the desk's list, off
+ * the channel-mapping frame (`ChannelMappingEntry.properties`), not a lookup rebuilt here.
  *
- * Not exported: a non-component export beside a component is what makes Vite's Fast Refresh give
- * up on the whole file (the repo's React conventions), and nothing outside reads it.
- */
-function channelOwners(fixtures: readonly Fixture[]): Map<string, ChannelOwner> {
-  const map = new Map<string, ChannelOwner>()
-  for (const fixture of fixtures) {
-    for (const property of fixture.properties) addOwner(map, fixture.key, property)
-    for (const element of fixture.elements ?? []) {
-      for (const property of element.properties) addOwner(map, element.key, property)
-    }
-  }
-  return map
-}
-
-/**
- * Which layer owns an address — the programmer's per-key provenance, read through the property
- * that drives the channel, so the DMX sheet's rings are the programmer's rings.
+ * It was rebuilt here once, from the fixture descriptors, and it drifted from the desk in three
+ * ways at once: bundled white/amber/UV were filed under the colour property (the desk lifts an
+ * `updateChannel` write on one to its *own* slider, so a value set on this sheet never ringed), an
+ * element's white was missing altogether (its colour descriptor names none), and a pan axis was
+ * read only as `position` (the desk lifts it to the `pan` slider). An address is routinely driven
+ * through two keys — a bundled amber is both `amber` and part of `rgbColour` — so this holds one
+ * state per key and the caller aggregates.
  *
  * **The snapshot is cached per subscription.** `getKeyState` builds a fresh object on every call,
  * and `useSyncExternalStore` compares snapshots by identity — handed that directly, it re-rendered
  * on every render, logged "getSnapshot should be cached" for every owned cell, and the moment a
  * write gave a channel a programmer entry the loop crossed React's update-depth limit and took
- * the page down. The state the subscription callback delivers is what is held, and it is replaced
+ * the page down. The array the subscription callbacks build is what is held, and it is replaced
  * only when the next callback lands — the same discipline `useProgrammerRowSnapshot` keeps for
- * the fixtures list, in one-key form.
+ * the fixtures list. `keys` is the frame's own array, so its identity holds until the next
+ * channel-mapping frame.
  */
-function useChannelKeyState(owner: ChannelOwner | undefined): ProgrammerKeyState | undefined {
-  const cache = useRef<{ owner: ChannelOwner; state: ProgrammerKeyState } | null>(null)
-  const read = useCallback(
-    (): ProgrammerKeyState | undefined => {
-      if (!owner) return undefined
-      if (cache.current?.owner !== owner) {
-        cache.current = {
-          owner,
-          state: lightingApi.programmer.getKeyState(owner.fixtureKey, owner.propertyName),
-        }
-      }
-      return cache.current.state
-    },
-    [owner],
+function useChannelKeyStates(keys: readonly ChannelPropertyKey[]): readonly ProgrammerKeyState[] {
+  const cache = useRef<{ keys: readonly ChannelPropertyKey[]; states: readonly ProgrammerKeyState[] } | null>(null)
+  const fresh = useCallback(
+    () => keys.map((key) => lightingApi.programmer.getKeyState(key.targetKey, key.propertyName)),
+    [keys],
   )
+  const read = useCallback((): readonly ProgrammerKeyState[] => {
+    if (cache.current?.keys !== keys) cache.current = { keys, states: fresh() }
+    return cache.current.states
+  }, [fresh, keys])
   const subscribe = useCallback(
     (cb: () => void) => {
-      if (!owner) return () => {}
+      if (keys.length === 0) return () => {}
       // Registration itself refreshes: `subscribeToKey` emits nothing on subscribe, so a push
       // landing between the render's `read()` and this effect would otherwise be held in a stale
       // cache for as long as that key stayed quiet. Re-reading here hands React's post-subscribe
-      // snapshot check a fresh object — the same gap `useProgrammerRowSnapshot` closes with its
+      // snapshot check a fresh array — the same gap `useProgrammerRowSnapshot` closes with its
       // version bump, and for the same reason.
-      cache.current = {
-        owner,
-        state: lightingApi.programmer.getKeyState(owner.fixtureKey, owner.propertyName),
-      }
-      const sub = lightingApi.programmer.subscribeToKey(owner.fixtureKey, owner.propertyName, (state) => {
-        cache.current = { owner, state }
-        cb()
-      })
-      return () => sub.unsubscribe()
+      cache.current = { keys, states: fresh() }
+      const subs = keys.map((key, index) =>
+        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, (state) => {
+          const states = cache.current?.keys === keys ? [...cache.current.states] : fresh()
+          states[index] = state
+          cache.current = { keys, states }
+          cb()
+        }),
+      )
+      return () => subs.forEach((sub) => sub.unsubscribe())
     },
-    [owner],
+    [fresh, keys],
   )
-  return useSyncExternalStore(subscribe, read, () => undefined)
+  return useSyncExternalStore(subscribe, read, () => NO_STATES)
 }
+
+const NO_STATES: readonly ProgrammerKeyState[] = []
 
 /**
  * Whether the programmer is blind — one subscription for the whole sheet, threaded to every cell
@@ -167,7 +128,7 @@ function useChannelKeyState(owner: ChannelOwner | undefined): ProgrammerKeyState
  * the whole-state channel would be the cost `useProgrammerRowSnapshot` exists to avoid.
  *
  * Not `hooks/useProgrammerBlind`, which reads the same fact off the RTK `ProgrammerSummary`: this
- * one reads the WS layer's snapshot, the source `useChannelKeyState` reads each cell's key state
+ * one reads the WS layer's snapshot, the source `useChannelKeyStates` reads each cell's key state
  * from, so a cell's blind and its entry come from one place — the pairing `useRowOwnership` keeps
  * on the programmer's grid. It also keeps this sheet mountable with no store.
  */
@@ -182,21 +143,89 @@ function useWsProgrammerBlind(): boolean {
   )
 }
 
+const NO_SIDEBAND: readonly ProgrammerChannelEntry[] = []
+
+/**
+ * The programmer's channel **sideband** on this universe, by address — one subscription for the
+ * sheet, threaded to each cell as a prop, for `useWsProgrammerBlind`'s reason.
+ *
+ * The sideband is where an `updateChannel` write lands when the desk cannot lift it to a property
+ * (`handleUpdateChannel`): an address no property drives, a raw pan/tilt axis, and — since the
+ * desk's covering lookup walks only a fixture's own properties — every address of a multi-head
+ * fixture's heads. Provenance names none of the last two kinds' keys, so without this a value set
+ * here on a pixel bar never rang. It is read *beside* the property keys, never instead of them
+ * (`ProgrammerChannelEntry`'s docblock: the sideband is a supplement, not the programmer's output).
+ */
+function useWsProgrammerSideband(universe: number): ReadonlyMap<number, ProgrammerChannelEntry> {
+  const channels = useSyncExternalStore(
+    (cb) => {
+      const sub = lightingApi.programmer.subscribe(() => cb())
+      return () => sub.unsubscribe()
+    },
+    () => lightingApi.programmer.getState().channels,
+    () => NO_SIDEBAND,
+  )
+  const last = useRef<{ universe: number; signature: string; map: ReadonlyMap<number, ProgrammerChannelEntry> } | null>(null)
+  return useMemo(() => {
+    const mine = channels.filter((entry) => entry.universe === universe)
+    // Every `programmer.state` refetch hands a fresh array of fresh entries — and it is refetched
+    // on the desk's provenance frames, which fire for any write on any universe. Keep the previous
+    // map while this universe's slots are unchanged, so an unrelated busk does not rebuild the
+    // columns and re-render every cell that carries a slot.
+    const signature = mine.map((e) => `${e.channel}:${e.value}:${e.owner}:${e.touched}`).join('|')
+    if (last.current?.universe === universe && last.current.signature === signature) return last.current.map
+    const map = new Map<number, ProgrammerChannelEntry>()
+    for (const entry of mine) map.set(entry.channel, entry)
+    last.current = { universe, signature, map }
+    return map
+  }, [channels, universe])
+}
+
+/**
+ * One address's owner. **Always an answer** — an address the desk names no property for reads
+ * baseline like any idle one, where it used to read *nothing* and so drew undimmed, brighter than
+ * the patched channels beside it.
+ *
+ * **One address, one owner.** The keys driving it can disagree — amber programmer-owned through its
+ * slider while a cue holds `rgbColour` — but the wire carries one byte, and it is the strongest
+ * layer's; `aggregateCellOwnership` already ranks them. So the dashed "mixed" ring, which on the
+ * programmer's grid means *these heads disagree*, is not drawn here: it would mark every channel an
+ * operator set on a fixture whose colour a cue also holds.
+ *
+ * **A sideband slot promotes an address to the programmer over a cue or baseline, and over nothing
+ * else.** Programmer output composes over the cue layers on the wire (`FxTarget.composeProgrammerOver`),
+ * so a raw write beats a cue. But park beats everything, and an `effect` verdict stands: the desk
+ * attributes a sideband slot to the property covering its channel before deciding a key's winner,
+ * and a programmer-band effect deliberately outranks the programmer there (`ProvenanceService`) —
+ * so for any address the desk can name, an `effect` answer has already weighed the sideband.
+ */
 function useChannelOwnership(
-  owner: ChannelOwner | undefined,
+  keys: readonly ChannelPropertyKey[],
+  sideband: ProgrammerChannelEntry | undefined,
   parked: boolean,
   blind: boolean,
-): CellOwnership | undefined {
-  const state = useChannelKeyState(owner)
+): CellOwnership {
+  const states = useChannelKeyStates(keys)
   return useMemo(() => {
-    if (parked) return { source: 'parked', touched: false, isUniform: true, owners: [] }
-    if (!owner || !state) return undefined
-    return aggregateCellOwnership(
-      [{ targetKey: owner.fixtureKey, propertyName: owner.propertyName }],
-      blind,
-      () => state,
-    )
-  }, [blind, owner, parked, state])
+    if (parked) return PARKED_OWNERSHIP
+    const fromKeys =
+      states.length === keys.length
+        ? aggregateCellOwnership(keys, blind, (targetKey, propertyName) => {
+            const index = keys.findIndex((k) => k.targetKey === targetKey && k.propertyName === propertyName)
+            return states[index] ?? {}
+          })
+        : undefined
+    if (sideband && fromKeys?.source !== 'parked' && fromKeys?.source !== 'effect') {
+      const owners = fromKeys?.source === 'programmer' ? fromKeys.owners : []
+      return {
+        source: 'programmer',
+        touched: sideband.touched || (fromKeys?.source === 'programmer' && fromKeys.touched),
+        isUniform: true,
+        owners: owners.includes(sideband.owner) ? owners : [...owners, sideband.owner],
+      }
+    }
+    return fromKeys ? { ...fromKeys, isUniform: true } : BASELINE_OWNERSHIP
+  }, [blind, keys, parked, sideband, states])
 }
 
 /** The face and the live value of one address, subscribed per cell. */
@@ -215,7 +244,9 @@ const DmxCell = memo(function DmxCell({
   first: boolean
   tint: boolean
   /** Read by the wrapper's ownership hook, not by the face. */
-  owner: ChannelOwner | undefined
+  keys: readonly ChannelPropertyKey[]
+  /** Read by the wrapper's ownership hook, not by the face. */
+  sideband: ProgrammerChannelEntry | undefined
   /** Read by the wrapper's ownership hook, not by the face. */
   blind: boolean
   parkedValue: number | undefined
@@ -291,9 +322,8 @@ export function DmxSheet({
   const [updateChannel] = useUpdateChannelMutation()
   const [parkChannel] = useParkChannelMutation()
   const [unparkChannel] = useUnparkChannelMutation()
-  const { data: fixtures } = useFixtureListQuery()
-  const owners = useMemo(() => channelOwners(fixtures ?? []), [fixtures])
   const blind = useWsProgrammerBlind()
+  const sideband = useWsProgrammerSideband(universe)
 
   // **How many addresses fit on a row** — the widest arm the container can draw without scrolling
   // sideways. `useContainerBand` reads the floors straight off `DMX_ROW_WIDTHS`, so the arms and
@@ -356,7 +386,8 @@ export function DmxSheet({
               mapping={mappings?.[channelNo]}
               first={runs.first.has(channelNo)}
               tint={runs.tinted.has(channelNo)}
-              owner={owners.get(channelKey(universe, channelNo))}
+              keys={mappings?.[channelNo]?.properties ?? NO_KEYS}
+              sideband={sideband.get(channelNo)}
               blind={blind}
               parkedValue={parkValueMap.get(channelNo)}
               props={props as Omit<React.ComponentProps<typeof LevelCell>, 'value' | 'face'>}
@@ -372,7 +403,7 @@ export function DmxSheet({
           for (const row of rows) write(row.base + i, 0)
         },
       })),
-    [blind, columnKeys, mappings, owners, parkValueMap, runs, universe, write],
+    [blind, columnKeys, mappings, parkValueMap, runs, sideband, universe, write],
   )
 
   const copy = useCallback(
@@ -594,9 +625,9 @@ export function DmxSheet({
 
 /** A cell with its ownership ring read per address — a hook per cell, so it cannot live in the column closure. */
 function DmxCellWithOwnership(props: React.ComponentProps<typeof DmxCell>) {
-  const ownership = useChannelOwnership(props.owner, props.parkedValue !== undefined, props.blind)
+  const ownership = useChannelOwnership(props.keys, props.sideband, props.parkedValue !== undefined, props.blind)
   return (
-    <div className={cn('h-full', ownershipCellClass(ownership))} title={ownership && ownership.source !== 'baseline' ? OWNERSHIP_LABELS[ownership.source] : undefined}>
+    <div className={cn('h-full', ownershipCellClass(ownership))} title={ownership.source !== 'baseline' ? OWNERSHIP_LABELS[ownership.source] : undefined}>
       <DmxCell {...props} />
     </div>
   )
