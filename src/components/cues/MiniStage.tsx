@@ -6,6 +6,7 @@ import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useProjectedPatches } from '@/hooks/useProjectedPatches'
 import type { CueTarget } from '@/api/cuesApi'
+import { elementParents } from './targetUtils'
 
 interface MiniStageProps {
   projectId: number
@@ -38,10 +39,14 @@ export function MiniStage({
     () => new Set(targets.filter((t) => t.type === 'group').map((t) => t.key)),
     [targets],
   )
-  const fixtureTargetKeys = useMemo(
-    () => new Set(targets.filter((t) => t.type === 'fixture').map((t) => t.key)),
-    [targets],
-  )
+  // A cell-target (one head of a multi-head fixture) lights the fixture it belongs to: the stage
+  // draws whole fixtures, and a head's element key is no patch's key.
+  const fixtureTargetKeys = useMemo(() => {
+    const parentOf = elementParents(fixtures)
+    return new Set(
+      targets.filter((t) => t.type === 'fixture').map((t) => parentOf.get(t.key) ?? t.key),
+    )
+  }, [targets, fixtures])
 
   const isTargeted = (patch: { key: string; groups: { name: string }[] }) =>
     fixtureTargetKeys.has(patch.key) ||

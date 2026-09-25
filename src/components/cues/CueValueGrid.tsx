@@ -13,6 +13,7 @@ import { SliderCell } from '@/components/fixtures-list/cells/SliderCell'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useProjectCueCookedQuery } from '@/store/cues'
 import { buildStaticRows } from './cueCookedRows'
+import { elementParents } from './targetUtils'
 import type { CellValue, RowCell } from '@/components/fixtures-list/useRowValues'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 
@@ -56,16 +57,24 @@ export function CueValueGrid({
     const cooked = buildStaticRows(data?.rows, allFixtures, isSuccess)
     // The heads to show are the ones the cook mentions — derived from the expanded map, so a
     // group-targeted row correctly brings its members in rather than a group nobody can point at.
+    // A cell-target row keys the cook by a head's element key, which is no fixture's key: it brings
+    // its parent in *expanded*, so the head's own row is there to carry the value.
+    const parentOf = elementParents(allFixtures)
     const touched = new Set<string>()
+    const expandedFixtures = new Set<string>()
     for (const key of cooked.rows.keys()) {
       const parts = splitLookRowKey(key)
-      if (parts) touched.add(parts.targetKey)
+      if (!parts) continue
+      const parent = parentOf.get(parts.targetKey)
+      touched.add(parent ?? parts.targetKey)
+      if (parent) expandedFixtures.add(parent)
     }
     const fixtures = (allFixtures ?? []).filter((f) => touched.has(f.key))
     const rows = buildRows({
       fixtures,
       groups: [],
       expandedGroups: new Set(),
+      expandedFixtures,
       textFilter: '',
     })
 
@@ -74,7 +83,7 @@ export function CueValueGrid({
 
     // Two passes: resolve every row's cells, then keep the columns something actually filled. A
     // cue with no position values should not be read against an empty Position column.
-    const resolved = rows.map((row) => {
+    const everyRow = rows.map((row) => {
       const cells = buildRowCells(row, ALL_COLUMNS)
       const values = new Map<ColumnKey, CellValue>()
       for (const cell of cells) {
@@ -86,6 +95,8 @@ export function CueValueGrid({
       }
       return { row, cells, values, layer: layerFor(cells, cooked.layerByKey) }
     })
+    // Expanding a parent brings every head; only the heads the cue holds are worth a row.
+    const resolved = everyRow.filter((r) => r.row.kind !== 'element' || r.values.size > 0)
     const columns = ALL_COLUMNS.filter((col) => resolved.some((r) => r.values.has(col)))
     return { resolved, columns, loaded: isSuccess }
   }, [data, allFixtures, isSuccess])

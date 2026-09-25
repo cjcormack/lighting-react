@@ -150,11 +150,13 @@ const NO_SIDEBAND: readonly ProgrammerChannelEntry[] = []
  * sheet, threaded to each cell as a prop, for `useWsProgrammerBlind`'s reason.
  *
  * The sideband is where an `updateChannel` write lands when the desk cannot lift it to a property
- * (`handleUpdateChannel`): an address no property drives, a raw pan/tilt axis, and — since the
- * desk's covering lookup walks only a fixture's own properties — every address of a multi-head
- * fixture's heads. Provenance names none of the last two kinds' keys, so without this a value set
- * here on a pixel bar never rang. It is read *beside* the property keys, never instead of them
- * (`ProgrammerChannelEntry`'s docblock: the sideband is a supplement, not the programmer's output).
+ * (`handleUpdateChannel`): an address no property drives, and a raw pan/tilt axis where the fixture
+ * declares no slider of its own. A head of a multi-head fixture is *not* one of them — the desk's
+ * covering lookup (`resolveChannelCoveringKey`) reaches elements, so a write on a head lifts to that
+ * head's own property and rings through its key like any other. Provenance names no key for an
+ * address nothing covers, so without this a value set there never rang. It is read *beside* the
+ * property keys, never instead of them (`ProgrammerChannelEntry`'s docblock: the sideband is a
+ * supplement, not the programmer's output).
  */
 function useWsProgrammerSideband(universe: number): ReadonlyMap<number, ProgrammerChannelEntry> {
   const channels = useSyncExternalStore(

@@ -2363,9 +2363,11 @@ Three surface rules, each pinned by its test:
   takes the strongest source and is never drawn dashed** — the wire carries one byte, and the
   programmer grid's "these heads disagree" means nothing for one channel. An address the desk names
   nothing for reads **baseline** (dimmed) like any idle one; it used to read *nothing* and drew
-  brighter than its patched neighbours. A multi-head fixture's heads ring through the sideband,
-  because the desk's covering lookup (`resolveChannelCoveringKey`) walks only a fixture's own
-  properties, so a write on a head is never lifted to the element's property. A desk that predates
+  brighter than its patched neighbours. A multi-head fixture's heads ring through their own
+  element keys: the desk's covering lookup (`resolveChannelCoveringKey`) reaches elements, so a
+  write on a head lifts to that head's property (a red to its `rgbColour`, its white to its own
+  `white`) and records into a cue as a cell-target row. The sheet still reads the sideband for the
+  addresses the desk *cannot* lift — nothing covers them — which ring through no key. A desk that predates
   the field sends no `properties` and the sheet reads every patched address as baseline until it
   restarts.
 
