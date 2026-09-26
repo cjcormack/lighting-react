@@ -17,6 +17,8 @@ vi.mock('@/store/auth', () => ({
   useUpdateProfileMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useRevokeOtherSessionsMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useSessionsQuery: () => ({ data: [] }),
+  useConnectedAppsQuery: () => ({ data: [] }),
+  useRevokeConnectedAppMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useCreateDeviceLoginMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useCancelDeviceLoginMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useDeviceLoginStatusQuery: () => ({}),

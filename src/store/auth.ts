@@ -38,6 +38,18 @@ export interface SessionInfo {
   createdVia: SessionOrigin
 }
 
+/**
+ * An app signed in to this account through the desk's MCP listener (OAuth) — Claude on a phone,
+ * say. One row per grant: connecting the same app twice is two rows, each revocable.
+ */
+export interface ConnectedApp {
+  id: number
+  clientName: string
+  createdAt: string
+  /** When it last called a tool; updated at most every ten minutes, so it is a hint. */
+  lastUsedAt: string
+}
+
 /** A freshly minted device-login QR, as the desk's sheet needs it. */
 export interface DeviceLoginResponse {
   /** Opaque uuid, for the poll and cancel calls. */
@@ -148,10 +160,11 @@ export const authApi = restApi.injectEndpoints({
     }),
 
     // Revokes the caller's *other* sessions server-side but keeps this one, so the
-    // session list changes without this browser being logged out.
+    // session list changes without this browser being logged out. Every connected app goes
+    // with them: an app has no "this one" to keep.
     changePassword: build.mutation<void, ChangePasswordRequest>({
       query: (body) => ({ url: 'auth/password', method: 'PUT', body }),
-      invalidatesTags: ['AuthSessions'],
+      invalidatesTags: ['AuthSessions', 'AuthConnectedApps'],
     }),
 
     // The one thing a user may change about themselves. Authenticated but *any* role
@@ -178,7 +191,19 @@ export const authApi = restApi.injectEndpoints({
     // leaving an exchangeable QR alive through it would defeat the point.
     revokeOtherSessions: build.mutation<void, void>({
       query: () => ({ url: 'auth/sessions', method: 'DELETE' }),
-      invalidatesTags: ['AuthSessions', 'DeviceLogin'],
+      invalidatesTags: ['AuthSessions', 'AuthConnectedApps', 'DeviceLogin'],
+    }),
+
+    // Grants made on the MCP listener's sign-in page. Revoked server-side by the same events
+    // that end sessions (a password change, "sign out everywhere else", being disabled), which
+    // is why those mutations invalidate this tag too.
+    connectedApps: build.query<ConnectedApp[], void>({
+      query: () => 'auth/connected-apps',
+      providesTags: ['AuthConnectedApps'],
+    }),
+    revokeConnectedApp: build.mutation<void, { id: number }>({
+      query: ({ id }) => ({ url: `auth/connected-apps/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['AuthConnectedApps'],
     }),
 
     // ─── Device-login QR (the desk's own side) ───────────────────────────
@@ -219,6 +244,8 @@ export const {
   useUpdateProfileMutation,
   useSessionsQuery,
   useRevokeOtherSessionsMutation,
+  useConnectedAppsQuery,
+  useRevokeConnectedAppMutation,
   useCreateDeviceLoginMutation,
   useDeviceLoginStatusQuery,
   useCancelDeviceLoginMutation,

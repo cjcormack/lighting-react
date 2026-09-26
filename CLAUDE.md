@@ -4036,6 +4036,14 @@ recovery. Frontend shape:
   deliberately outside the admin-only `/api/rest/users` subtree — a self-exception
   inside a prefix-matched admin gate would mean that prefix list no longer describes
   its own subtree.
+
+  **Connected apps** sit on the Devices tab under the sessions: the MCP OAuth grants
+  (`lighting7/docs/mcp-engineering.md`), one row each with Revoke, via
+  `GET`/`DELETE /auth/connected-apps`. Drawn only when there is at least one, so a desk
+  that never connected Claude shows nothing new. They are beside the devices because they
+  answer the same question — what can act as me — and the backend ends them on the same
+  events, which is why `changePassword` and `revokeOtherSessions` invalidate
+  `AuthConnectedApps` too.
 - **Account changes self-heal across clients**, via two frames from one backend flow rather
   than the show-scoped `FixturesChangeListener` bus every other list rides (users belong to the
   machine; see `lighting7/docs/desk-accounts.md` → "Account edits reach other clients").
